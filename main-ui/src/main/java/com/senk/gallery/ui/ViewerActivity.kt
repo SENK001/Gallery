@@ -355,9 +355,14 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun showMapCard(item: MediaItem, latitude: Double, longitude: Double, token: Int) {
         currentLocation = latitude to longitude
+        val mapView = ensureSheetMap()
+        if (mapView == null) {
+            // SDK 不可用（如未配置 AK）：不显示地图卡片，仅隐藏即可，避免崩溃。
+            sheetMapCard.isVisible = false
+            return
+        }
         sheetMapCard.isVisible = true
         sheetMapAddress.text = getString(R.string.gallery_info_address_loading)
-        val mapView = ensureSheetMap()
         val bd09 = LocationAddressResolver.toBd09(latitude, longitude)
         mapView.map.apply {
             clear()
@@ -378,8 +383,13 @@ class ViewerActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensureSheetMap(): TextureMapView {
+    private fun ensureSheetMap(): TextureMapView? {
         sheetMapView?.let { return it }
+        // TextureMapView 构造前必须已完成 SDK 初始化，否则抛 NPE 崩溃（真机实测）。
+        // AK 未配置等情况下返回 null，由调用方降级为「地址获取失败」，不崩溃。
+        if (!BaiduMapSdk.ensureInitialized(this)) {
+            return null
+        }
         val mapView = TextureMapView(this)
         mapView.showZoomControls(false)
         mapView.showScaleControl(false)

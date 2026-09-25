@@ -16,6 +16,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.viewpager2.widget.ViewPager2
 import com.senk.gallery.ui.AlbumsFragment
+import com.senk.gallery.ui.BaiduMapSdk
 import com.senk.gallery.ui.PhotosFragment
 import com.senk.gallery.util.SystemBarUtils
 
@@ -121,6 +122,10 @@ class MainActivity : AppCompatActivity() {
         pager.isVisible = granted
         findViewById<View>(R.id.bottom_nav).isVisible = granted
         if (granted) {
+            // 权限已由用户授予（即用户已进行过交互），此处提前初始化百度地图 SDK：
+            // SDK 鉴权是异步的，首次逆地理编码会因 authtoken 未就绪返回
+            // PERMISSION_UNFINISHED（真机实测）。提前预热可让用户真正打开照片详情时鉴权已完成。
+            BaiduMapSdk.ensureInitialized(this)
             refreshFragments()
         }
     }

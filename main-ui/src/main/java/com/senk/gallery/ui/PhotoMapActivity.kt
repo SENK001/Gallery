@@ -27,6 +27,9 @@ class PhotoMapActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 必须早于 setContentView：activity_photo_map.xml 内含 TextureMapView，
+        // 未初始化 SDK 时构造该 View 会抛 NPE 崩溃。
+        BaiduMapSdk.ensureInitialized(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_photo_map)
         SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)

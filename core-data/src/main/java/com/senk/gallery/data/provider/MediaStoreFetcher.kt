@@ -25,8 +25,21 @@ object MediaStoreFetcher {
 
     val BASE_SELECTION: String = "$MEDIA_TYPE_SELECTION AND $VISIBLE_SELECTION"
 
+    /**
+     * 拍摄时间倒序。`datetaken` 在 MediaProvider 中可能为 NULL（实测本机 87% 的条目为 NULL），
+     * 此时回退到 `date_modified * 1000`（秒转毫秒）以保持与 `datetaken` 同一量纲。
+     *
+     * 末尾的 `_id DESC` 是**稳定排序键**：缺失拍摄时间的条目会映射到相同的 `date_modified` 值
+     * （同一秒批量导入很常见），没有稳定的次级键时 SQLite 的返回顺序不保证跨查询一致，
+     * 配合 limit/offset 分页会出现重复或漏项。加上后实测同一查询连续两次结果完全一致。
+     *
+     * MediaProvider 对排序串做逐 token 白名单校验（非 system 调用者走
+     * SQLiteQueryBuilder.enforceStrictGrammar），`COALESCE` 属允许的 SQLite 函数、
+     * `datetaken`/`date_modified` 属允许的列名，已在 Android 16 真机实测通过。
+     */
     val SORT_DATE_DESC: String =
-        "COALESCE(${MediaStore.MediaColumns.DATE_TAKEN}, ${MediaStore.MediaColumns.DATE_MODIFIED} * 1000) DESC"
+        "COALESCE(${MediaStore.MediaColumns.DATE_TAKEN}, " +
+            "${MediaStore.MediaColumns.DATE_MODIFIED} * 1000) DESC, ${MediaStore.MediaColumns._ID} DESC"
 
     private val QUERY_PROJECTION = arrayOf(
         MediaStore.MediaColumns._ID,

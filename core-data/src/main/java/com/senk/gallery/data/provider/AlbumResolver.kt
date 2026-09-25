@@ -280,18 +280,20 @@ object AlbumResolver {
             is ThirdPartyAlbum -> null to album.packageName
             else -> null to null
         }
-        cursor.addRow(
-            arrayOf(
-                album.albumType + ":" + (bucketId ?: packageName ?: ""),
-                album.albumType,
-                album.name,
-                album.coverUri,
-                album.count,
-                bucketId,
-                (album as? FolderAlbum)?.folderPath,
-                packageName,
-            ),
+        // 显式标注 Array<Any?>：本行的列值混合了 String / Int / Uri? / null，
+        // 不标注时 arrayOf 推断出的交叉类型在 addRow 的 reified 参数上会被 Kotlin
+        // 报「Reification of an intersection type」警告，并将在未来版本变为错误。
+        val row: Array<Any?> = arrayOf(
+            album.albumType + ":" + (bucketId ?: packageName ?: ""),
+            album.albumType,
+            album.name,
+            album.coverUri,
+            album.count,
+            bucketId,
+            (album as? FolderAlbum)?.folderPath,
+            packageName,
         )
+        cursor.addRow(row)
     }
 
     private fun appLabel(context: Context, packageName: String): String {

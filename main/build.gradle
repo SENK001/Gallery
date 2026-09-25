@@ -2,6 +2,17 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// 百度地图 AK 不进版本库：从 local.properties 读取（该文件已被 .gitignore 忽略）。
+// 未配置时注入空串，SDK 初始化会失败但应用不崩溃（地图/逆地理编码功能不可用）。
+// 配置方式见 README「百度地图 AK 配置」。
+def baiduMapApiKey = ''
+def propsFile = rootProject.file('local.properties')
+if (propsFile.exists()) {
+    def props = new Properties()
+    propsFile.withInputStream { props.load(it) }
+    baiduMapApiKey = props.getProperty('BAIDU_MAP_API_KEY', '')
+}
+
 android {
     namespace 'com.senk.gallery'
     compileSdk {
@@ -18,6 +29,15 @@ android {
         versionName "1.0.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders = [baiduMapApiKey: baiduMapApiKey]
+
+        // 百度地图 SDK 自带 4 个 ABI 的 .so，全打包会让 APK 达到 ~90MB。
+        // 只保留 arm64-v8a（现代真机唯一需要的 ABI），APK 降到 ~39MB。
+        // 如需 x86_64 模拟器调试，临时在本行加回 "x86_64" 即可。
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
     }
 
     sourceSets {
@@ -46,6 +66,9 @@ dependencies {
     implementation libs.androidx.constraintlayout
     implementation libs.androidx.core.ktx
     implementation libs.androidx.lifecycle.runtime.ktx
+    // MainActivity / MainPagerAdapter 直接使用 ViewPager2 与 FragmentStateAdapter，
+    // 必须显式声明：此前依赖 material 的传递依赖，material 一旦收紧依赖即编译失败。
+    implementation libs.androidx.viewpager2
     implementation libs.kotlinx.coroutines.android
     implementation libs.material
     testImplementation libs.junit

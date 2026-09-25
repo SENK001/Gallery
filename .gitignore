@@ -15,7 +15,12 @@
 /.idea/markdown.xml
 .DS_Store
 /build
+/buildSrc/build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# 本机验证产物（构建/测试/lint 日志、真机截图）。与具体设备、时间绑定，
+# 不进版本库；重新生成方式见 verification-reports/README.md。
+/verification-reports/

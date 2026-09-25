@@ -1,0 +1,10 @@
+## 复制本文件为 local.properties 后按需填写（local.properties 已被 .gitignore 忽略，不会进版本库）。
+## Android Studio 会自动生成 sdk.dir，无需手写。
+
+# Android SDK 路径（示例，Windows 下需转义反斜杠）
+# sdk.dir=D\:\\Programs\\Android\\Sdk
+
+# 百度地图 AK（Android SDK）。
+# 在百度地图开放平台按「应用包名 + 签名 SHA1」申请后填入。
+# 未配置时应用仍可编译运行，只是地图与逆地理编码功能不可用。
+BAIDU_MAP_API_KEY=

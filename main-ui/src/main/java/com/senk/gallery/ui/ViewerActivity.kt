@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.ImageButton
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -47,6 +49,9 @@ class ViewerActivity : AppCompatActivity() {
     private var currentItem: MediaItem? = null
     private var pendingFavoriteItem: MediaItem? = null
     private var pendingFavoriteValue = 0
+    private var exifLocation: Pair<Double, Double>? = null
+    private var exifLocationLineIndex = -1
+    private var addressResolver: LocationAddressResolver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +93,12 @@ class ViewerActivity : AppCompatActivity() {
         viewer.stopMotionVideo()
         viewer.onPause()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        addressResolver?.release()
+        addressResolver = null
+        super.onDestroy()
     }
 
     private fun applyInsets() {
@@ -293,7 +304,7 @@ class ViewerActivity : AppCompatActivity() {
         item ?: return
         lifecycleScope.launch {
             val lines = withContext(Dispatchers.IO) { buildInfoLines(item) }
-            MaterialAlertDialogBuilder(this@ViewerActivity)
+            val dialog = MaterialAlertDialogBuilder(this@ViewerActivity)
                 .setTitle(R.string.gallery_info_title)
                 .setMessage(
                     if (lines.isEmpty()) getString(R.string.gallery_info_no_data)
@@ -301,10 +312,40 @@ class ViewerActivity : AppCompatActivity() {
                 )
                 .setPositiveButton(R.string.gallery_info_close, null)
                 .show()
+            val location = exifLocation
+            if (location != null) {
+                requestAddress(dialog, lines, location.first, location.second)
+            }
         }
     }
 
-    private fun buildInfoLines(item: MediaItem): List<String> {
+    private fun requestAddress(
+        dialog: AlertDialog,
+        lines: MutableList<String>,
+        latitude: Double,
+        longitude: Double,
+    ) {
+        val lineIndex = exifLocationLineIndex
+        if (lineIndex !in lines.indices) {
+            return
+        }
+        val messageView = dialog.findViewById<TextView>(android.R.id.message)
+        val resolver = addressResolver
+            ?: LocationAddressResolver(this).also { addressResolver = it }
+        resolver.resolve(latitude, longitude) { address ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) {
+                    return@runOnUiThread
+                }
+                lines[lineIndex] = "位置: ${address ?: "解析失败（请检查百度地图 AK）"}"
+                messageView?.text = lines.joinToString("\n")
+            }
+        }
+    }
+
+    private fun buildInfoLines(item: MediaItem): MutableList<String> {
+        exifLocation = null
+        exifLocationLineIndex = -1
         val lines = ArrayList<String>()
         lines.add("名称: ${item.name ?: "-"}")
         lines.add("类型: ${item.mimeType ?: "-"}")
@@ -360,7 +401,10 @@ class ViewerActivity : AppCompatActivity() {
                 if (hasLocation) {
                     val latitude = cursor.getDouble(cursor.getColumnIndex(columns.LATITUDE))
                     val longitude = cursor.getDouble(cursor.getColumnIndex(columns.LONGITUDE))
-                    lines.add("位置: %.5f, %.5f".format(latitude, longitude))
+                    exifLocation = latitude to longitude
+                    exifLocationLineIndex = lines.size
+                    lines.add("位置: 解析中…")
+                    lines.add("坐标: %.5f, %.5f".format(latitude, longitude))
                 }
             }
         } catch (ignored: Exception) {

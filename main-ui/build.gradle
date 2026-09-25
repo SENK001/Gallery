@@ -23,6 +23,7 @@ android {
 }
 
 dependencies {
+    api files('../libs/baidumap/BaiduLBS_Android.aar')
     api project(':core-data')
     api project(':common-util')
     implementation libs.androidx.appcompat

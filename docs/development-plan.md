@@ -86,6 +86,7 @@ URI 设计（cursor 列即 UI 数据接口）：
   - 大图纹理：解码最长边 = min(GL_MAX_TEXTURE_SIZE, 视口最长边)（约一屏分辨率），纹理缓存 96MB（可容纳 当前页 + 前后各一页 的工作集）；放大超过约 1.2x 为纹理放大（后续可做按需高分解码）
   - 标题栏/底部菜单为覆盖层（FrameLayout，不占布局空间）：照片按全屏 fit，进出沉浸只隐藏/显示覆盖层与系统栏，内容区尺寸不变（像素级零跳变）；覆盖层通过系统栏 insets 调整 padding
   - **长按动态照片播放**（`item.isMotionPhoto && item.motionVideoLength > 0`）：对文件尾部内嵌 MP4 起播，视频帧 center-fit 叠加绘制在当前页照片上；松手/拖动/翻页/`onPause` 停止并恢复静图；错误时 log 并回退静图（MIUI 长按弹出的系统识别气泡为系统全局行为，无法在 App 内抑制）
+  - **详情弹窗**：EXIF 含定位时先显示「位置: 解析中…」与坐标，随后经 `LocationAddressResolver` 用百度地图 SDK 逆地理编码（WGS-84→BD09LL）替换为文字地址；初始化在 `GalleryApp.onCreate`（AK 在 `main` 的 `AndroidManifest.xml` meta-data `com.baidu.lbsapi.API_KEY`，SDK AAR 位于 `libs/baidumap`，so 由 `main` 的 `jniLibs.srcDir` 打包）
 - `VideoPlayerActivity`：GlVideoView 播放（MediaPlayer + OES，硬解优先）
   - 标题栏/底部控制条为**半透明覆盖层**（`#99000000`，不占布局空间，GL 恒定 `match_parent`）：窗口背景设为透明（`window.setBackgroundDrawable(ColorDrawable(TRANSPARENT))`）才能透过半透明栏看到下层视频；insets 只调整覆盖层 padding
   - **系统栏始终隐藏**：进入即 `hide(systemBars)`（`BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`），`onResume` 重新隐藏；无「显示系统栏」的切换
@@ -158,3 +159,4 @@ URI 设计（cursor 列即 UI 数据接口）：
 - `GlVideoView` 封装到 `VideoPlayManager` 后播放器黑屏根因：`attachTexture`（GL 表面晚于 `setSource` 到达，播放器页正是此顺序；`setSource` 时无 surface 不建播放器）里原实现仅当 `mediaPlayer != null` 才调用 `createPlayerIfPossible()` → 播放器永不创建。修复：`attachTexture` 中总是调用 `createPlayerIfPossible()`（仅当已有播放器时先 `releasePlayer()`）；查看器动态照片是 surface 先于 source 的相反顺序，不受影响
 - `UriMatcher` 的子节点按**注册顺序**匹配：先注册的 `albums/*` 通配节点会遮挡后注册的 `albums/folder/*`、`albums/app/*`，导致多段 URI 返回 `NO_MATCH`；注册顺序必须“具体模式在前、通配在后”
 - `owner_package_name` 对非 owner 应用不可见（读取为 null），三方应用相册不能按该列过滤；改为用 bucket 名映射分组后按 `bucket_id IN (...)` 查询（读取到的 owner 为空时才回退 `owner_package_name = ?`）
+- 百度地图 SDK 鉴权需在发请求前完成（官方建议在 Application 子类初始化）：惰性初始化（打开详情时才 `SDKInitializer.initialize`）会因鉴权未完成报 `get authtoken failed`、`mContext is null` 且逆地理编码直接失败；改为 `GalleryApp.onCreate` 启动即初始化后正常返回地址

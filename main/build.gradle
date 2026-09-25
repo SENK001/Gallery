@@ -20,6 +20,12 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    sourceSets {
+        main {
+            jniLibs.srcDir '../libs/baidumap'
+        }
+    }
+
     buildTypes {
         release {
             optimization {

@@ -66,4 +66,98 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/details_sheet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_viewer_sheet"
+        android:elevation="12dp"
+        android:orientation="vertical"
+        android:visibility="invisible">
+
+        <FrameLayout
+            android:id="@+id/sheet_handle"
+            android:layout_width="match_parent"
+            android:layout_height="28dp">
+
+            <View
+                android:layout_width="36dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_viewer_sheet_handle" />
+        </FrameLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/sheet_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="24dp">
+
+                <TextView
+                    android:id="@+id/sheet_basic_info"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:lineSpacingExtra="4dp"
+                    android:textColor="@color/gallery_text_primary"
+                    android:textSize="14sp" />
+
+                <FrameLayout
+                    android:id="@+id/sheet_map_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_viewer_map_card"
+                    android:clipToOutline="true"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <FrameLayout
+                            android:id="@+id/sheet_map_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="160dp" />
+
+                        <TextView
+                            android:id="@+id/sheet_map_address"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingExtra="2dp"
+                            android:padding="12dp"
+                            android:textColor="@color/gallery_text_primary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/sheet_map_overlay"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/sheet_exif_info"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:lineSpacingExtra="4dp"
+                    android:textColor="@color/gallery_text_primary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+
 </FrameLayout>

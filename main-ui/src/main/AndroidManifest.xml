@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries>
+        <package android:name="com.autonavi.minimap" />
+        <package android:name="com.baidu.BaiduMap" />
+        <package android:name="com.tencent.map" />
+        <package android:name="com.google.android.apps.maps" />
+    </queries>
+
     <application>
 
         <activity
@@ -16,6 +23,11 @@
         <activity
             android:name="com.senk.gallery.ui.VideoPlayerActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
+        <activity
+            android:name="com.senk.gallery.ui.PhotoMapActivity"
             android:exported="false"
             android:theme="@style/Theme.Gallery" />
 

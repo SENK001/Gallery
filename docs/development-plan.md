@@ -69,7 +69,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 | 组件 | 实现 |
 |---|---|
 | `GlThumbnailGridView` | GLSurfaceView + `OverScroller` 自绘宫格，RENDERMODE_WHEN_DIRTY；4 列方形单元格居中裁剪；视频时长/动态照片角标用位图纹理绘制；Executor 池 + LRU 纹理缓存，`loadThumbnail(uri,Size,Signal)` 可见优先/离开取消；点击回调 |
-| `GlImageViewer` | GLSurfaceView 自绘左右翻页（拖动跟手 + fling），前后页纹理预加载；`ImageDecoder` 目标尺寸采样（受 GL_MAX_TEXTURE_SIZE 限制）、EXIF 方向矩阵；双击/双指缩放；单击回调切换沉浸；视频页显示封面+播放按钮 |
+| `GlImageViewer` | GLSurfaceView 自绘左右翻页（拖动跟手 + fling），前后页纹理预加载；`ImageDecoder` 目标尺寸采样（受 GL_MAX_TEXTURE_SIZE 限制）、EXIF 方向矩阵；双击/双指缩放；方向锁横纵手势（横向翻页/纵向上划 detail 面板）；单击回调切换沉浸；视频页显示封面+播放按钮 |
 | `GlVideoView` | GLSurfaceView 渲染（播放逻辑全部委托 `VideoPlayManager`），aspect-fit（尺寸/朝向直接采用 MediaPlayer 旋转后的显示尺寸）；默认 z-order（`setZOrderOnTop(false)`，控制层窗口视图需盖在其上）；生命周期/音频焦点处理 |
 | `VideoPlayManager` | MediaPlayer + SurfaceTexture(OES) 播放状态机封装：`VideoSource.File`（独立文件）/ `VideoSource.Embedded`（文件尾部内嵌 MP4 + 长度）；`attachTexture` 在 GL 线程绑定 OES 纹理（GL 上下文重建后自动换绑并重建播放器）；start/pause/seekTo/stop/release、prepared/duration/position/尺寸与帧到达回调；播放器页与查看器动态照片共用 |
 | `EmbeddedVideoDataSource` | `MediaDataSource` 实现：按 `[fileSize - videoLength, fileSize)` 范围用 `Os.pread` 读取（不拷贝视频数据），供动态照片内嵌视频 `setDataSource` |
@@ -86,7 +86,9 @@ URI 设计（cursor 列即 UI 数据接口）：
   - 大图纹理：解码最长边 = min(GL_MAX_TEXTURE_SIZE, 视口最长边)（约一屏分辨率），纹理缓存 96MB（可容纳 当前页 + 前后各一页 的工作集）；放大超过约 1.2x 为纹理放大（后续可做按需高分解码）
   - 标题栏/底部菜单为覆盖层（FrameLayout，不占布局空间）：照片按全屏 fit，进出沉浸只隐藏/显示覆盖层与系统栏，内容区尺寸不变（像素级零跳变）；覆盖层通过系统栏 insets 调整 padding
   - **长按动态照片播放**（`item.isMotionPhoto && item.motionVideoLength > 0`）：对文件尾部内嵌 MP4 起播，视频帧 center-fit 叠加绘制在当前页照片上；松手/拖动/翻页/`onPause` 停止并恢复静图；错误时 log 并回退静图（MIUI 长按弹出的系统识别气泡为系统全局行为，无法在 App 内抑制）
-  - **详情弹窗**：EXIF 含定位时先显示「位置: 解析中…」与坐标，随后经 `LocationAddressResolver` 用百度地图 SDK 逆地理编码（WGS-84→BD09LL）替换为文字地址；初始化在 `GalleryApp.onCreate`（AK 在 `main` 的 `AndroidManifest.xml` meta-data `com.baidu.lbsapi.API_KEY`，SDK AAR 位于 `libs/baidumap`，so 由 `main` 的 `jniLibs.srcDir` 打包）
+  - **上划详情面板**（替代原详情弹窗）：从底部上划跟手拖出半屏（52% 屏高）面板，顶栏/底栏随展开进度淡出；内容自上而下 = 基础信息（名称/类型/拍摄时间/大小/尺寸/路径/来源应用）→ 地图定位卡片（EXIF 含定位时：百度地图瓦片 + 蓝点标记 + 逆地理编码地址，隐藏缩放/比例尺控件，点击整卡进入 `PhotoMapActivity`）→ EXIF；无定位则不显示地图卡片；展开时翻页保持展开并按 item 刷新内容（防串页）；把手/大图单击/返回键收起（返回键优先关面板）
+  - **定位与导航**：地址解析经 `LocationAddressResolver` 用百度地图 SDK 逆地理编码（WGS-84→BD09LL，含缓存）；初始化在 `GalleryApp.onCreate`（AK 在 `main` 的 `AndroidManifest.xml` meta-data `com.baidu.lbsapi.API_KEY`，SDK AAR 位于 `libs/baidumap`，so 由 `main` 的 `jniLibs.srcDir` 打包）；界面不展示经纬度（与照片查看一致，只给地址）
+  - **`PhotoMapActivity`**：全屏百度地图（标题 = 照片文件名）+ 底部地址卡 + 「开始导航」（未安装任何导航应用时隐藏）；`NavigationHelper` 检测已安装应用（`main-ui` manifest `<queries>` 声明 4 个包）弹窗选择后 scheme 直达：高德 `androidamap://navi`（GCJ-02）/ 百度 `baidumap://map/navi`（BD09LL）/ 腾讯 `qqmap://map/routeplan` 路线页（GCJ-02）/ Google `google.navigation`（WGS-84）；GCJ-02 由 `common-util` 的 `CoordConverter.wgs84ToGcj02` 转换（含单测）
 - `VideoPlayerActivity`：GlVideoView 播放（MediaPlayer + OES，硬解优先）
   - 标题栏/底部控制条为**半透明覆盖层**（`#99000000`，不占布局空间，GL 恒定 `match_parent`）：窗口背景设为透明（`window.setBackgroundDrawable(ColorDrawable(TRANSPARENT))`）才能透过半透明栏看到下层视频；insets 只调整覆盖层 padding
   - **系统栏始终隐藏**：进入即 `hide(systemBars)`（`BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`），`onResume` 重新隐藏；无「显示系统栏」的切换
@@ -160,3 +162,4 @@ URI 设计（cursor 列即 UI 数据接口）：
 - `UriMatcher` 的子节点按**注册顺序**匹配：先注册的 `albums/*` 通配节点会遮挡后注册的 `albums/folder/*`、`albums/app/*`，导致多段 URI 返回 `NO_MATCH`；注册顺序必须“具体模式在前、通配在后”
 - `owner_package_name` 对非 owner 应用不可见（读取为 null），三方应用相册不能按该列过滤；改为用 bucket 名映射分组后按 `bucket_id IN (...)` 查询（读取到的 owner 为空时才回退 `owner_package_name = ?`）
 - 百度地图 SDK 鉴权需在发请求前完成（官方建议在 Application 子类初始化）：惰性初始化（打开详情时才 `SDKInitializer.initialize`）会因鉴权未完成报 `get authtoken failed`、`mContext is null` 且逆地理编码直接失败；改为 `GalleryApp.onCreate` 启动即初始化后正常返回地址
+- MIUI 跨应用跳转确认：首次经 scheme 拉起高德等三方应用时，系统弹出「相册 想要打开 高德地图，是否允许？」（`com.miui.securitycenter` 的 ConfirmStartActivity），点「始终允许」后不再出现；属系统安全行为，应用侧不做绕过

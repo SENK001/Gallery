@@ -60,11 +60,7 @@ class LocationAddressResolver(context: Context) {
             it.setOnGetGeoCodeResultListener(listener)
             geoCoder = it
         }
-        val source = LatLng(latitude, longitude)
-        val converted = CoordinateConverter()
-            .from(CoordinateConverter.CoordType.GPS)
-            .coord(source)
-            .convert() ?: source
+        val converted = toBd09(latitude, longitude)
         pending = key to onResult
         if (!coder.reverseGeoCode(ReverseGeoCodeOption().location(converted))) {
             pending = null
@@ -96,5 +92,17 @@ class LocationAddressResolver(context: Context) {
 
     companion object {
         private const val TAG = "LocationAddressResolver"
+
+        fun toBd09(latitude: Double, longitude: Double): LatLng {
+            val source = LatLng(latitude, longitude)
+            return try {
+                CoordinateConverter()
+                    .from(CoordinateConverter.CoordType.GPS)
+                    .coord(source)
+                    .convert() ?: source
+            } catch (e: Throwable) {
+                source
+            }
+        }
     }
 }

@@ -40,12 +40,16 @@ class GlImageViewer @JvmOverloads constructor(
     private var lastTouchY = 0f
     private var dragging = false
     private var zooming = false
+    private var sheetDragging = false
     private var animator: ValueAnimator? = null
 
     var onPageChanged: ((Int, MediaItem) -> Unit)? = null
     var onSingleTap: ((Float, Float) -> Unit)? = null
     var onLongPress: (() -> Unit)? = null
     var onPressEnd: (() -> Unit)? = null
+    var onSheetDragStart: (() -> Unit)? = null
+    var onSheetDrag: ((Float) -> Unit)? = null
+    var onSheetDragEnd: ((Float) -> Unit)? = null
 
     init {
         setEGLContextClientVersion(2)
@@ -89,6 +93,7 @@ class GlImageViewer @JvmOverloads constructor(
         renderer.currentIndex = position.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         renderer.offsetPx = 0f
         dragging = false
+        sheetDragging = false
         resetZoom()
         requestRender()
         notifyPageChanged()
@@ -123,6 +128,7 @@ class GlImageViewer @JvmOverloads constructor(
                 lastTouchY = event.y
                 dragging = false
                 zooming = false
+                sheetDragging = false
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 zooming = true
@@ -144,14 +150,23 @@ class GlImageViewer @JvmOverloads constructor(
                         clampPan()
                         requestRender()
                     } else {
-                        if (!dragging && abs(dx) > touchSlop) {
-                            dragging = true
+                        if (!dragging && !sheetDragging &&
+                            (abs(dx) > touchSlop || abs(dy) > touchSlop)
+                        ) {
+                            if (abs(dx) >= abs(dy)) {
+                                dragging = true
+                            } else {
+                                sheetDragging = true
+                                onSheetDragStart?.invoke()
+                            }
                             onPressEnd?.invoke()
                         }
                         if (dragging) {
                             renderer.offsetPx = (renderer.offsetPx + dx)
                                 .coerceIn(-width.toFloat(), width.toFloat())
                             requestRender()
+                        } else if (sheetDragging) {
+                            onSheetDrag?.invoke(dy)
                         }
                     }
                 }
@@ -161,18 +176,29 @@ class GlImageViewer @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 velocityTracker?.addMovement(event)
+                val wasSheetDragging = sheetDragging
                 dragging = false
+                sheetDragging = false
                 onPressEnd?.invoke()
-                if (!zooming && renderer.scale <= 1.01f) {
+                if (wasSheetDragging) {
+                    velocityTracker?.computeCurrentVelocity(1000)
+                    onSheetDragEnd?.invoke(velocityTracker?.yVelocity ?: 0f)
+                } else if (!zooming && renderer.scale <= 1.01f) {
                     settlePage()
                 }
                 velocityTracker?.recycle()
                 velocityTracker = null
             }
             MotionEvent.ACTION_CANCEL -> {
+                val wasSheetDragging = sheetDragging
                 dragging = false
+                sheetDragging = false
                 onPressEnd?.invoke()
-                settlePage()
+                if (wasSheetDragging) {
+                    onSheetDragEnd?.invoke(0f)
+                } else {
+                    settlePage()
+                }
                 velocityTracker?.recycle()
                 velocityTracker = null
             }

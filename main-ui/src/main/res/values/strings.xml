@@ -18,5 +18,12 @@
     <string name="gallery_info_title">详细信息</string>
     <string name="gallery_info_close">关闭</string>
     <string name="gallery_info_no_data">暂无详细信息</string>
+    <string name="gallery_info_loading">加载中…</string>
+    <string name="gallery_info_address_loading">地址解析中…</string>
+    <string name="gallery_info_address_failed">地址解析失败</string>
     <string name="gallery_share_title">分享</string>
+    <string name="gallery_map_title">照片位置</string>
+    <string name="gallery_nav_start">开始导航</string>
+    <string name="gallery_nav_choose">选择导航应用</string>
+    <string name="gallery_nav_failed">未找到可用的导航应用</string>
 </resources>

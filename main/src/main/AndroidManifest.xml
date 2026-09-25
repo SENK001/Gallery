@@ -26,16 +26,22 @@
             android:name="com.baidu.lbsapi.API_KEY"
             android:value="${baiduMapApiKey}" />
 
+        <!-- 首启隐私政策同意页：应用入口。未同意前不进入主界面、不初始化任何三方 SDK。 -->
         <activity
-            android:name=".MainActivity"
+            android:name=".PrivacyActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.Gallery.Privacy">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

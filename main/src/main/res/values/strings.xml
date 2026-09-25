@@ -5,4 +5,23 @@
     <string name="permission_message">授予媒体访问权限后即可浏览设备上的照片和视频</string>
     <string name="permission_grant">授予权限</string>
     <string name="permission_manage">管理已选择的照片</string>
+
+    <!-- 隐私政策同意页（首启全屏页，文案结构对齐系统应用首启页） -->
+    <string name="privacy_welcome">欢迎您使用相册。您可使用本应用以实现照片浏览、相册分类、大图查看与视频播放等功能。在使用本应用的过程中，我们将在本地读取并向您申请以下权限：</string>
+    <string name="privacy_perm_media_title">照片和视频</string>
+    <string name="privacy_perm_media_desc">浏览及播放在本机展示的照片与视频</string>
+    <string name="privacy_perm_location_title">照片拍摄地点</string>
+    <string name="privacy_perm_location_desc">读取照片中的位置信息，用于显示地图与地址</string>
+    <string name="privacy_perm_favorite_title">收藏状态</string>
+    <string name="privacy_perm_favorite_desc">将收藏操作写回系统媒体库</string>
+    <string name="privacy_badge">隐私</string>
+    <string name="privacy_statement">请您阅读并同意我们的用户协议与隐私政策。</string>
+    <string name="privacy_link_text">用户协议与隐私政策</string>
+    <string name="privacy_disagree">退出</string>
+    <string name="privacy_agree">同意</string>
+
+    <!-- 同意页完整政策正文（点击「用户协议与隐私政策」链接后展示） -->
+    <string name="privacy_policy_title">用户协议与隐私政策</string>
+    <string name="privacy_policy_body">欢迎使用「相册」。我们非常重视你的个人信息与隐私保护。在使用前，请仔细阅读并充分理解以下内容：\n\n一、我们如何收集和使用信息\n\n1. 照片与视频\n当你授予媒体访问权限后，本应用会读取设备上的照片与视频，用于在本机展示宫格、相册分类、大图查看与视频播放。这些媒体文件全程仅在你的设备本地处理，不会上传到任何服务器。\n\n2. 位置信息（照片中的拍摄地点）\n若某张照片的 EXIF 信息中包含经纬度，本应用会在你查看该照片详情时，把该坐标发送给百度地图 SDK 以获取文字地址并显示地图缩略图。本应用不会读取或上传你的实时定位，也未申请定位权限。\n\n3. 收藏状态\n你在应用内的收藏操作会写回系统媒体库（MediaStore）的收藏字段，仅用于本机展示。\n\n二、第三方 SDK\n\n本应用集成了百度地图 SDK（用于展示地图与逆地理编码），其可能收集设备标识、网络状态与坐标信息用于地图服务。该 SDK 仅在你同意本政策并查看含定位信息的照片详情时才会被初始化。\n\n三、我们不会做的事\n\n· 不会上传、备份或分享你的照片、视频与位置信息；\n· 不会读取通讯录、短信、通话记录；\n· 不会在后台采集你的实时位置。\n\n四、你的选择\n\n你可以随时在系统设置中撤销本应用的媒体权限，或卸载本应用以停止一切数据处理。\n\n点击「同意」即表示你已阅读并同意上述内容；若你不同意，请点击「退出」退出应用。</string>
+    <string name="privacy_close">关闭</string>
 </resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 同意页顶部应用标识：圆角方形底 + 照片图标（对齐系统应用首启页的应用图标块）。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <solid android:color="#FFF7F7F7" />
+            <stroke android:width="1dp" android:color="#14000000" />
+        </shape>
+    </item>
+    <item
+        android:drawable="@drawable/ic_privacy_photo"
+        android:gravity="center"
+        android:width="52dp"
+        android:height="52dp" />
+</layer-list>

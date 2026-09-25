@@ -6,4 +6,13 @@
     </style>
 
     <style name="Theme.Gallery" parent="Base.Theme.Gallery" />
+
+    <!--
+      隐私政策同意页主题：全屏白底页（非对话框），不设遮罩、不设卡片。
+      窗口背景设为透明，白色只由布局根节点绘制一次，避免主题背景与布局背景
+      重复绘制（lint Overdraw）；状态栏保持可见并使用深色图标，与系统应用首启页一致。
+    -->
+    <style name="Theme.Gallery.Privacy" parent="Theme.Gallery">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

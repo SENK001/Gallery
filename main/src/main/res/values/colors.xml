@@ -2,4 +2,10 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 隐私政策同意页（取值对齐系统应用首启页）。 -->
+    <color name="privacy_text_primary">#DE000000</color>
+    <color name="privacy_text_secondary">#8A000000</color>
+    <color name="privacy_button_primary">#FF3482FF</color>
+    <color name="privacy_button_neutral">#FFF2F2F2</color>
 </resources>

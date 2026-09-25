@@ -1,0 +1,15 @@
+<type>(<scope>): <一句话说明>
+
+为什么：
+
+做了什么：
+
+验证：
+
+Refs: #
+
+# type：feat 新功能 | fix 修复 | refactor 重构 | perf 性能 | docs 文档 | test 测试 | build 构建 | chore 杂项
+# scope：main | main-ui | core-data | common-util | gl | viewer | player | provider | docs
+# 标题 ≤50 字；「为什么」写问题背景，「做了什么」写核心改动
+# 「验证」写明实际执行过的命令或真机复测项
+# 关联 Issue 用 Refs #123 / Fixes #123；无则删除该行

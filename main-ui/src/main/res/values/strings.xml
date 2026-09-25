@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gallery_tab_photos">照片</string>
+    <string name="gallery_tab_albums">相册</string>
+    <string name="gallery_section_common">常用</string>
+    <string name="gallery_section_more">更多</string>
+    <string name="gallery_section_recently_deleted">最近删除</string>
+    <string name="gallery_empty">暂无内容</string>
+    <string name="gallery_play">播放</string>
+    <string name="gallery_rotate_screen">横竖屏切换</string>
+    <string name="gallery_time_format">%1$s / %2$s</string>
+    <string name="gallery_time_initial">00:00 / 00:00</string>
+    <string name="gallery_share">分享</string>
+    <string name="gallery_favorite">收藏</string>
+    <string name="gallery_info">详情</string>
+    <string name="gallery_count_format">%1$d 项</string>
+    <string name="gallery_position_format">%1$d / %2$d</string>
+    <string name="gallery_info_title">详细信息</string>
+    <string name="gallery_info_close">关闭</string>
+    <string name="gallery_info_no_data">暂无详细信息</string>
+    <string name="gallery_share_title">分享</string>
+</resources>

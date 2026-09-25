@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <activity
+            android:name="com.senk.gallery.ui.AlbumDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
+        <activity
+            android:name="com.senk.gallery.ui.ViewerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
+        <activity
+            android:name="com.senk.gallery.ui.VideoPlayerActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
+    </application>
+
+</manifest>

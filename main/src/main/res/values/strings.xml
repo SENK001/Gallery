@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">相册</string>
+    <string name="permission_title">需要访问照片和视频</string>
+    <string name="permission_message">授予媒体访问权限后即可浏览设备上的照片和视频</string>
+    <string name="permission_grant">授予权限</string>
+    <string name="permission_manage">管理已选择的照片</string>
+</resources>

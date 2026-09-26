@@ -3,12 +3,16 @@ package com.senk.gallery.ui.gl
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
 import android.util.LruCache
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.sin
 
 class BadgeCache(private val density: Float = 1.5f, maxEntries: Int = 48) {
 
@@ -27,12 +31,31 @@ class BadgeCache(private val density: Float = 1.5f, maxEntries: Int = 48) {
 
     private val pendingDeletes = ConcurrentLinkedQueue<Int>()
 
-    fun videoBadge(text: String): Int = cache.get("video:$text") ?: createVideoBadge(text).also {
-        cache.put("video:$text", it)
+    fun videoInfo(text: String): TextTexture {
+        val key = "info:$text"
+        val existing = cache.get(key)
+        if (existing != null) {
+            return textSizes[key] ?: TextTexture(existing, 1, 1)
+        }
+        val texture = createVideoInfo(text)
+        cache.put(key, texture.textureId)
+        textSizes[key] = texture
+        return texture
     }
 
-    fun motionBadge(): Int = cache.get(KEY_MOTION) ?: createMotionBadge().also {
-        cache.put(KEY_MOTION, it)
+    fun bottomGradient(): Int = cache.get(KEY_GRADIENT) ?: createBottomGradient().also {
+        cache.put(KEY_GRADIENT, it)
+    }
+
+    fun motionBadge(): TextTexture {
+        val existing = cache.get(KEY_MOTION)
+        if (existing != null) {
+            return textSizes[KEY_MOTION] ?: TextTexture(existing, 1, 1)
+        }
+        val texture = createMotionBadge()
+        cache.put(KEY_MOTION, texture.textureId)
+        textSizes[KEY_MOTION] = texture
+        return texture
     }
 
     fun playIcon(): Int = cache.get(KEY_PLAY) ?: createPlayIcon().also {
@@ -67,56 +90,104 @@ class BadgeCache(private val density: Float = 1.5f, maxEntries: Int = 48) {
 
     private val textSizes = HashMap<String, TextTexture>()
 
-    private fun createVideoBadge(text: String): Int {
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textSize = 11f * density
-        }
-        val triangleWidth = 7f * density
-        val padding = 5f * density
-        val textWidth = textPaint.measureText(text)
-        val metrics = textPaint.fontMetrics
-        val textHeight = metrics.descent - metrics.ascent
-        val width = ceil(padding * 2 + triangleWidth + 4f * density + textWidth).toInt()
-        val height = ceil(padding * 2 + textHeight).toInt()
+    private fun createBottomGradient(): Int {
+        val width = 4
+        val height = 64
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x99000000.toInt() }
-        val radius = 3f * density
-        canvas.drawRoundRect(
-            RectF(0f, 0f, width.toFloat(), height.toFloat()),
-            radius,
-            radius,
-            bgPaint,
-        )
-        val path = Path().apply {
-            moveTo(padding, padding + textHeight * 0.15f)
-            lineTo(padding, height - padding - textHeight * 0.15f)
-            lineTo(padding + triangleWidth, height / 2f)
-            close()
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f,
+                0f,
+                0f,
+                height.toFloat(),
+                0x00000000,
+                0xB3000000.toInt(),
+                Shader.TileMode.CLAMP,
+            )
         }
-        canvas.drawPath(path, textPaint)
-        val baseline = (height - (metrics.descent + metrics.ascent)) / 2f - padding * 0.2f
-        canvas.drawText(text, padding + triangleWidth + 4f * density, baseline, textPaint)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         return GlUtils.uploadTexture(bitmap).also { bitmap.recycle() }
     }
 
-    private fun createMotionBadge(): Int {
-        val size = ceil(14f * density).toInt()
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    private fun createVideoInfo(text: String): TextTexture {
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 11f * density
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val metrics = textPaint.fontMetrics
+        val textHeight = metrics.descent - metrics.ascent
+        val iconSize = 12f * density
+        val strokeWidth = 1.3f * density
+        val gap = 3f * density
+        val width = ceil(iconSize + gap + textPaint.measureText(text)).toInt().coerceAtLeast(2)
+        val height = ceil(textHeight.coerceAtLeast(iconSize)).toInt().coerceAtLeast(2)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x99000000.toInt() }
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint)
+        val centerX = iconSize / 2f
+        val centerY = height / 2f
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
-            strokeWidth = 1.4f * density
+            this.strokeWidth = strokeWidth
         }
-        val inset = 3.6f * density
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f - inset, ringPaint)
-        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-        canvas.drawCircle(size / 2f, size / 2f, 1.6f * density, dotPaint)
-        return GlUtils.uploadTexture(bitmap).also { bitmap.recycle() }
+        canvas.drawCircle(centerX, centerY, (iconSize - strokeWidth) / 2f, ringPaint)
+        val halfWidth = iconSize * 0.16f
+        val halfHeight = iconSize * 0.19f
+        val triangleCenterX = centerX + iconSize * 0.04f
+        val path = Path().apply {
+            moveTo(triangleCenterX - halfWidth, centerY - halfHeight)
+            lineTo(triangleCenterX - halfWidth, centerY + halfHeight)
+            lineTo(triangleCenterX + halfWidth, centerY)
+            close()
+        }
+        canvas.drawPath(path, textPaint)
+        val baseline = (height - textHeight) / 2f - metrics.ascent
+        canvas.drawText(text, iconSize + gap, baseline, textPaint)
+        val textureId = GlUtils.uploadTexture(bitmap)
+        bitmap.recycle()
+        return TextTexture(textureId, width, height)
+    }
+
+    private fun createMotionBadge(): TextTexture {
+        val iconSize = 16f * density
+        val unit = iconSize / 1024f
+        val dotCount = 36
+        val orbitRadius = 428f * unit
+        val dotRadius = 21.7f * unit
+        val ringOuter = 326.65f * unit
+        val ringInner = 279.6f * unit
+        val centerOuter = 169.4f * unit
+        val centerInner = 83.4f * unit
+        val shadowRadius = 1.5f * density
+        val padding = shadowRadius + density
+        val width = ceil(iconSize + padding * 2).toInt().coerceAtLeast(2)
+        val height = width
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val center = width / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            setShadowLayer(shadowRadius, 0f, 0.5f * density, 0x59000000)
+        }
+        for (i in 0 until dotCount) {
+            val angle = Math.PI * 2.0 * i / dotCount - Math.PI / 2.0
+            canvas.drawCircle(
+                center + (orbitRadius * cos(angle)).toFloat(),
+                center + (orbitRadius * sin(angle)).toFloat(),
+                dotRadius,
+                paint,
+            )
+        }
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = ringOuter - ringInner
+        canvas.drawCircle(center, center, (ringOuter + ringInner) / 2f, paint)
+        paint.strokeWidth = centerOuter - centerInner
+        canvas.drawCircle(center, center, (centerOuter + centerInner) / 2f, paint)
+        val textureId = GlUtils.uploadTexture(bitmap)
+        bitmap.recycle()
+        return TextTexture(textureId, width, height)
     }
 
     private fun createPlayIcon(): Int {
@@ -161,5 +232,6 @@ class BadgeCache(private val density: Float = 1.5f, maxEntries: Int = 48) {
     private companion object {
         const val KEY_MOTION = "motion"
         const val KEY_PLAY = "play"
+        const val KEY_GRADIENT = "bottom_gradient"
     }
 }

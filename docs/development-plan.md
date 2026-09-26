@@ -68,7 +68,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 | 组件 | 实现 |
 |---|---|
-| `GlThumbnailGridView` | GLSurfaceView + `OverScroller` 自绘宫格，RENDERMODE_WHEN_DIRTY；4 列方形单元格居中裁剪；视频时长/动态照片角标用位图纹理绘制；Executor 池 + LRU 纹理缓存；`GlGridRenderer` 只对**可见行（firstRow..lastRow）**发缩略图请求 —— ~~可见优先/离开取消~~ **未实现**（无优先级队列；`ThumbnailLoader` 仅在 shutdown 时批量 cancel，滚出屏幕的请求仍会跑完并进缓存）；点击回调 |
+| `GlThumbnailGridView` | GLSurfaceView + `OverScroller` 自绘宫格，RENDERMODE_WHEN_DIRTY；4 列方形单元格居中裁剪；视频角标与动态照片角标共用缩略图底部 50% 区域的黑色→透明渐变纹理（底边约 70% 黑）；视频在左下角绘制圆形播放图标 + 加粗时长文字（11sp，图标与文字均按纹理原始尺寸、不拉伸）；动态照片角标按官方矢量图比例绘制：外圈 36 个白点 + 中间细圆环 + 中心圆环（带柔和阴影），同样置于左下角；角标样式参考系统相册（MIUI）；Executor 池 + LRU 纹理缓存；`GlGridRenderer` 只对**可见行（firstRow..lastRow）**发缩略图请求 —— ~~可见优先/离开取消~~ **未实现**（无优先级队列；`ThumbnailLoader` 仅在 shutdown 时批量 cancel，滚出屏幕的请求仍会跑完并进缓存）；点击回调 |
 | `GlImageViewer` | GLSurfaceView 自绘左右翻页（拖动跟手 + fling），前后页纹理预加载；`ImageDecoder` 目标尺寸采样（受 GL_MAX_TEXTURE_SIZE 限制）—— ~~EXIF 方向矩阵~~ **无矩阵代码**：`ImageDecoder`（API 28+）解码时已自动套用 EXIF 方向，故不再手写方向变换；双击/双指缩放；方向锁横纵手势（横向翻页/纵向上划 detail 面板）；单击回调切换沉浸；视频页显示封面+播放按钮 |
 | `GlVideoView` | GLSurfaceView 渲染（播放逻辑全部委托 `VideoPlayManager`），aspect-fit（尺寸/朝向直接采用 MediaPlayer 旋转后的显示尺寸）；默认 z-order（`setZOrderOnTop(false)`，控制层窗口视图需盖在其上）；生命周期管理 —— ~~音频焦点处理~~ **未实现**（仅 `setAudioAttributes(USAGE_MEDIA/CONTENT_TYPE_MOVIE)`，未 `requestAudioFocus`） |
 | `VideoPlayManager` | MediaPlayer + SurfaceTexture(OES) 播放状态机封装：`VideoSource.File`（独立文件）/ `VideoSource.Embedded`（文件尾部内嵌 MP4 + 长度）；`attachTexture` 在 GL 线程绑定 OES 纹理（GL 上下文重建后自动换绑并重建播放器）；start/pause/seekTo/stop/release、prepared/duration/position/尺寸与帧到达回调；播放器页与查看器动态照片共用 |

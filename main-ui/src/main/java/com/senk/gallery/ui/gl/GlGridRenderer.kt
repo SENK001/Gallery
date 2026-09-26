@@ -164,23 +164,40 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
             drawQuad(rect, u0, v0, u1, v1, entry.textureId)
         }
         val size = rect.width()
-        if (item.isVideo && item.duration > 0L) {
+        val isVideo = item.isVideo && item.duration > 0L
+        if (isVideo || item.isMotionPhoto) {
+            badgeRect.set(rect.left, rect.bottom - size * 0.5f, rect.right, rect.bottom)
+            drawQuad(badgeRect, 0f, 0f, 1f, 1f, badgeCache.bottomGradient())
+        }
+        if (isVideo) {
+            val info = badgeCache.videoInfo(DateFormats.formatDuration(item.duration))
+            val margin = size * 0.06f
+            var infoWidth = info.width.toFloat()
+            var infoHeight = info.height.toFloat()
+            val maxWidth = size * 0.6f
+            if (infoWidth > maxWidth) {
+                val scale = maxWidth / infoWidth
+                infoWidth *= scale
+                infoHeight *= scale
+            }
             badgeRect.set(
-                rect.left + size * 0.06f,
-                rect.bottom - size * 0.22f,
-                rect.right - size * 0.06f,
-                rect.bottom - size * 0.05f,
+                rect.left + margin,
+                rect.bottom - margin - infoHeight,
+                rect.left + margin + infoWidth,
+                rect.bottom - margin,
             )
-            drawQuad(badgeRect, 0f, 0f, 1f, 1f, badgeCache.videoBadge(DateFormats.formatDuration(item.duration)))
+            drawQuad(badgeRect, 0f, 0f, 1f, 1f, info.textureId)
         }
         if (item.isMotionPhoto) {
+            val motion = badgeCache.motionBadge()
+            val motionMargin = size * 0.06f
             badgeRect.set(
-                rect.left + size * 0.06f,
-                rect.top + size * 0.06f,
-                rect.left + size * 0.26f,
-                rect.top + size * 0.26f,
+                rect.left + motionMargin,
+                rect.bottom - motionMargin - motion.height,
+                rect.left + motionMargin + motion.width,
+                rect.bottom - motionMargin,
             )
-            drawQuad(badgeRect, 0f, 0f, 1f, 1f, badgeCache.motionBadge())
+            drawQuad(badgeRect, 0f, 0f, 1f, 1f, motion.textureId)
         }
     }
 

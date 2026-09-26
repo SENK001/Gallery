@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.gl.GlThumbnailGridView
+import com.senk.gallery.util.DisplayUtils
 import kotlinx.coroutines.launch
 
 class PhotosFragment : Fragment(R.layout.fragment_photos) {
@@ -25,6 +26,7 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         grid = view.findViewById(R.id.photo_grid)
         grid?.apply {
             setColumns(COLUMNS)
+            setBottomInset(DisplayUtils.dp2px(requireContext(), BOTTOM_INSET_DP).toInt())
             onItemClick = { item -> openViewer(item) }
             onLoadMore = { loadPage(reset = false) }
         }
@@ -108,5 +110,6 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
     companion object {
         const val PAGE_SIZE = 200
         private const val COLUMNS = 4
+        private const val BOTTOM_INSET_DP = 92f
     }
 }

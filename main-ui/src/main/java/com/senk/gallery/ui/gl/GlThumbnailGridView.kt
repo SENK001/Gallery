@@ -1,7 +1,6 @@
 package com.senk.gallery.ui.gl
 
 import android.content.Context
-import android.graphics.Color
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -40,10 +39,10 @@ class GlThumbnailGridView @JvmOverloads constructor(
 
     init {
         setEGLContextClientVersion(2)
-        setZOrderOnTop(true)
         setRenderer(renderer)
         renderMode = RENDERMODE_WHEN_DIRTY
-        setBackgroundColor(Color.WHITE)
+        // 默认 z-order：GL 面位于窗口后方，窗口层控件（如底部悬浮胶囊导航）可覆盖其上；
+        // 白底由渲染器 glClearColor 绘制（给 GLSurfaceView 设 View 背景会盖住 surface）
         // 与屏幕边缘无间距，仅缩略图之间保留间隔
         renderer.geometry.padding = 0f
         renderer.geometry.gap = DisplayUtils.dp2px(context, 1.5f)

@@ -77,8 +77,8 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="16dp"
-        app:cardBackgroundColor="#F5FFFFFF"
-        app:cardCornerRadius="30dp"
+        app:cardBackgroundColor="#F0FFFFFF"
+        app:cardCornerRadius="34dp"
         app:cardElevation="10dp"
         app:strokeWidth="0dp">
 
@@ -86,13 +86,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="5dp">
+            android:padding="4dp">
 
             <FrameLayout
                 android:id="@+id/nav_photos"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -102,29 +101,29 @@
                     android:background="@drawable/bg_nav_item"
                     android:duplicateParentState="true"
                     android:gravity="center"
-                    android:minWidth="104dp"
-                    android:orientation="horizontal"
-                    android:paddingStart="22dp"
-                    android:paddingTop="11dp"
-                    android:paddingEnd="22dp"
-                    android:paddingBottom="11dp">
+                    android:minWidth="92dp"
+                    android:orientation="vertical"
+                    android:paddingStart="16dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="4dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:duplicateParentState="true"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:contentDescription="@string/gallery_tab_photos"
+                        android:duplicateParentState="true"
                         android:src="@drawable/ic_tab_photos"
                         app:tint="@color/nav_item_tint" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="7dp"
+                        android:layout_marginTop="1dp"
                         android:duplicateParentState="true"
                         android:text="@string/gallery_tab_photos"
                         android:textColor="@color/nav_item_text"
-                        android:textSize="14sp" />
+                        android:textSize="11sp" />
 
                 </LinearLayout>
 
@@ -134,7 +133,6 @@
                 android:id="@+id/nav_albums"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -144,29 +142,29 @@
                     android:background="@drawable/bg_nav_item"
                     android:duplicateParentState="true"
                     android:gravity="center"
-                    android:minWidth="104dp"
-                    android:orientation="horizontal"
-                    android:paddingStart="22dp"
-                    android:paddingTop="11dp"
-                    android:paddingEnd="22dp"
-                    android:paddingBottom="11dp">
+                    android:minWidth="92dp"
+                    android:orientation="vertical"
+                    android:paddingStart="16dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="4dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:duplicateParentState="true"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:contentDescription="@string/gallery_tab_albums"
+                        android:duplicateParentState="true"
                         android:src="@drawable/ic_tab_albums"
                         app:tint="@color/nav_item_tint" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="7dp"
+                        android:layout_marginTop="1dp"
                         android:duplicateParentState="true"
                         android:text="@string/gallery_tab_albums"
                         android:textColor="@color/nav_item_text"
-                        android:textSize="14sp" />
+                        android:textSize="11sp" />
 
                 </LinearLayout>
 

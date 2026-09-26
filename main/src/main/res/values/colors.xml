@@ -8,4 +8,9 @@
     <color name="privacy_text_secondary">#8A000000</color>
     <color name="privacy_button_primary">#FF3482FF</color>
     <color name="privacy_button_neutral">#FFF2F2F2</color>
+
+    <!-- 底部胶囊导航（选中态参考高德地图）。 -->
+    <color name="nav_item_selected">#FF1E7DFF</color>
+    <color name="nav_icon_unselected">#E6000000</color>
+    <color name="nav_text_unselected">#99000000</color>
 </resources>

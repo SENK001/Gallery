@@ -77,7 +77,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 ### 3.2 主界面与查看器
 
-- `MainActivity`（main 模块）：MaterialToolbar + ViewPager2（照片 / 相册），Tab 切换由**底部悬浮胶囊导航栏**（MaterialCardView + 胶囊选中态）驱动，宫格区域与胶囊不重叠
+- `MainActivity`（main 模块）：MaterialToolbar + ViewPager2（照片 / 相册），Tab 切换由**底部悬浮胶囊导航栏**驱动：MaterialCardView 磨砂白底，条目图标在上、文字在下，选中项图标与文字为蓝色并整体带半透明灰色大圆角衬底（衬底包住图标和文字，可透出下层内容，与导航栏背景同一类半透明效果），样式参考高德地图底部栏；宫格区域与胶囊不重叠
 - `PhotosFragment`：GL 宫格（不分组），滑到底分页加载
 - `AlbumsFragment`：RecyclerView 多类型 — “常用”3 列网格 + “更多”列表（小封面/名称/数量），section 标题
 - `AlbumDetailActivity`：相册内容 GL 宫格 + 分页

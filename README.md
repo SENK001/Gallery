@@ -98,3 +98,14 @@ BAIDU_MAP_API_KEY=你的AK
 - **SDK 依赖改为 Maven 后复测**（2026-09-28，同机）：`assembleDebug`/`Release`/单测/lint 共 **327/327 任务** BUILD SUCCESSFUL；debug **38.67MB**、release **35.81MB**，APK 内 arm64 的 4 个 so 齐全；真机详情面板地图瓦片 + 蓝点 + 逆地理编码 **`重庆市（地址已脱敏）`**、全屏 `PhotoMapActivity` 均正常，无崩溃、无鉴权报错（详见 [docs/development-plan.md](docs/development-plan.md) §10 末节）
 - **隐私同意页**：首启显示（全屏页）；「退出」/返回键退出且不记录同意（再次启动仍显示）；点「用户协议与隐私政策」可查看政策正文；「同意」写入状态后进入权限流程与主界面；**第二次启动不再显示**；未同意时不会初始化百度地图 SDK（`MainActivity` 为 `exported=false`，`am start` 直调会被系统以 `Permission Denial: not exported` 拒绝——本次验证中实测确认）
 - **现场截图与完整报告**：本机 `verification-reports/`（**该目录不进版本库**，含 11 张真机截图与 `2026-09-26-device-verification.md`）；重新生成方式见其中 `README.md`
+
+## 许可证
+
+本项目**自有代码与资源**以 [Apache License 2.0](LICENSE) 授权，版权归 `Copyright 2026 SENK001`。
+
+**第三方内容不适用该授权**，完整清单与声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，其中两点需要特别留意：
+
+1. **百度地图 SDK 是专有软件**：它由 Gradle 在构建时从 Maven Central 下载（不存放在本仓库），本项目**不对其主张任何授权，也不对其再许可**。使用前须自行遵守[百度地图开放平台服务条款](https://lbsyun.baidu.com/docs/pcsa?title=law/open/law)并自备 API Key。其 POM 元数据虽声明 Apache-2.0，但该声明的效力需你自行核验。
+2. **Material Design Icons**：项目中有 17 个矢量图标是从 [google/material-design-icons](https://github.com/google/material-design-icons) **逐字节复制**的路径数据（非仅样式参考），按 Apache-2.0 保留 Google 版权声明，对应关系见 `THIRD_PARTY_NOTICES.md` §1。
+
+> 本仓库历史上曾包含百度地图 SDK 二进制（AAR + 4 个 ABI 的 so，共 75.5 MB），已于提交 `9fdf1a7` 中连同全部 Git 历史移除，当前仓库不含任何第三方二进制。

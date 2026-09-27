@@ -8,3 +8,21 @@
 # 在百度地图开放平台按「应用包名 + 签名 SHA1」申请后填入。
 # 未配置时应用仍可编译运行，只是地图与逆地理编码功能不可用。
 BAIDU_MAP_API_KEY=
+
+# ---------------------------------------------------------------
+# Release 签名（四项缺一不可；任一为空则 release 产出未签名包）
+# ---------------------------------------------------------------
+# 密钥文件路径。建议放在仓库外，例如用户目录下的 ~/.android/release.keystore。
+# Windows 下需转义反斜杠。也支持相对项目根目录的路径。
+# RELEASE_STORE_FILE=C\:\\Users\\you\\.android\\release.keystore
+# RELEASE_STORE_PASSWORD=
+# RELEASE_KEY_ALIAS=
+# RELEASE_KEY_PASSWORD=
+#
+# 生成新密钥（有效期 25 年，RSA 2048；口令自己设定）：
+#   keytool -genkeypair -v -keystore "%USERPROFILE%\.android\release.keystore" \
+#     -alias gallery -keyalg RSA -keysize 2048 -validity 9125 \
+#     -storetype PKCS12 -dname "CN=Gallery, OU=Dev, O=Senk, L=Chongqing, ST=Chongqing, C=CN"
+#
+# 查看现有密钥的证书指纹（申请百度 AK 需要 SHA1）：
+#   keytool -list -v -keystore "%USERPROFILE%\.android\release.keystore" -alias gallery

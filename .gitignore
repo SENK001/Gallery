@@ -28,3 +28,10 @@ local.properties
 # 百度地图 SDK 已改为从 Maven Central 引入（见 gradle/libs.versions.toml 的 baiduLbs），
 # 不再需要本地 AAR/so。若日后回退到本地集成，产物也一律不进版本库（体积 75.5MB 且非本仓库版权）。
 /libs/baidumap/
+
+# 签名密钥与口令（发布签名专用，绝不可进版本库）。
+# 密钥本身放在仓库外（如 ~/.android/release.keystore），口令写在已被忽略的 local.properties。
+# 这里再兜一层，防止误把 keystore 复制进项目目录后被提交。
+*.jks
+*.keystore
+keystore.properties

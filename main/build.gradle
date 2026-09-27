@@ -2,16 +2,24 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-// 百度地图 AK 不进版本库：从 local.properties 读取（该文件已被 .gitignore 忽略）。
-// 未配置时注入空串，SDK 初始化会失败但应用不崩溃（地图/逆地理编码功能不可用）。
-// 配置方式见 README「百度地图 AK 配置」。
-def baiduMapApiKey = ''
+// 百度地图 AK 与 release 签名口令都不进版本库：统一从 local.properties 读取（该文件已被 .gitignore 忽略）。
+// 未配置 AK 时注入空串，SDK 初始化会失败但应用不崩溃（地图/逆地理编码功能不可用）。
+// 未配置签名时 release 产出 main-release-unsigned.apk，不影响他人 clone 后构建。
+// 配置方式见 README「百度地图 SDK 与 AK 配置」与「Release 签名」。
+def localProps = new Properties()
 def propsFile = rootProject.file('local.properties')
 if (propsFile.exists()) {
-    def props = new Properties()
-    propsFile.withInputStream { props.load(it) }
-    baiduMapApiKey = props.getProperty('BAIDU_MAP_API_KEY', '')
+    propsFile.withInputStream { localProps.load(it) }
 }
+def baiduMapApiKey = localProps.getProperty('BAIDU_MAP_API_KEY', '')
+
+// release 签名：四项缺一不可，任一缺失即视为未配置（产出未签名包）。
+// 注意：口令只存在于 local.properties，绝不可写死在本文件里。
+def releaseStoreFile = localProps.getProperty('RELEASE_STORE_FILE', '')
+def releaseStorePassword = localProps.getProperty('RELEASE_STORE_PASSWORD', '')
+def releaseKeyAlias = localProps.getProperty('RELEASE_KEY_ALIAS', '')
+def releaseKeyPassword = localProps.getProperty('RELEASE_KEY_PASSWORD', '')
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
 android {
     namespace 'com.senk.gallery'
@@ -40,8 +48,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                // 同时启用 v1/v2/v3：v2+ 为 Android 7+ 必需，v1 兼容更早系统
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             optimization {
                 enable false
             }

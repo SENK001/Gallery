@@ -49,6 +49,35 @@ Gallery/
 adb install -r main/build/outputs/apk/debug/main-debug.apk
 ```
 
+## Release 签名
+
+**签名口令不进版本库**：`main/build.gradle` 从 `local.properties`（已被 `.gitignore` 忽略）读取四项配置，模板见 [local.properties.example](local.properties.example)：
+
+```properties
+RELEASE_STORE_FILE=C\:\\Users\\you\\.android\\release.keystore
+RELEASE_STORE_PASSWORD=
+RELEASE_KEY_ALIAS=
+RELEASE_KEY_PASSWORD=
+```
+
+```bash
+./gradlew :main:assembleRelease
+# 已配置签名 -> main/build/outputs/apk/release/main-release.apk
+# 未配置签名 -> main-release-unsigned.apk（不影响他人 clone 后构建）
+```
+
+**四项缺一不可**，任一为空即视为未配置并产出未签名包——这样开源仓库在没有密钥的情况下依然能构建。
+
+生成新密钥（有效期 25 年，RSA 2048）与查看 SHA1（申请百度 AK 需要，AK 绑定「包名 + 签名 SHA1」）：
+
+```bash
+keytool -genkeypair -v -keystore "%USERPROFILE%\.android\release.keystore" ^
+  -alias gallery -keyalg RSA -keysize 2048 -validity 9125 -storetype PKCS12
+keytool -list -v -keystore "%USERPROFILE%\.android\release.keystore" -alias gallery
+```
+
+> ⚠️ 密钥文件与口令一旦丢失，**无法为已发布的同包名应用提供升级**（签名不一致会导致覆盖安装失败）。请单独备份密钥文件与口令。
+
 ## 百度地图 SDK 与 AK 配置
 
 **SDK 从 Maven Central 引入**（`com.baidu.lbsyun`），无需本地 AAR/so，也无需 `jniLibs.srcDir`。注意**三个 Artifact 缺一不可**——它们各自只覆盖一部分 API：

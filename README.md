@@ -49,7 +49,17 @@ Gallery/
 adb install -r main/build/outputs/apk/debug/main-debug.apk
 ```
 
-## 百度地图 AK 配置
+## 百度地图 SDK 与 AK 配置
+
+**SDK 从 Maven Central 引入**（`com.baidu.lbsyun`），无需本地 AAR/so，也无需 `jniLibs.srcDir`。注意**三个 Artifact 缺一不可**——它们各自只覆盖一部分 API：
+
+| Artifact | 提供 |
+|---|---|
+| `BaiduMapSDK_Map:8.2.0` | 地图渲染（`TextureMapView`/`BaiduMap`/`MarkerOptions`），含 4 个 ABI 的 `.so`；经 `base`→`common` 传递引入 |
+| `BaiduMapSDK_Search:8.2.0` | `GeoCoder` 逆地理编码 |
+| `BaiduMapSDK_Util:8.2.0` | `CoordinateConverter`（WGS-84 → BD09LL） |
+
+版本集中声明在 [gradle/libs.versions.toml](gradle/libs.versions.toml) 的 `baiduLbs`。**只声明 `Map` 会编译失败**（缺 `GeoCoder`/`CoordinateConverter` 等 20 余处引用）。
 
 AK 不进版本库，从 `local.properties`（已被 `.gitignore` 忽略）读取，模板见仓库根 [local.properties.example](local.properties.example)：
 
@@ -85,5 +95,6 @@ BAIDU_MAP_API_KEY=你的AK
 - **媒体库口径**：应用展示 **223 条 = 216 图片 + 7 视频**（与相册「全部 223 项」吻合），其 `datetaken` **全部非 NULL**；`MediaStore.Files` 原始行数为 1749（含非图片/视频文件），其中 1525 条 `datetaken` 为 NULL 的均为这些非媒体文件
 - **排序**：`COALESCE(datetaken, date_modified*1000) DESC, _id DESC` 真机可用且分页稳定（同秒并列的跨页不稳定已由 `_id DESC` 稳定键修复；规则与 AOSP 依据见 [docs/development-plan.md](docs/development-plan.md) §10 设备适配记录）
 - **逆地理编码**结果：`重庆市（地址已脱敏）`
-- **隐私同意页**：首启显示（全屏页）；「退出」/返回键退出且不记录同意（再次启动仍显示）；点「用户协议与隐私政策」可查看政策正文；「同意」写入状态后进入权限流程与主界面；**第二次启动不再显示**；未同意时不会初始化百度地图 SDK
+- **SDK 依赖改为 Maven 后复测**（2026-09-28，同机）：`assembleDebug`/`Release`/单测/lint 共 **327/327 任务** BUILD SUCCESSFUL；debug **38.67MB**、release **35.81MB**，APK 内 arm64 的 4 个 so 齐全；真机详情面板地图瓦片 + 蓝点 + 逆地理编码 **`重庆市（地址已脱敏）`**、全屏 `PhotoMapActivity` 均正常，无崩溃、无鉴权报错（详见 [docs/development-plan.md](docs/development-plan.md) §10 末节）
+- **隐私同意页**：首启显示（全屏页）；「退出」/返回键退出且不记录同意（再次启动仍显示）；点「用户协议与隐私政策」可查看政策正文；「同意」写入状态后进入权限流程与主界面；**第二次启动不再显示**；未同意时不会初始化百度地图 SDK（`MainActivity` 为 `exported=false`，`am start` 直调会被系统以 `Permission Denial: not exported` 拒绝——本次验证中实测确认）
 - **现场截图与完整报告**：本机 `verification-reports/`（**该目录不进版本库**，含 11 张真机截图与 `2026-09-26-device-verification.md`）；重新生成方式见其中 `README.md`

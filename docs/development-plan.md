@@ -87,7 +87,7 @@ URI 设计（cursor 列即 UI 数据接口）：
   - 标题栏/底部菜单为覆盖层（FrameLayout，不占布局空间）：照片按全屏 fit，进出沉浸只隐藏/显示覆盖层与系统栏，内容区尺寸不变（像素级零跳变）；覆盖层通过系统栏 insets 调整 padding
   - **长按动态照片播放**（`item.isMotionPhoto && item.motionVideoLength > 0`）：对文件尾部内嵌 MP4 起播，视频帧 center-fit 叠加绘制在当前页照片上；松手/拖动/翻页/`onPause` 停止并恢复静图；错误时 log 并回退静图（MIUI 长按弹出的系统识别气泡为系统全局行为，无法在 App 内抑制）
   - **上划详情面板**（替代原详情弹窗）：从底部上划跟手拖出半屏（52% 屏高）面板，顶栏/底栏随展开进度淡出；内容自上而下 = 基础信息（名称/类型/拍摄时间/大小/尺寸/路径/来源应用）→ 地图定位卡片（EXIF 含定位时：百度地图瓦片 + 蓝点标记 + 逆地理编码地址，隐藏缩放/比例尺控件，点击整卡进入 `PhotoMapActivity`）→ EXIF；无定位则不显示地图卡片；展开时翻页保持展开并按 item 刷新内容（防串页）；大图单击/返回键收起（返回键优先关面板）—— ~~把手拖动收起~~ **未实现**：`sheet_handle` 只存在于 `activity_viewer.xml`，无任何 Kotlin 绑定
-  - **定位与导航**：地址解析经 `LocationAddressResolver` 用百度地图 SDK 逆地理编码（WGS-84→BD09LL，含缓存）；**SDK 唯一初始化点是 `BaiduMapSdk.ensureInitialized(context)`**（进程内单例，负责 `setAgreePrivacy` + `setCoordType(BD09LL)` + `initialize`），由 `ViewerActivity.ensureSheetMap()` / `PhotoMapActivity.onCreate()` / `LocationAddressResolver` 按需调用，并在权限授予后（`MainActivity.updatePermissionState()`）预热鉴权；~~初始化在 `GalleryApp.onCreate`~~ **已移除**（原因见 §10）；AK 经 `main` 的 `AndroidManifest.xml` meta-data `com.baidu.lbsapi.API_KEY`（值为 `manifestPlaceholders.baiduMapApiKey`，来自 `local.properties` 的 `BAIDU_MAP_API_KEY`）注入，SDK AAR 位于 `libs/baidumap`，so 由 `main` 的 `jniLibs.srcDir` 打包；界面不展示经纬度（与照片查看一致，只给地址）
+  - **定位与导航**：地址解析经 `LocationAddressResolver` 用百度地图 SDK 逆地理编码（WGS-84→BD09LL，含缓存）；**SDK 唯一初始化点是 `BaiduMapSdk.ensureInitialized(context)`**（进程内单例，负责 `setAgreePrivacy` + `setCoordType(BD09LL)` + `initialize`），由 `ViewerActivity.ensureSheetMap()` / `PhotoMapActivity.onCreate()` / `LocationAddressResolver` 按需调用，并在权限授予后（`MainActivity.updatePermissionState()`）预热鉴权；~~初始化在 `GalleryApp.onCreate`~~ **已移除**（原因见 §10）；AK 经 `main` 的 `AndroidManifest.xml` meta-data `com.baidu.lbsapi.API_KEY`（值为 `manifestPlaceholders.baiduMapApiKey`，来自 `local.properties` 的 `BAIDU_MAP_API_KEY`）注入；**SDK 经 Maven Central 引入**（`com.baidu.lbsyun` 的 `BaiduMapSDK_Map` + `BaiduMapSDK_Search` + `BaiduMapSDK_Util`，版本集中在 `libs.versions.toml` 的 `baiduLbs`，三者缺一不可），~~本地 `libs/baidumap` AAR + `jniLibs.srcDir`~~ **已移除**（原因见 §10）；界面不展示经纬度（与照片查看一致，只给地址）
   - **`PhotoMapActivity`**：全屏百度地图（标题 = 照片文件名）+ 底部地址卡 + 「开始导航」（未安装任何导航应用时隐藏）；`NavigationHelper` 检测已安装应用（`main-ui` manifest `<queries>` 声明 4 个包）弹窗选择后 scheme 直达：高德 `androidamap://navi`（GCJ-02）/ 百度 `baidumap://map/navi`（BD09LL）/ 腾讯 `qqmap://map/routeplan` 路线页（GCJ-02）/ Google `google.navigation`（WGS-84）；GCJ-02 由 `common-util` 的 `CoordConverter.wgs84ToGcj02` 转换（含单测）
 - `VideoPlayerActivity`：GlVideoView 播放（MediaPlayer + OES，硬解优先）
   - 标题栏/底部控制条为**半透明覆盖层**（`#99000000`，不占布局空间，GL 恒定 `match_parent`）：窗口背景设为透明（`window.setBackgroundDrawable(ColorDrawable(TRANSPARENT))`）才能透过半透明栏看到下层视频；insets 只调整覆盖层 padding
@@ -115,6 +115,10 @@ URI 设计（cursor 列即 UI 数据接口）：
 - `main` 打包配置（2026-09-26 新增/更正）：
   - `ndk { abiFilters 'arm64-v8a' }`：百度地图 SDK 自带 4 个 ABI 的 so，全打包 APK ≈90MB，只留 arm64-v8a 后 debug ≈38.7MB / release ≈35.9MB（体积数据为真机实测，见 §10）
   - `manifestPlaceholders = [baiduMapApiKey: ...]`：AK 从 `local.properties` 的 `BAIDU_MAP_API_KEY` 读取（`local.properties` 已被 `.gitignore` 忽略；模板见仓库根 `local.properties.example`），manifest 中写 `android:value="${baiduMapApiKey}"`，不再明文硬编码；未配置时注入空串，SDK 初始化失败但应用不崩溃
+- 百度地图 SDK 依赖（2026-09-28 变更，Maven 化）：
+  - `main-ui` 的 `api files('../libs/baidumap/BaiduLBS_Android.aar')` 与 `main` 的 `sourceSets { main { jniLibs.srcDir '../libs/baidumap' } }` **均已删除**，改为 `api libs.baidu.lbs.map / .search / .util`（Maven Central，groupId `com.baidu.lbsyun`）
+  - `.gitignore` 增加 `/libs/baidumap/` 作为回退保险（不再需要本地 AAR；若日后回退本地集成也不进版本库）
+  - 变更收益：仓库体积由 **75.5MB 降至 456KB**（移除 1 个 AAR + 16 个 so），依赖可复现、无需手工下载二进制
 
 ## 6. 实施顺序
 
@@ -195,3 +199,15 @@ URI 设计（cursor 列即 UI 数据接口）：
 - **隐私政策同意页真机验证**（`pm clear` 模拟首启）：首启显示同意页（`PrivacyActivity` 为焦点，非 `MainActivity`）；点「退出」退回桌面且**不写入**同意状态，再次启动仍显示同意页；按返回键同样退出且不记录同意；点「用户协议与隐私政策」链接弹出可滚动政策正文；点「同意」写入 `gallery_privacy.xml`（`privacy_agreed=true`）→ 进入系统媒体权限弹窗 → 进入 `MainActivity`；**第二次启动不再显示同意页**（经 `am start` 与桌面图标两种方式验证）；未同意时直接 `am start MainActivity` 也不会初始化百度 SDK（logcat 无 `LBSAuthManager`/`authtoken` 活动，且未崩溃）；同意后再进入地图路径 SDK 正常初始化
 - 现场截图与完整报告归档：本机 `verification-reports/`（**已在 `.gitignore` 中排除，不进版本库**）——`2026-09-26-device-verification.md` 含缺陷清单、端到端用例、构建/测试/lint 数据与已知限制；`screenshots/` 含 11 张真机截图（隐私同意页 / 政策正文弹窗 / 同意后主界面 / 第二次启动 / 照片宫格 / 相册常用与更多 / 动态照片 12 项 / 查看器 / 详情面板含地图卡片与地址 / 视频封面与播放图标 / 播放器控制栏）
 - 本轮其他改动：`DateFormats` 的 `SimpleDateFormat` 改为 `ThreadLocal`（线程安全）；`AlbumResolver.addAlbumRow` 显式 `Array<Any?>` 消除 Kotlin 交叉类型 reified 警告；`main-ui` 移除未使用的 `viewpager2`（改由 `main` 显式声明）
+
+### 2026-09-28 百度地图 SDK 改为 Maven 引入（Android 16 真机 / Android 16 复测）
+
+- **动机**：原集成把 `BaiduLBS_Android.aar` + 16 个 so（4 ABI × 4 文件）放进版本库，共 **75.5MB**，既拖慢 clone 又使二进制归属与开源许可复杂化。改用 Maven 后**仓库自有代码仅 456KB**。
+- **产物一致性（逐字节核对）**：Maven `BaiduMapSDK_Map:8.2.0` + `base:8.2.0` 中的 16 个 so，与原 `libs/baidumap/**` 的 SHA-256 **全部一致**（4 ABI × 4 文件，无一差异）；`Map-8.2.0.aar` 的 sha256 `bbdd358d…b690` 与 Maven Central 元数据一致。即 Maven 产物就是原 SDK，非替代品。
+- **三个 Artifact 缺一不可**（实测编译错误数）：仅 `Map` → 20 处未解析；`Map+Search` → 仍 3 处（`CoordinateConverter`）；`Map+Search+Util` → 0 处。原因是 `Map` 只覆盖渲染，`GeoCoder` 在 `Search`、`CoordinateConverter` 在 `Util`。
+- **`libs/baidumap` 内部构成（记录存档）**：`BaiduLBS_Android.aar`（仅 5.69MB，含 assets 与 classes，**不含 so**）+ `jniLibs` 目录下的 16 个 so。它对应平台上 readme 所述的「Base + Map + Search + Util」四件套合并；而 Maven 版 `Map` AAR 自带 so、`classes.jar` 仅 1.0MB（本地 2.37MB）。
+- **曾担忧的风险（已由真机验证排除）**：Maven 各 Artifact 的 class 总数为 1266，本地单体 AAR 为 1803，**743 个 class 仅本地存在**（`mshield`/`mapauto`/`bbalbscesium`/`sec`/`xclient`/`lbsapi` 等安全与鉴权包）；其中 **9 个被 Maven 侧字节码引用却未随包发布**（`com/baidu/lbsapi/auth/LBSAuthManager`、`com/baidu/mapauto/auth/AuthCore`、`com/baidu/mshield/MH` 等），理论上存在 `NoClassDefFoundError`。**实测不成立**：真机详情的逆地理编码与全屏地图均正常，logcat 无 `LBSAuthManager`/`authtoken`/`ClassNotFound`/`NoClassDefFound` 报错，仅有良性的 `[BD]buildtime: map-engine libapp_BaiduMap*.so` 引擎加载日志。即这些类在地图+检索路径上并非必需。
+- **许可声明（重要，但需自行复核）**：Maven Central 上 `Map`/`base`/`common` 的 POM 均声明 `<license>The Apache License, Version 2.0</license>`。**这是发行方元数据声明，不等同于与百度签订的《开发者服务条款》**，能否据此再分发请自行核对服务条款；仓库 `.gitignore` 保留了 `/libs/baidumap/` 作为回退保险。
+- **构建与验证数据**：`clean` + `--no-build-cache` + 杀 daemon 后 `:main:assembleDebug :main:assembleRelease :core-data:testDebugUnitTest :common-util:testDebugUnitTest :main:lintDebug` 共 **327/327 任务真实执行，BUILD SUCCESSFUL (3m27s)**；debug APK **38.67MB**、release **35.81MB**（与本地 AAR 路线的 38.77MB 基本一致）；APK 内 arm64 的 4 个 so 齐全，`ndk.abiFilters` 仍生效；单元测试 14 个全绿（注：README 早前记的「16 个」按 `:core-data` + `:common-util` 两个任务口径实为 14，差异是 `main`/`main-ui` 两个模块的模板测试未计入）。
+- **真机端到端验证（本次）**：装 Maven 版 APK → 照片宫格 → 查看器 → 详情面板：地图卡片瓦片（`百度地图 V20`，可见某道路/某道路/某道路/某地铁站）、蓝点标记、缩放与比例尺控件按设计隐藏、**地址 `重庆市（地址已脱敏）`**（对应 EXIF `（EXIF 坐标已脱敏）`，与原 GPS 坐标一致，证明 WGS-84→BD09LL 转换与坐标系设置仍生效）；点击卡片进入 `PhotoMapActivity` 全屏地图亦正常；全程无崩溃（`logcat -b crash` 为空）。
+

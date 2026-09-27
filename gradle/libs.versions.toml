@@ -13,6 +13,13 @@ recyclerview = "1.4.0"
 viewpager2 = "1.0.0"
 lifecycle = "2.11.0"
 coroutines = "1.10.2"
+# 百度地图 SDK：已发布到 Maven Central（groupId com.baidu.lbsyun，POM 声明 Apache-2.0）。
+# 三个 Artifact 必须同时声明，各自只覆盖一部分 API：
+#   Map    -> 地图渲染（TextureMapView / BaiduMap / MarkerOptions），并含 4 个 ABI 的 .so
+#   Search -> 检索能力（GeoCoder 逆地理编码）
+#   Util   -> CoordinateConverter（WGS-84 -> BD09LL 转换）
+# 注意：Map 会通过 base/common 传递引入，但 Search/Util 不会，需显式声明。
+baiduLbs = "8.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,6 +35,9 @@ androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview"
 androidx-viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "viewpager2" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+baidu-lbs-map = { group = "com.baidu.lbsyun", name = "BaiduMapSDK_Map", version.ref = "baiduLbs" }
+baidu-lbs-search = { group = "com.baidu.lbsyun", name = "BaiduMapSDK_Search", version.ref = "baiduLbs" }
+baidu-lbs-util = { group = "com.baidu.lbsyun", name = "BaiduMapSDK_Util", version.ref = "baiduLbs" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

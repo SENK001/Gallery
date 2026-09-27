@@ -40,12 +40,6 @@ android {
         }
     }
 
-    sourceSets {
-        main {
-            jniLibs.srcDir '../libs/baidumap'
-        }
-    }
-
     buildTypes {
         release {
             optimization {

@@ -23,7 +23,11 @@ android {
 }
 
 dependencies {
-    api files('../libs/baidumap/BaiduLBS_Android.aar')
+    // 百度地图 SDK 走 Maven Central（含 4 个 ABI 的 .so，无需本地 libs/baidumap 与 jniLibs.srcDir）。
+    // 三个 Artifact 缺一不可：Search 提供 GeoCoder（逆地理编码）、Util 提供 CoordinateConverter。
+    api libs.baidu.lbs.map
+    api libs.baidu.lbs.search
+    api libs.baidu.lbs.util
     api project(':core-data')
     api project(':common-util')
     implementation libs.androidx.appcompat

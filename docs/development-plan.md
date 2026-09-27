@@ -207,6 +207,12 @@ URI 设计（cursor 列即 UI 数据接口）：
 - **三个 Artifact 缺一不可**（实测编译错误数）：仅 `Map` → 20 处未解析；`Map+Search` → 仍 3 处（`CoordinateConverter`）；`Map+Search+Util` → 0 处。原因是 `Map` 只覆盖渲染，`GeoCoder` 在 `Search`、`CoordinateConverter` 在 `Util`。
 - **`libs/baidumap` 内部构成（记录存档）**：`BaiduLBS_Android.aar`（仅 5.69MB，含 assets 与 classes，**不含 so**）+ `jniLibs` 目录下的 16 个 so。它对应平台上 readme 所述的「Base + Map + Search + Util」四件套合并；而 Maven 版 `Map` AAR 自带 so、`classes.jar` 仅 1.0MB（本地 2.37MB）。
 - **曾担忧的风险（已由真机验证排除）**：Maven 各 Artifact 的 class 总数为 1266，本地单体 AAR 为 1803，**743 个 class 仅本地存在**（`mshield`/`mapauto`/`bbalbscesium`/`sec`/`xclient`/`lbsapi` 等安全与鉴权包）；其中 **9 个被 Maven 侧字节码引用却未随包发布**（`com/baidu/lbsapi/auth/LBSAuthManager`、`com/baidu/mapauto/auth/AuthCore`、`com/baidu/mshield/MH` 等），理论上存在 `NoClassDefFoundError`。**实测不成立**：真机详情的逆地理编码与全屏地图均正常，logcat 无 `LBSAuthManager`/`authtoken`/`ClassNotFound`/`NoClassDefFound` 报错，仅有良性的 `[BD]buildtime: map-engine libapp_BaiduMap*.so` 引擎加载日志。即这些类在地图+检索路径上并非必需。
+- **一处真实但非致命的差异（冷启动实测）**：Maven `Map` Artifact 缺少「BmSDK」相关视图类，SDK 初始化时会走一次失败的类查找并降级（`W` 级，由 SDK 内部捕获）：
+  ```
+  W System.err: java.lang.ClassNotFoundException:
+    Didn't find class "com.baidu.platform.comapi.bmsdk.view.BmBaseView" / "BmImageView"
+  ```
+  之后引擎照常加载、地图与逆地理编码不受影响（本次冷启动首次打开详情即返回正确地址）。**注意**：这类被引用但缺失的类，若日后用到「在地图上内嵌大图/街景」等 BmSDK 能力，可能触发 `NoClassDefFoundError`；当前功能用不到，故可接受。
 - **许可声明（重要，但需自行复核）**：Maven Central 上 `Map`/`base`/`common` 的 POM 均声明 `<license>The Apache License, Version 2.0</license>`。**这是发行方元数据声明，不等同于与百度签订的《开发者服务条款》**，能否据此再分发请自行核对服务条款；仓库 `.gitignore` 保留了 `/libs/baidumap/` 作为回退保险。
 - **构建与验证数据**：`clean` + `--no-build-cache` + 杀 daemon 后 `:main:assembleDebug :main:assembleRelease :core-data:testDebugUnitTest :common-util:testDebugUnitTest :main:lintDebug` 共 **327/327 任务真实执行，BUILD SUCCESSFUL (3m27s)**；debug APK **38.67MB**、release **35.81MB**（与本地 AAR 路线的 38.77MB 基本一致）；APK 内 arm64 的 4 个 so 齐全，`ndk.abiFilters` 仍生效；单元测试 14 个全绿（注：README 早前记的「16 个」按 `:core-data` + `:common-util` 两个任务口径实为 14，差异是 `main`/`main-ui` 两个模块的模板测试未计入）。
 - **真机端到端验证（本次）**：装 Maven 版 APK → 照片宫格 → 查看器 → 详情面板：地图卡片瓦片（`百度地图 V20`，可见某道路/某道路/某道路/某地铁站）、蓝点标记、缩放与比例尺控件按设计隐藏、**地址 `重庆市（地址已脱敏）`**（对应 EXIF `（EXIF 坐标已脱敏）`，与原 GPS 坐标一致，证明 WGS-84→BD09LL 转换与坐标系设置仍生效）；点击卡片进入 `PhotoMapActivity` 全屏地图亦正常；全程无崩溃（`logcat -b crash` 为空）。

@@ -270,7 +270,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 - **ABI 拆分与固定文件名冲突**：拆分时一个变体会产生多个 output，而 `apkDisplayNames` 是「一变体一个固定名」，多项会重名互相覆盖。已在 `onVariants` 里加了**限定条件**的拦截（仅当 `android.splits.abi.isEnable()` 且 `outputs.size() > 1` 时报错）。**为什么必须加限定**：不能对所有多 output 的变体一概报错，否则会误伤密度拆分等场景——那些场景需按 `output.filters` 分别生成名字。另注：ABI 拆分与 `ndk.abiFilters`（本项目的动态 ABI，见上一节）本就互斥，AGP 会直接报 `Conflicting configuration ... cannot be present when splits abi filters are set`，因此该 guard 在当前配置下实际不可达，属防御性代码。
 - **验证**：
   - `clean` + `assembleDebug assembleRelease`：产物为 `SenkGallery-Debug.apk` / `SenkGallery-Release.apk`，目录内**无 `main-*.apk`**；`output-metadata.json` 的 `outputFile` 同步为 `SenkGallery-Debug.apk` / `SenkGallery-Release.apk`
-  - `apksigner verify` release 产物：V3.0 签名有效，证书 SHA-1 `（签名指纹已脱敏）` 与 `local.properties` 的 release 密钥一致（改名不影响签名）
+  - `apksigner verify` release 产物：V3.0 签名有效，证书 SHA-1 与 `local.properties` 的 release 密钥一致（指纹不在此记录；改名不影响签名）
   - **`installDebug`**：`Installed on 1 device.`，`adb shell pm path com.senk.gallery` 正常返回；**`adb install` 直接装改名后的 release 包**：`Success`
   - **未配置签名的分支**（临时移走 `local.properties` 的 4 项 `RELEASE_*`）：仍产出 `SenkGallery-Release.apk`（内容为未签名包），`outputFile` 一致；恢复签名后重跑正常
   - 配置缓存 `Reusing configuration cache.` 正常复用；全量门禁 BUILD SUCCESSFUL、单测 16/16 全绿、lint 0 error / 7 warning（较基线 9 条少 2 条：`ChromeOsAbiSupport` 与 `OldTargetApi`，无新增）

@@ -40,11 +40,17 @@ android {
 
         manifestPlaceholders = [baiduMapApiKey: baiduMapApiKey]
 
-        // 百度地图 SDK 自带 4 个 ABI 的 .so，全打包会让 APK 达到 ~90MB。
-        // 只保留 arm64-v8a（现代真机唯一需要的 ABI），APK 降到 ~39MB。
-        // 如需 x86_64 模拟器调试，临时在本行加回 "x86_64" 即可。
+        // ABI 过滤：按当前连接的设备动态决定，没插设备时退回 arm64-v8a。
+        // 原因：百度地图 SDK 自带 4 个 ABI 的 .so，全打包 APK ≈90MB、只留 arm64-v8a ≈39MB；
+        // 但 arm64-v8a 的包装不进 x86_64 模拟器，而模拟器调试很常用。
+        // 探测逻辑与全部覆盖项（-Pgallery.abiFilters / .abiAuto / .adb / .abiDeviceSerial）
+        // 见根 build.gradle 顶部注释。
+        def resolvedAbis = rootProject.galleryAbiFilters()
+        logger.lifecycle("[abi] :main abiFilters = ${resolvedAbis ?: '(未过滤，打包全部 ABI)'}")
         ndk {
-            abiFilters 'arm64-v8a'
+            if (!resolvedAbis.isEmpty()) {
+                abiFilters.addAll(resolvedAbis)
+            }
         }
     }
 

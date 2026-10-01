@@ -3,3 +3,163 @@ plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
 }
+
+// ---------------------------------------------------------------------------
+// 动态 ABI 选择（galleryAbi）
+//
+// 背景：百度地图 SDK 自带 4 个 ABI 的 .so，全打包 APK ≈90MB，只留 arm64-v8a 则 ≈39MB；
+// 但 arm64-v8a 的包装不进 x86_64 模拟器（原生库加载失败），而模拟器调试很常用。
+// 因此按「当前连接的设备」自动决定 ABI，没有设备时退回 arm64-v8a。
+//
+// 覆盖项：
+//   -Pgallery.abiFilters=arm64-v8a      显式指定（逗号分隔），跳过自动探测
+//   -Pgallery.abiFilters=none           不做 ABI 过滤（4 个 ABI 全打包，≈90MB）
+//   -Pgallery.abiAuto=false             关闭自动探测，恒用默认 arm64-v8a
+//   -Pgallery.adb=<path>                指定 adb 可执行文件
+//   -Pgallery.abiDeviceSerial=<serial>  指定优先使用哪台设备（多设备时）
+//   -Pgallery.androidSdk=<path>         指定 SDK 目录（默认读 local.properties 的 sdk.dir）
+//
+// 实现说明：探测发生在「配置阶段」，结果作为 configuration cache 的输入被记录，
+// 因此连接/断开设备会自动使缓存失效并重新探测，不会出现「缓存里还是上一台设备」。
+// ---------------------------------------------------------------------------
+ext.gallerySdkDir = {
+    def sdk = providers.gradleProperty('gallery.androidSdk').orNull
+    if (!sdk) {
+        def propsFile = rootProject.file('local.properties')
+        if (propsFile.exists()) {
+            def props = new Properties()
+            propsFile.withInputStream { props.load(it) }
+            sdk = props.getProperty('sdk.dir')
+        }
+    }
+    if (!sdk) {
+        sdk = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
+    }
+    return sdk ? sdk.replace('\\', '/') : null
+}
+
+ext.galleryAdb = {
+    def explicit = providers.gradleProperty('gallery.adb').orNull
+    if (explicit) {
+        return explicit
+    }
+    def sdk = gallerySdkDir()
+    if (sdk) {
+        def candidate = new File(
+            sdk,
+            'platform-tools/adb' + (System.getProperty('os.name').toLowerCase().contains('windows') ? '.exe' : ''),
+        )
+        if (candidate.isFile()) {
+            return candidate.absolutePath
+        }
+    }
+    return 'adb' // 交给 PATH 解析；仍找不到时后面退回默认 ABI
+}
+
+/** 运行一条 adb 命令，失败不抛异常；返回 [exitValue, stdout]。 */
+ext.galleryExec = { List<String> command ->
+    // 用 providers.exec 而不是 Project.exec：后者在 Gradle 9 里已不再是 Project 的
+    // 稳定公开 API（经 rootProject 调用闭包时无法解析），providers.exec 则是官方推荐
+    // 的配置阶段执行外部命令的方式，且对 configuration cache 友好。
+    def projectRef = project
+    try {
+        def result = projectRef.providers.exec { spec ->
+            spec.commandLine(command)
+            spec.ignoreExitValue = true
+        }
+        return [result.result.get().exitValue, result.standardOutput.asText.get()]
+    } catch (Exception e) {
+        // 命令根本起不来（adb 不存在、权限不足等）：当作退出码非 0 处理
+        return [-1, '']
+    }
+}
+
+/** 探测当前连接设备的 ABI，返回 Gradle 可直接用于 ndk.abiFilters 的列表。 */
+ext.galleryDetectDeviceAbis = {
+    def adb = galleryAdb()
+    def (rc, listing) = galleryExec([adb, 'devices'])
+    if (rc != 0) {
+        logger.lifecycle("[abi] adb devices 失败（exit ${rc}），回退默认 ABI")
+        return []
+    }
+    // 兼容 CRLF/CR/LF；只认状态列为 device 的行，offline/unauthorized 一律忽略
+    def lines = listing.split(/\r\n|\r|\n/)
+        .collect { it.trim() }
+        .findAll { it }
+        .collect { it.split(/\s+/) as List<String> }
+        .findAll { it.size() > 1 && it[1] == 'device' }
+    if (lines.isEmpty()) {
+        logger.lifecycle('[abi] 未检测到已连接的设备')
+        return []
+    }
+    def serials = lines.collect { it[0] }
+    def requested = providers.gradleProperty('gallery.abiDeviceSerial').orNull
+    def serial
+    if (requested != null) {
+        serial = serials.find { it == requested }
+        if (serial == null) {
+            logger.lifecycle("[abi] 未找到指定设备 ${requested}，改用第一台")
+        }
+    }
+    if (serial == null) {
+        // 未指定时真机优先于模拟器（模拟器序列号形如 emulator-5554）
+        serial = serials.find { !(it ==~ /emulator-\d+/) } ?: serials[0]
+    }
+    if (serials.size() > 1) {
+        logger.lifecycle("[abi] 检测到 ${serials.size()} 台设备 ${serials}，采用 ${serial}")
+    }
+    def (rc2, raw) = galleryExec([adb, '-s', serial, 'shell', 'getprop', 'ro.product.cpu.abilist'])
+    if (rc2 != 0 || !raw?.trim()) {
+        logger.lifecycle("[abi] 设备 ${serial} 未返回 ABI 列表，回退默认 ABI")
+        return []
+    }
+    def reported = raw.trim()
+    // 归一化：只保留本工程依赖中真实存在的 ABI（百度地图 SDK 提供这 4 个）
+    def known = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    def abis = reported.split(/[,\s]+/).collect { it.trim() }.findAll { known.contains(it) }.unique()
+    if (abis.isEmpty()) {
+        logger.lifecycle("[abi] 设备 ${serial} 上报的 ABI 均不在支持列表（${reported}），回退默认 arm64-v8a")
+        return []
+    }
+    logger.lifecycle("[abi] 设备 ${serial} 上报 ABI: ${reported} -> 采用 ${abis}")
+    return abis
+}
+
+// 解析结果缓存：闭包每次被调用时 Gradle 都会重新委托，脚本内的局部变量不足以承载状态，
+// 因此把结果存在项目扩展属性上（galleryAbiResolved 作为「是否已算过」的哨兵）。
+if (!rootProject.ext.has('galleryAbiResolved')) {
+    rootProject.ext.galleryAbiResolved = false
+    rootProject.ext.galleryAbiCache = null
+}
+
+ext.galleryAbiFilters = {
+    if (rootProject.ext.galleryAbiResolved) {
+        return rootProject.ext.galleryAbiCache
+    }
+    def resolved
+    def raw = providers.gradleProperty('gallery.abiFilters').orNull
+    if (raw != null) {
+        def requested = raw.split(',').collect { it.trim() }.findAll { it }
+        if (requested.isEmpty() || requested.any { it.equalsIgnoreCase('none') }) {
+            logger.lifecycle('[abi] -Pgallery.abiFilters=none -> 不做 ABI 过滤')
+            resolved = []
+        } else {
+            logger.lifecycle("[abi] 采用 -Pgallery.abiFilters 指定的 ABI: ${requested}")
+            resolved = requested
+        }
+    } else if (providers.gradleProperty('gallery.abiAuto').orNull?.toBoolean() == false) {
+        logger.lifecycle('[abi] 自动探测已关闭（-Pgallery.abiAuto=false）-> arm64-v8a')
+        resolved = ['arm64-v8a']
+    } else {
+        def detected = galleryDetectDeviceAbis()
+        if (detected.isEmpty()) {
+            logger.lifecycle('[abi] 无设备/探测不可用 -> 默认 arm64-v8a')
+            resolved = ['arm64-v8a']
+        } else {
+            resolved = detected
+        }
+    }
+    rootProject.ext.galleryAbiCache = resolved
+    rootProject.ext.galleryAbiResolved = true
+    return resolved
+}

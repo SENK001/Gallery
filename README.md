@@ -111,7 +111,13 @@ BAIDU_MAP_API_KEY=你的AK
 ## 兼容性
 
 - minSdk 36 / targetSdk 36 —— **仅支持 Android 16 及以上**；compileSdk 37.2
-- 打包 ABI 仅 `arm64-v8a`（`main/build.gradle` 的 `ndk.abiFilters`）：百度地图 SDK 自带 4 个 ABI 的 so，全打包时 APK ≈90MB；只留 arm64-v8a 后 debug ≈38.7MB、release ≈35.9MB。需要 x86_64 模拟器调试时，临时把 `"x86_64"` 加回该行
+- 打包 ABI **按当前连接的设备自动决定**（`main/build.gradle` 的 `ndk.abiFilters`，探测逻辑在根 `build.gradle`）：
+  - **插了设备** → 取该设备的 `ro.product.cpu.abilist`，APK 可直接装到它上面。x86_64 模拟器打包 `x86_64` + `arm64-v8a`，debug ≈58.4MB
+  - **没插设备** → 退回 `arm64-v8a`（现代真机唯一需要的 ABI），debug ≈38.7MB / release ≈35.9MB；相比全打包 ≈90MB 省一半以上
+  - 多设备时**真机优先于模拟器**；`offline`/`unauthorized` 状态的设备会被忽略
+  - 手动覆盖：`-Pgallery.abiFilters=x86_64`（逗号分隔）、`-Pgallery.abiFilters=none` 关闭过滤（全打包 ≈90MB）、`-Pgallery.abiAuto=false` 关闭自动探测恒用 `arm64-v8a`、`-Pgallery.abiDeviceSerial=<serial>` 指定用哪台设备
+  - 探测只在**配置阶段**发生且结果计入 configuration cache，因此插拔设备会自动触发重新探测（不会命中上一台设备的缓存）
+  - adb 位置默认由 `local.properties` 的 `sdk.dir` 推导，也可用 `-Pgallery.adb=<path>` 或环境变量 `ANDROID_SDK_ROOT` 指定；找不到 adb 时同样退回 `arm64-v8a`，不会让构建失败
 
 ## 真机验证
 

@@ -113,7 +113,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 - `main` 加 main-ui
 - `core-data` Manifest 注册 GalleryProvider（exported=false）
 - `main` 打包配置（2026-09-26 新增/更正）：
-  - `ndk { abiFilters 'arm64-v8a' }`：百度地图 SDK 自带 4 个 ABI 的 so，全打包 APK ≈90MB，只留 arm64-v8a 后 debug ≈38.7MB / release ≈35.9MB（体积数据为真机实测，见 §10）
+  - `ndk.abiFilters`：**按当前连接的设备动态决定**（2026-10-01 变更，见 §10「动态 ABI」）。原先硬编码 `'arm64-v8a'`；理由仍是百度地图 SDK 自带 4 个 ABI 的 so，全打包 APK ≈90MB，只留 arm64-v8a 后 debug ≈38.7MB / release ≈35.9MB（体积数据为真机实测，见 §10），但硬编码导致 arm64 包装不进 x86_64 模拟器。现在：插了设备取其 `abilist`（x86_64 模拟器 → `x86_64` + `arm64-v8a`，debug ≈58.4MB），没插设备退回 `arm64-v8a`
   - `manifestPlaceholders = [baiduMapApiKey: ...]`：AK 从 `local.properties` 的 `BAIDU_MAP_API_KEY` 读取（`local.properties` 已被 `.gitignore` 忽略；模板见仓库根 `local.properties.example`），manifest 中写 `android:value="${baiduMapApiKey}"`，不再明文硬编码；未配置时注入空串，SDK 初始化失败但应用不崩溃
 - 百度地图 SDK 依赖（2026-09-28 变更，Maven 化）：
   - `main-ui` 的 `api files('../libs/baidumap/BaiduLBS_Android.aar')` 与 `main` 的 `sourceSets { main { jniLibs.srcDir '../libs/baidumap' } }` **均已删除**，改为 `api libs.baidu.lbs.map / .search / .util`（Maven Central，groupId `com.baidu.lbsyun`）
@@ -216,4 +216,31 @@ URI 设计（cursor 列即 UI 数据接口）：
 - **许可声明（重要，但需自行复核）**：Maven Central 上 `Map`/`base`/`common` 的 POM 均声明 `<license>The Apache License, Version 2.0</license>`。**这是发行方元数据声明，不等同于与百度签订的《开发者服务条款》**，能否据此再分发请自行核对服务条款；仓库 `.gitignore` 保留了 `/libs/baidumap/` 作为回退保险。
 - **构建与验证数据**：`clean` + `--no-build-cache` + 杀 daemon 后 `:main:assembleDebug :main:assembleRelease :core-data:testDebugUnitTest :common-util:testDebugUnitTest :main:lintDebug` 共 **327/327 任务真实执行，BUILD SUCCESSFUL (3m27s)**；debug APK **38.67MB**、release **35.81MB**（与本地 AAR 路线的 38.77MB 基本一致）；APK 内 arm64 的 4 个 so 齐全，`ndk.abiFilters` 仍生效；单元测试 14 个全绿（注：README 早前记的「16 个」按 `:core-data` + `:common-util` 两个任务口径实为 14，差异是 `main`/`main-ui` 两个模块的模板测试未计入）。
 - **真机端到端验证（本次）**：装 Maven 版 APK → 照片宫格 → 查看器 → 详情面板：地图卡片瓦片（`百度地图 V20`，可见某道路/某道路/某道路/某地铁站）、蓝点标记、缩放与比例尺控件按设计隐藏、**地址 `重庆市（地址已脱敏）`**（对应 EXIF `（EXIF 坐标已脱敏）`，与原 GPS 坐标一致，证明 WGS-84→BD09LL 转换与坐标系设置仍生效）；点击卡片进入 `PhotoMapActivity` 全屏地图亦正常；全程无崩溃（`logcat -b crash` 为空）。
+
+### 2026-10-01 打包 ABI 改为按连接设备动态决定
+
+- **动机**：`ndk.abiFilters 'arm64-v8a'` 是硬编码的，arm64 APK 装不进 x86_64 模拟器（原生库加载失败），而模拟器是日常调试主力；此前只能靠手工改 `build.gradle`。改为「**有设备就跟随设备、没设备退回 arm64-v8a**」。
+- **实现**：根 `build.gradle` 提供 `galleryAbiFilters()`（辅助闭包 `gallerySdkDir()` / `galleryAdb()` / `galleryExec()` / `galleryDetectDeviceAbis()`），`main/build.gradle` 的 `defaultConfig.ndk` 调用它。探测用 `adb devices` 列设备（只认状态列 `device`，忽略 `offline`/`unauthorized`）→ 多设备时**真机优先于模拟器** → `adb -s <serial> shell getprop ro.product.cpu.abilist` → 按 `arm64-v8a / armeabi-v7a / x86 / x86_64` 白名单归一化去重。adb 路径优先 `-Pgallery.adb`，其次由 `local.properties` 的 `sdk.dir` 推导 `platform-tools/adb[.exe]`，再次 `ANDROID_SDK_ROOT`/`ANDROID_HOME`，最后交给 PATH。
+- **失败一律降级不报错**：adb 不存在、`adb devices` 非 0 退出、无设备、设备无 `abilist`、上报的 ABI 全不在白名单 —— 五种情况都退回 `arm64-v8a` 并打一行 `[abi]` 日志。
+- **覆盖项**：`-Pgallery.abiFilters=a,b`（显式指定，跳过探测）、`=none`（关闭过滤）、`-Pgallery.abiAuto=false`（关闭探测恒用 arm64-v8a）、`-Pgallery.abiDeviceSerial=<serial>`、`-Pgallery.adb=<path>`、`-Pgallery.androidSdk=<path>`。
+- **configuration cache 安全性**：探测在**配置阶段**执行，结果随 configuration cache 一起被记录，因此插拔设备会使缓存失效并重新探测，不会复用上一台设备的结论（**这正是必须放在配置阶段而非执行阶段的原因**）。解析结果记忆化在 `rootProject.ext` 上（**不能**用脚本局部变量：Gradle 每次调用闭包都会重新委托，局部变量不承载状态，实测会退化成每次调用都探测一遍），一次配置只起一轮 adb 进程（`devices` + `getprop`，经计数器确认）。
+- **一处 Gradle 9 适配**：最初用 `Project.exec {}` 实现，经 `rootProject.galleryAbiFilters()` 从子项目调用时闭包 delegate 不再是 `Project`，报 `Could not find method exec()`；改用官方推荐的 `providers.exec {}`（对 configuration cache 友好且有明确的 `result`/`standardOutput` Provider API）。
+- **验证（本机模拟器，`x86_64 模拟器` / Android 16 / SDK 37 / 屏幕尺寸已脱敏 / density 480）**：
+
+| 场景 | 期望 ABI | 实测 APK 内 `lib/` | APK 体积 |
+|---|---|---|---|
+| 接入 x86_64 模拟器，无覆盖 | `x86_64` + `arm64-v8a` | `arm64-v8a` + `x86_64` 各 4 个 so | 58.44MB |
+| **断开设备**，无覆盖 | `arm64-v8a` | 仅 `arm64-v8a` 4 个 so | **38.67MB**（与改动前逐字节同规格） |
+| `-Pgallery.abiFilters=arm64-v8a`（设备在线） | 覆盖生效 | 仅 `arm64-v8a` | 38.67MB |
+| `-Pgallery.abiFilters=none` | 全打包 | 未验证（会含 4 个 ABI） | — |
+
+- **分支覆盖（stub adb，共 8 种）**：单模拟器、单真机、模拟器+真机（取真机）、`offline`、空列表、`adb devices` 返回 1、设备 ABIs 全不在白名单、`abilist` 为空 —— 全部按预期解析或降级为 `arm64-v8a`；`-Pgallery.abiFilters` / `-Pgallery.abiAuto=false` 两路径经计数器确认**完全不调用 adb**。
+- **端到端实机验证（x86_64 模拟器）**：`adb install` 成功 → 首启隐私页正常 → 同意后进入主界面 → 推入一张带 GPS EXIF 的测试 JPEG 并触发媒体扫描 → 宫格显示 → 查看器 → 详情面板。**关键证据**：logcat 出现
+  ```
+  D nativeloader: Load .../base.apk!/lib/x86_64/libBaiduMapSDK_map_v8_2_0.so ... ok
+  E [BD]buildtime: map-engine libapp_BaiduMapApplib.so [Jul 22 2026 19:31:49]
+  ```
+  且地图卡片正常渲染（左下角 `百度地图 V20` 水印 + 蓝点标记）、EXIF 中文标签（品牌 `TestMake` / 型号 `TestModel` / 软件 `gallery-abi-test`）正确显示 → 证明**动态选出的 x86_64 原生库确实被加载并可用**，不是只打包进去而已。全程 `logcat -b crash` 无 `com.senk.gallery` 记录。地址显示「地址解析失败」属预期：模拟器无百度 AK 对应签名且无法联网取瓦片。
+- **顺带复核的既有现象**：`ClassNotFoundException: com.baidu.platform.comapi.bmsdk.view.BmBaseView / BmImageView` 在 x86_64 上同样出现且同样被 SDK 内部捕获降级（与 §10 上文 Maven 化那条一致，非本次引入）。
+- **未覆盖**：真实 arm64 真机（本次无设备，退回分支是靠断开模拟器验证的）、`-Pgallery.abiFilters=none` 的实际产物、多 ABI 同时存在时的 16KB page size 对齐问题。
 

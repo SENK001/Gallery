@@ -145,20 +145,11 @@ BAIDU_MAP_API_KEY=你的AK
   - 探测只在**配置阶段**发生且结果计入 configuration cache，因此插拔设备会自动触发重新探测（不会命中上一台设备的缓存）
   - adb 位置默认由 `local.properties` 的 `sdk.dir` 推导，也可用 `-Pgallery.adb=<path>` 或环境变量 `ANDROID_SDK_ROOT` 指定；找不到 adb 时同样退回 `arm64-v8a`，不会让构建失败
 
-## 真机验证
+## 验证
 
-设备：Android 16 真机（代号已脱敏），Android 16 / SDK 36，HyperOS ROM 版本已脱敏，arm64-v8a only，屏幕尺寸已脱敏（2026-09-26 实测）
+构建、单元测试、lint 与真机手测的具体结论见 [docs/development-plan.md](docs/development-plan.md) §10「设备适配记录」——该节记录**可复现的技术结论与缺陷根因**，不含具体设备标识与位置信息。
 
-- **构建**：冷启动（`clean` + `--no-build-cache` + 杀 daemon）`:main:assembleDebug` 91/91 任务真实执行 53s，BUILD SUCCESSFUL；`:main:assembleRelease` BUILD SUCCESSFUL，产出 `main-release-unsigned.apk` 35.89MB
-- **检查**：`:main:lintDebug` 0 error / 6 warning（`lintVitalRelease` = No issues found）；单元测试 16 个全绿（`XmpParserTest` 8 + `CoordConverterTest` 4 + 4 个模块模板测试）
-- **手测**：照片 Tab / 相册 Tab / 相册详情 / 查看器 / 沉浸模式 / 上划详情面板 / EXIF / 地图卡片 / 逆地理编码 / 视频播放（控制栏、横屏）/ 动态照片长按播放 / 收藏写回 均正常，无崩溃
-- **相册计数**：动态照片 12 项、全部 223 项、相机 195 项、视频 7 项、截屏 11 项、微信 8 项、QQ 3 项（证明 `XMP LIKE` 过滤 BLOB 列真机可用）
-- **媒体库口径**：应用展示 **223 条 = 216 图片 + 7 视频**（与相册「全部 223 项」吻合），其 `datetaken` **全部非 NULL**；`MediaStore.Files` 原始行数为 1749（含非图片/视频文件），其中 1525 条 `datetaken` 为 NULL 的均为这些非媒体文件
-- **排序**：`COALESCE(datetaken, date_modified*1000) DESC, _id DESC` 真机可用且分页稳定（同秒并列的跨页不稳定已由 `_id DESC` 稳定键修复；规则与 AOSP 依据见 [docs/development-plan.md](docs/development-plan.md) §10 设备适配记录）
-- **逆地理编码**结果：`重庆市（地址已脱敏）`
-- **SDK 依赖改为 Maven 后复测**（2026-09-28，同机）：`assembleDebug`/`Release`/单测/lint 共 **327/327 任务** BUILD SUCCESSFUL；debug **38.67MB**、release **35.81MB**，APK 内 arm64 的 4 个 so 齐全；真机详情面板地图瓦片 + 蓝点 + 逆地理编码 **`重庆市（地址已脱敏）`**、全屏 `PhotoMapActivity` 均正常，无崩溃、无鉴权报错（详见 [docs/development-plan.md](docs/development-plan.md) §10 末节）
-- **隐私同意页**：首启显示（全屏页）；「退出」/返回键退出且不记录同意（再次启动仍显示）；点「用户协议与隐私政策」可查看政策正文；「同意」写入状态后进入权限流程与主界面；**第二次启动不再显示**；未同意时不会初始化百度地图 SDK（`MainActivity` 为 `exported=false`，`am start` 直调会被系统以 `Permission Denial: not exported` 拒绝——本次验证中实测确认）
-- **现场截图与完整报告**：本机 `verification-reports/`（**该目录不进版本库**，含 11 张真机截图与 `2026-09-26-device-verification.md`）；重新生成方式见其中 `README.md`
+现场的构建日志、lint 报告与真机截图归档在本机 `verification-reports/` 目录（**该目录已在 `.gitignore` 中排除，不进版本库**），重新生成方式见其中 `README.md`。
 
 ## 许可证
 

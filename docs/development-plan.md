@@ -146,7 +146,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 - **自建相册**：目录固定放 `Pictures/<相册名>`；后续实现“新建/重命名/删除相册、添加/移出照片”，写入用 `MediaStore RELATIVE_PATH` 更新或 `createWriteRequest`；Provider 预留 `folder` 类型即目录相册基础
 - **最近删除**：查询 `IS_TRASHED=1`，恢复/彻底删除用 `MediaStore.createTrashRequest/createDeleteRequest`，系统 30 天自动清理；UI 入口与 Provider `recently_deleted` 分类暂时隐藏，代码预留
-- ~~**发布前必须接入隐私政策弹窗（合规阻塞项）**~~ **已实现（2026-09-26）**：新增首启隐私政策同意页 `PrivacyActivity`（LAUNCHER，`main` 模块）。**UI 为全屏页而非对话框弹窗**，结构与间距按系统应用（MIUI/HyperOS，实测参考「日历」首启页，屏幕尺寸已脱敏）对齐：白底全屏 + 顶部居中应用标识块（80dp 圆角方） + 应用名 + 欢迎说明 + 逐条列出将申请的权限（44dp 浅灰圆角图标底 + 权限名 + 说明） + 底部「隐私」盾牌标识与分割线 + 同意声明（「用户协议与隐私政策」为可点链接，点击弹出可滚动政策正文 `dialog_privacy_policy.xml`） + 底部「退出 / 同意」两枚 56dp 圆角按钮。实测几何对齐：正文左边距 117px vs 系统 102px、权限名 x306 vs 系统 268、y1291 vs 系统 1072、按钮 y2473 vs 系统 2472、按钮尺寸 502x182 vs 系统 532x159。
+- ~~**发布前必须接入隐私政策弹窗（合规阻塞项）**~~ **已实现（2026-09-26）**：新增首启隐私政策同意页 `PrivacyActivity`（LAUNCHER，`main` 模块）。**UI 为全屏页而非对话框弹窗**，结构与间距按系统应用（MIUI/HyperOS，实测参考「日历」首启页）对齐：白底全屏 + 顶部居中应用标识块（80dp 圆角方） + 应用名 + 欢迎说明 + 逐条列出将申请的权限（44dp 浅灰圆角图标底 + 权限名 + 说明） + 底部「隐私」盾牌标识与分割线 + 同意声明（「用户协议与隐私政策」为可点链接，点击弹出可滚动政策正文 `dialog_privacy_policy.xml`） + 底部「退出 / 同意」两枚 56dp 圆角按钮。实测几何对齐：正文左边距 117px vs 系统 102px、权限名 x306 vs 系统 268、y1291 vs 系统 1072、按钮 y2473 vs 系统 2472、按钮尺寸 502x182 vs 系统 532x159。
   同意状态由 `main-ui` 的 `PrivacyPrefs` 持久化（SharedPreferences `gallery_privacy/privacy_agreed`），`BaiduMapSdk.ensureInitialized()` **先校验该状态，未同意直接返回 false 且不做任何 SDK 初始化**。行为：点「同意」→ 记录并进入 `MainActivity`；点「退出」或返回键 → 退出应用不进入主界面；已同意则启动时静默转发。`MainActivity` 已改为 `exported=false`（不可被外部绕过同意页直接调起）。**遗留**：隐私政策正文目前是应用内固定文案，正式上架前需替换为真实生效的政策文本/链接
 - **音频焦点**：`VideoPlayManager` 目前只设 `setAudioAttributes`，未 `requestAudioFocus`（其他应用播放时不会自动压低/暂停）；如需车内/后台共存体验再补
 - 其他 backlog：搜索、多选分享、编辑
@@ -171,7 +171,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 - 由于 GL 面在最上层会遮挡窗口绘制的 View，宫格空态文案改为在 GL 内绘制（纹理化文本），不再使用 `TextView`
 - 大图翻页“闪烁一下”根因：早期实现让 `GlImageViewer` 尺寸贴合当前照片（`wrap_content` + `onMeasure`），切到不同尺寸照片时 `SurfaceView` 改变大小——系统在新尺寸下会先把旧缓冲拉伸合成 1~2 帧（抓帧实测：settle 后一帧照片被压扁、下一帧才正确），加上拖动/缩放时的临时扩展也会有同样问题。修复：GL 视图改为恒定 `match_parent`，整个会话内不再改变 surface 尺寸（换页/缩放/进出沉浸均无 resize），照片 fit 与留白全部由渲染器绘制，闪烁消失
 - 视频播放“画面颠倒”根因（用合成测试视频定位：无旋转/90° 元数据两种）：①`GlVideoView` 的 UV 映射把 v=0 放在了画面顶部（GL 常规相反），所有视频被上下翻转（无旋转元数据的视频表现为“颠倒”）；②MediaPlayer 渲染到 Surface 时**已按容器元数据旋转**，`videoWidth/Height` 返回旋转后的显示尺寸，我们又把 `MediaMetadataRetriever`/`MediaExtractor` 读到的 rotation 手动转一遍 → 二次旋转。修复：去掉手动旋转与尺寸交换，UV 改为常规约定（左上顶点 (0,1)、左下 (0,0)）；查看器动态照片的视频叠加（`GlImagePagerRenderer.drawVideoQuad`）也曾沿用照片纹理约定（v=0 在画面顶部）导致上下颠倒，已同步改为同一约定
-- 新拍/动态照片“一直闪烁”根因：查看器解码最长边上限原为 `视口最长边 * 2`（本机 5544 → 受 GL_MAX_TEXTURE_SIZE 限制实际 4096），单张纹理 2304x4096≈36MB；工作集（当前页+前后页）两张就超过 64MB 纹理缓存 → LRU 每帧互相淘汰，`drawPage` 发现缺纹理又触发解码上传，形成“解码→上传→淘汰→重解码”死循环（logcat 实测 100ms/轮，画面在两页纹理间逐帧交替）。修复：解码上限改为 `min(GL_MAX_TEXTURE_SIZE, 视口最长边)`（纹理约 17~23MB），缓存提升到 96MB，工作集可完整驻留，循环消失（稳定性实测 0/3120 帧差异）
+- 新拍/动态照片“一直闪烁”根因：查看器解码最长边上限原为 `视口最长边 * 2`（本机视口最长边 5544 → 受 GL_MAX_TEXTURE_SIZE 限制实际 4096），单张纹理 2304x4096≈36MB；工作集（当前页+前后页）两张就超过 64MB 纹理缓存 → LRU 每帧互相淘汰，`drawPage` 发现缺纹理又触发解码上传，形成“解码→上传→淘汰→重解码”死循环（logcat 实测 100ms/轮，画面在两页纹理间逐帧交替）。修复：解码上限改为 `min(GL_MAX_TEXTURE_SIZE, 视口最长边)`（纹理约 17~23MB），缓存提升到 96MB，工作集可完整驻留，循环消失（稳定性实测 0/3120 帧差异）
 - 视频播放器覆盖层要“半透明 + 看得见视频”，窗口（decorView/主题背景）必须设为透明：默认 z-order 下 surface 位于窗口**之后**，窗口不透明背景会把半透明栏合成成不透明黑，视频透不过来；透明窗口 + `#99000000` 栏即可看到下层视频（横屏实测有效）
 - 播放器「暂停后栏仍会自动隐藏 / 再点播放无效」根因：`VideoPlayManager.start()/pause()` 均为主线程 post（异步生效），而 `togglePlayback` 同步读 `isPlaying()` 并调用 `setBarsVisible(true)`→`scheduleAutoHide()`——暂停瞬间 `isPlaying()` 仍是 true，会重新排上 5s 自动隐藏（栏在暂停后 5s 消失，之后的“播放”点击落在视频区只切换了栏显隐）；恢复瞬间 `isPlaying()` 仍是 false，自动隐藏计时器又排不上。修复：播放/暂停两个分支都用 `handler.post { scheduleAutoHide() }`，在状态生效后再排计时器
 - `GlVideoView` 封装到 `VideoPlayManager` 后播放器黑屏根因：`attachTexture`（GL 表面晚于 `setSource` 到达，播放器页正是此顺序；`setSource` 时无 surface 不建播放器）里原实现仅当 `mediaPlayer != null` 才调用 `createPlayerIfPossible()` → 播放器永不创建。修复：`attachTexture` 中总是调用 `createPlayerIfPossible()`（仅当已有播放器时先 `releasePlayer()`）；查看器动态照片是 surface 先于 source 的相反顺序，不受影响
@@ -182,12 +182,12 @@ URI 设计（cursor 列即 UI 数据接口）：
   - **鉴权是异步的**：`initialize()` 返回时 SDK 往往还没拿到 authtoken，此时立刻逆地理编码会返回 `PERMISSION_UNFINISHED`（旧记录表现为 `get authtoken failed` / `mContext is null`）。因此必须在**用户交互点提前预热**：`MainActivity.updatePermissionState()` 在媒体权限已授予时调用 `BaiduMapSdk.ensureInitialized(this)`，用户真正上划出地图卡片时鉴权通常已就绪；首次失败属可重试状态，不是崩溃
   - 从 `GalleryApp.onCreate` 移走的两个原因：① 在用户同意隐私政策前就 `setAgreePrivacy(true)`，有合规风险（见 §8）；② `initialize` 一旦在 `Application` 完成，`SDKInitializer.isInitialized()` 即为 true，之后 `setCoordType(BD09LL)` 永不生效，SDK 退回 GCJ-02 却接收 BD09LL 坐标 → 地图与逆地理编码整体偏移。初始化点唯一化后两个问题都消失
   - 崩溃记录：`TextureMapView` 在 SDK 未初始化时构造会在 `JNIInitializer$InitOptions` 上抛 `NullPointerException`（详情面板地图卡片默认走到该路径）→ 收敛到 `BaiduMapSdk` 后复测通过
-  - 真机逆地理编码结果：`重庆市（地址已脱敏）`（BD09LL 设置生效）
+  - 真机逆地理编码：成功返回具体地址（BD09LL 设置生效）
 - MIUI 跨应用跳转确认：首次经 scheme 拉起高德等三方应用时，系统弹出「相册 想要打开 高德地图，是否允许？」（`com.miui.securitycenter` 的 ConfirmStartActivity），点「始终允许」后不再出现；属系统安全行为，应用侧不做绕过
 
-### 2026-09-26 真机复测（Android 16 真机 / Android 16）
+### 2026-09-26 真机复测（Android 16）
 
-- 设备：Android 16 真机（代号已脱敏），Android 16 / SDK 36，HyperOS ROM 版本已脱敏，arm64-v8a only，屏幕尺寸已脱敏；媒体条目 **223 条（216 图片 + 7 视频，`datetaken` 全部非 NULL）**，`MediaStore.Files` 原始行数 1749（含 1525 条非媒体文件，其 `datetaken` 为 NULL）
+- 设备：Android 16 / SDK 36 真机，arm64-v8a only；媒体条目 **223 条（216 图片 + 7 视频，`datetaken` 全部非 NULL）**，`MediaStore.Files` 原始行数 1749（含 1525 条非媒体文件，其 `datetaken` 为 NULL）
 - 冷启动构建：`gradlew clean` + `--no-build-cache` + 杀 daemon 后 `:main:assembleDebug` 91/91 任务真实执行 53s，BUILD SUCCESSFUL；`:main:assembleRelease` BUILD SUCCESSFUL，产出 `main-release-unsigned.apk` 35.89MB；`ndk.abiFilters 'arm64-v8a'` 生效后 debug APK 由 ≈90.5MB 降至 ≈38.7MB
 - 静态检查：`:main:lintDebug` 0 error / 6 warning；`lintVitalRelease` = No issues found
 - 单元测试 16 个全绿（`XmpParserTest` 8 + `CoordConverterTest` 4 + 4 个模块的模板 `ExampleUnitTest`）
@@ -196,12 +196,12 @@ URI 设计（cursor 列即 UI 数据接口）：
 - 相册计数：动态照片 12 项、全部 223 项、相机 195 项、视频 7 项、截屏 11 项、微信 8 项、QQ 3 项 —— 证明 `XMP LIKE` 过滤 BLOB 列在真机可用
 - 排序表达式：`COALESCE(datetaken, date_modified*1000) DESC` 在真机被接受且顺序正确；追加 `, _id DESC` 后连续两次查询结果完全一致（修复同秒并列导致的跨页不稳定）；`date_taken` / `no_such_column` 均报 `Invalid token`（详见上文对应条目）
 - 崩溃修复：详情面板地图卡片曾因 `TextureMapView` 在 SDK 未初始化时构造抛 `NullPointerException`（`JNIInitializer$InitOptions`）→ 已修复并复测通过
-- 逆地理编码真机结果：`重庆市（地址已脱敏）`
+- 逆地理编码真机结果：成功返回具体地址（内容已脱敏，不记录实际地址）
 - **隐私政策同意页真机验证**（`pm clear` 模拟首启）：首启显示同意页（`PrivacyActivity` 为焦点，非 `MainActivity`）；点「退出」退回桌面且**不写入**同意状态，再次启动仍显示同意页；按返回键同样退出且不记录同意；点「用户协议与隐私政策」链接弹出可滚动政策正文；点「同意」写入 `gallery_privacy.xml`（`privacy_agreed=true`）→ 进入系统媒体权限弹窗 → 进入 `MainActivity`；**第二次启动不再显示同意页**（经 `am start` 与桌面图标两种方式验证）；未同意时直接 `am start MainActivity` 也不会初始化百度 SDK（logcat 无 `LBSAuthManager`/`authtoken` 活动，且未崩溃）；同意后再进入地图路径 SDK 正常初始化
 - 现场截图与完整报告归档：本机 `verification-reports/`（**已在 `.gitignore` 中排除，不进版本库**）——`2026-09-26-device-verification.md` 含缺陷清单、端到端用例、构建/测试/lint 数据与已知限制；`screenshots/` 含 11 张真机截图（隐私同意页 / 政策正文弹窗 / 同意后主界面 / 第二次启动 / 照片宫格 / 相册常用与更多 / 动态照片 12 项 / 查看器 / 详情面板含地图卡片与地址 / 视频封面与播放图标 / 播放器控制栏）
 - 本轮其他改动：`DateFormats` 的 `SimpleDateFormat` 改为 `ThreadLocal`（线程安全）；`AlbumResolver.addAlbumRow` 显式 `Array<Any?>` 消除 Kotlin 交叉类型 reified 警告；`main-ui` 移除未使用的 `viewpager2`（改由 `main` 显式声明）
 
-### 2026-09-28 百度地图 SDK 改为 Maven 引入（Android 16 真机 / Android 16 复测）
+### 2026-09-28 百度地图 SDK 改为 Maven 引入（Android 16 复测）
 
 - **动机**：原集成把 `BaiduLBS_Android.aar` + 16 个 so（4 ABI × 4 文件）放进版本库，共 **75.5MB**，既拖慢 clone 又使二进制归属与开源许可复杂化。改用 Maven 后**仓库自有代码仅 456KB**。
 - **产物一致性（逐字节核对）**：Maven `BaiduMapSDK_Map:8.2.0` + `base:8.2.0` 中的 16 个 so，与原 `libs/baidumap/**` 的 SHA-256 **全部一致**（4 ABI × 4 文件，无一差异）；`Map-8.2.0.aar` 的 sha256 `bbdd358d…b690` 与 Maven Central 元数据一致。即 Maven 产物就是原 SDK，非替代品。
@@ -216,7 +216,7 @@ URI 设计（cursor 列即 UI 数据接口）：
   之后引擎照常加载、地图与逆地理编码不受影响（本次冷启动首次打开详情即返回正确地址）。**注意**：这类被引用但缺失的类，若日后用到「在地图上内嵌大图/街景」等 BmSDK 能力，可能触发 `NoClassDefFoundError`；当前功能用不到，故可接受。
 - **许可声明（重要，但需自行复核）**：Maven Central 上 `Map`/`base`/`common` 的 POM 均声明 `<license>The Apache License, Version 2.0</license>`。**这是发行方元数据声明，不等同于与百度签订的《开发者服务条款》**，能否据此再分发请自行核对服务条款；仓库 `.gitignore` 保留了 `/libs/baidumap/` 作为回退保险。
 - **构建与验证数据**：`clean` + `--no-build-cache` + 杀 daemon 后 `:main:assembleDebug :main:assembleRelease :core-data:testDebugUnitTest :common-util:testDebugUnitTest :main:lintDebug` 共 **327/327 任务真实执行，BUILD SUCCESSFUL (3m27s)**；debug APK **38.67MB**、release **35.81MB**（与本地 AAR 路线的 38.77MB 基本一致）；APK 内 arm64 的 4 个 so 齐全，`ndk.abiFilters` 仍生效；单元测试 14 个全绿（注：README 早前记的「16 个」按 `:core-data` + `:common-util` 两个任务口径实为 14，差异是 `main`/`main-ui` 两个模块的模板测试未计入）。
-- **真机端到端验证（本次）**：装 Maven 版 APK → 照片宫格 → 查看器 → 详情面板：地图卡片瓦片（`百度地图 V20`，可见某道路/某道路/某道路/某地铁站）、蓝点标记、缩放与比例尺控件按设计隐藏、**地址 `重庆市（地址已脱敏）`**（对应 EXIF `（EXIF 坐标已脱敏）`，与原 GPS 坐标一致，证明 WGS-84→BD09LL 转换与坐标系设置仍生效）；点击卡片进入 `PhotoMapActivity` 全屏地图亦正常；全程无崩溃（`logcat -b crash` 为空）。
+- **真机端到端验证（本次）**：装 Maven 版 APK → 照片宫格 → 查看器 → 详情面板：地图卡片瓦片（`百度地图 V20`）、蓝点标记、缩放与比例尺控件按设计隐藏、**逆地理编码返回的实际地址正确**（与照片 EXIF 中的原始 GPS 坐标一致，证明 WGS-84→BD09LL 转换与坐标系设置仍生效；地址与坐标均已脱敏，不在此记录）；点击卡片进入 `PhotoMapActivity` 全屏地图亦正常；全程无崩溃（`logcat -b crash` 为空）。
 
 ### 2026-10-01 打包 ABI 改为按连接设备动态决定
 
@@ -226,7 +226,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 - **覆盖项**：`-Pgallery.abiFilters=a,b`（显式指定，跳过探测）、`=none`（关闭过滤）、`-Pgallery.abiAuto=false`（关闭探测恒用 arm64-v8a）、`-Pgallery.abiDeviceSerial=<serial>`、`-Pgallery.adb=<path>`、`-Pgallery.androidSdk=<path>`。
 - **configuration cache 安全性**：探测在**配置阶段**执行，结果随 configuration cache 一起被记录，因此插拔设备会使缓存失效并重新探测，不会复用上一台设备的结论（**这正是必须放在配置阶段而非执行阶段的原因**）。解析结果记忆化在 `rootProject.ext` 上（**不能**用脚本局部变量：Gradle 每次调用闭包都会重新委托，局部变量不承载状态，实测会退化成每次调用都探测一遍），一次配置只起一轮 adb 进程（`devices` + `getprop`，经计数器确认）。
 - **一处 Gradle 9 适配**：最初用 `Project.exec {}` 实现，经 `rootProject.galleryAbiFilters()` 从子项目调用时闭包 delegate 不再是 `Project`，报 `Could not find method exec()`；改用官方推荐的 `providers.exec {}`（对 configuration cache 友好且有明确的 `result`/`standardOutput` Provider API）。
-- **验证（本机模拟器，`x86_64 模拟器` / Android 16 / SDK 37 / 屏幕尺寸已脱敏 / density 480）**：
+- **验证（本机 x86_64 模拟器 / Android 16 / SDK 37 / density 480）**：
 
 | 场景 | 期望 ABI | 实测 APK 内 `lib/` | APK 体积 |
 |---|---|---|---|

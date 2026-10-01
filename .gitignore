@@ -4,15 +4,14 @@
 .kotlin
 /main/release/
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-/.idea/deviceManager.xml
-/.idea/deploymentTargetSelector.xml
-/.idea/markdown.xml
+
+# IDE 工程配置整个不进版本库。
+# 原先只忽略了 .idea 下的一部分文件（caches/libraries/workspace.xml 等），
+# 结果是 misc.xml、gradle.xml 这类「一半是机器相关、一半是工程相关」的文件
+# 既被跟踪又频繁被 IDE 改写：改 JDK 名、换 SDK 路径都会产生无意义 diff 或冲突。
+# 这些文件由 Android Studio 打开工程时按 Gradle 模型自动重建，丢掉不影响构建。
+.idea/
+
 .DS_Store
 /build
 /buildSrc/build

@@ -115,7 +115,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 - `main` 打包配置（2026-09-26 新增/更正）：
   - `ndk.abiFilters`：**按当前连接的设备动态决定**（2026-10-01 变更，见 §10「动态 ABI」）。原先硬编码 `'arm64-v8a'`；理由仍是百度地图 SDK 自带 4 个 ABI 的 so，全打包 APK ≈90MB，只留 arm64-v8a 后 debug ≈38.7MB / release ≈35.9MB（体积数据为真机实测，见 §10），但硬编码导致 arm64 包装不进 x86_64 模拟器。现在：插了设备取其 `abilist`（x86_64 模拟器 → `x86_64` + `arm64-v8a`，debug ≈58.4MB），没插设备退回 `arm64-v8a`
   - `manifestPlaceholders = [baiduMapApiKey: ...]`：AK 从 `local.properties` 的 `BAIDU_MAP_API_KEY` 读取（`local.properties` 已被 `.gitignore` 忽略；模板见仓库根 `local.properties.example`），manifest 中写 `android:value="${baiduMapApiKey}"`，不再明文硬编码；未配置时注入空串，SDK 初始化失败但应用不崩溃
-  - APK 产物命名（2026-10-01 新增，见 §10「APK 改名」）：`RenameApkTask` 在 `package<Variant>` 之后复制出改名副本 `outputs/renamed/<variant>/SenkGallery-{Debug,Release}.apk`，AGP 标准产物与 `output-metadata.json` 保持原样不动（Studio Run/Debug 与 `install*` 依赖它们）。映射表是 `main/build.gradle` 的 `apkDisplayNames`
+  - APK 产物命名（2026-10-01 新增，见 §10「APK 改名」）：用公开的 `VariantOutput.outputFileName`（`Property<String>`）在 `onVariants` 里直接改产物名，AGP 会把新名贯彻到 APK 本体、`output-metadata.json` 与 baselineProfiles。映射表是 `main/build.gradle` 的 `apkDisplayNames`
 - 百度地图 SDK 依赖（2026-09-28 变更，Maven 化）：
   - `main-ui` 的 `api files('../libs/baidumap/BaiduLBS_Android.aar')` 与 `main` 的 `sourceSets { main { jniLibs.srcDir '../libs/baidumap' } }` **均已删除**，改为 `api libs.baidu.lbs.map / .search / .util`（Maven Central，groupId `com.baidu.lbsyun`）
   - `.gitignore` 增加 `/libs/baidumap/` 作为回退保险（不再需要本地 AAR；若日后回退本地集成也不进版本库）
@@ -248,24 +248,32 @@ URI 设计（cursor 列即 UI 数据接口）：
 ### 2026-10-01 APK 产物改名（SenkGallery-Debug / Release.apk）
 
 - **需求**：产物要叫 `SenkGallery-Debug.apk` / `SenkGallery-Release.apk`，而不是 AGP 默认的 `main-debug.apk` / `main-release.apk`。
-- **为什么没直接改 AGP 输出名**：AGP 8 起 `applicationVariants.all { outputFileName = ... }` 随老 Variant API 一起被移除；新 Variant API 里 `BuiltArtifact.outputFile` 是**只读 `String`**（已核对 AGP 9.2.1 源码 `gradle-api-9.2.1-sources.jar` 的 `BuiltArtifact.kt:35`）。唯一官方途径是 `Artifacts.transform` + `BuiltArtifacts.save()`，需要写 `WorkAction`/`WorkParameters` 与 `BuiltArtifactsLoader` —— 为改个文件名引入这一整套不值当。
-- **最终做法**：`RenameApkTask`（`@InputDirectory apkDir` + `@OutputDirectory outputDir` + `@Input displayName`，`dst.bytes = src.bytes`）挂在 `package<Variant>` 的 `finalizedBy` 上。AGP 标准产物、`output-metadata.json` 一律不动，改名副本另放 `outputs/renamed/<variant>/`：
+- **最终做法（一次自我纠错，过程如实保留）**：用 AGP **公开**的 Variant API 直接改产物名 —— `VariantOutput.outputFileName` 是 `Property<String>`，源码注释写着 *"It is safe to modify it once you need custom artifact name"*（`@Incubating`）：
+  ```groovy
+  androidComponents {
+      onVariants(selector().all()) { variant ->
+          variant.outputs.forEach { it.outputFileName.set(apkDisplayNames[variant.name]) }
+      }
+  }
   ```
-  outputs/apk/debug/main-debug.apk                      AGP 标准产物（保持不变）
-  outputs/renamed/debug/SenkGallery-Debug.apk            改名副本（字节相同）
-  ```
-  这样 Studio 的 Run/Debug 与 `installDebug`/`installRelease` 不受影响（它们靠标准文件名 + `output-metadata.json` 定位）。
-- **两处踩坑（已解决，记录备查）**：
-  1. `variant.artifacts.get(SingleArtifact.APK)` 在 Groovy 脚本里不可用：无论写全限定名还是 import 简单名，都报 `Cannot cast java.lang.Class to com.android.build.api.artifact.Artifact$Single`（泛型擦除 + Groovy 方法派发）。改用 AGP 的稳定约定路径 `layout.buildDirectory.dir("outputs/apk/<variant>")`。
-  2. `tasks.named("package<Variant>")` 在 `onVariants` 回调里报 `Task not found`（该任务此刻尚未注册），且 `assemble<Variant>` 实际依赖的是 `package<Variant>`、**不是** `package<Variant>Bundle`（后者只在打 .aab/universal apk 时用）。已改为 `tasks.matching { it.name == "package<Variant>" }.configureEach { finalizedBy ... }` 延迟绑定。
-  3. 副本最初放在 `outputs/apk/<variant>/share/`，**嵌在 `@InputDirectory` 里面**，副本自身成为输入的一部分 → 每次构建都判定为过期并重跑。改为与 `apkDir` 平级的 `outputs/renamed/<variant>/` 后恢复正常 `UP-TO-DATE`。
+  产物直接就是 `outputs/apk/<variant>/SenkGallery-<Variant>.apk`，**不再有 `main-*.apk`**。AGP 把新名贯彻到全部下游产物，实测同步生效：
+  - `outputs/apk/<variant>/SenkGallery-<Variant>.apk`（APK 本体）
+  - `outputs/apk/<variant>/output-metadata.json` 的 `outputFile`（Studio 定位产物用）
+  - `outputs/apk/release/baselineProfiles/*/SenkGallery-Release.dm`
+  因此 Studio 的 Run/Debug 与 `installDebug`/`installRelease` 都照常工作（`installDebug` 实测 `Installed on 1 device.`）。
+- **⚠️ 本节最初写错、已更正（保留痕迹）**：第一版实现走的是「打包完再复制一份改名副本到 `outputs/renamed/`」，理由是「新 API 里 `BuiltArtifact.outputFile` 是只读 `String`，没有公开写法能改文件名」。**这个结论是错的** —— 我把「**产物收集结构** `BuiltArtifact`（`outputFile` 确实只读）」误当成「**变体输出配置** `VariantOutput`（`outputFileName` 可写）」。前者是打包后给下游消费者读的元数据，后者才是决定文件名的配置项，两者是不同层面的东西。经外部提示后实测 `VariantOutput.outputFileName.set(...)` 在 AGP 9.2.1 上完全可用，遂改为上述写法。
+- **顺带澄清一个流传的写法**：网上常见 `(output as VariantOutputImpl).outputFileName = ...`（强转 AGP 内部类）。**不需要** —— `VariantOutputImpl` 位于 `com.android.build.api.variant.impl`（内部包），但其 `outputFileName` 只是对公开属性的 override；用公开接口的 `output.outputFileName.set(name)` 即可，实测三条路径等价：内部强转 / `getOutputFileName()` / 直接属性访问，均构建成功且产物正确。
+- **踩坑记录（第一版实现留下的，仍有参考价值）**：
+  1. `variant.artifacts.get(SingleArtifact.APK)` 在 Groovy 脚本里不可用：无论写全限定名还是 import 简单名，都报 `Cannot cast java.lang.Class to com.android.build.api.artifact.Artifact$Single`（泛型擦除 + Groovy 方法派发）。若要拿 APK 输出目录，用约定路径 `layout.buildDirectory.dir("outputs/apk/<variant>")`。
+  2. `tasks.named("package<Variant>")` 在 `onVariants` 回调里报 `Task not found`（该任务此刻尚未注册）；且 `assemble<Variant>` 实际依赖的是 `package<Variant>`、**不是** `package<Variant>Bundle`（后者只用于 .aab / universal apk）。要挂任务须用 `tasks.matching{}.configureEach{}` 延迟绑定。
+  3. 复制方案下若把副本放进 `outputs/apk/<variant>/share/`，它会**嵌在 `@InputDirectory` 里面**而成为输入的一部分 → 每次构建都判定过期重跑；必须与输入目录平级。
+- **ABI 拆分与固定文件名冲突**：拆分时一个变体会产生多个 output，而 `apkDisplayNames` 是「一变体一个固定名」，多项会重名互相覆盖。已在 `onVariants` 里加了**限定条件**的拦截（仅当 `android.splits.abi.isEnable()` 且 `outputs.size() > 1` 时报错）。**为什么必须加限定**：不能对所有多 output 的变体一概报错，否则会误伤密度拆分等场景——那些场景需按 `output.filters` 分别生成名字。另注：ABI 拆分与 `ndk.abiFilters`（本项目的动态 ABI，见上一节）本就互斥，AGP 会直接报 `Conflicting configuration ... cannot be present when splits abi filters are set`，因此该 guard 在当前配置下实际不可达，属防御性代码。
 - **验证**：
-  - `clean` + `assembleDebug assembleRelease`：两份副本产出正确；每组「副本 vs 标准产物」**sha256 逐字节相同**。注意：APK 哈希在重新构建/签名后会变（本次三次构建得到过 `379132ed…`、`1e897213…`、`867b6f45…`），即使配置完全相同也不是可复现值，因此这里不记录固定指纹，只保留「两者相同」这一关系
-  - `apksigner verify` release 副本：V3.0 签名有效，证书 SHA-1 `（签名指纹已脱敏）` 与 `local.properties` 的 release 密钥一致；`aapt2 dump badging` 确认包名 `com.senk.gallery`、versionCode 10000000 未变
-  - **未配置签名的分支**（临时移走 `local.properties` 的 4 项 `RELEASE_*`）：AGP 产出 `main-release-unsigned.apk`，改名任务正确输出 `SenkGallery-Release.apk`（55.58MB）；恢复签名后重跑，旧未签名产物被清掉、副本变回签名包（SHA-1 复核一致）
-  - **增量正确性**：连续两次 `assembleDebug`，第二次 `renameDebugApk UP-TO-DATE`，不重复复制
-  - **`installDebug` 路径**：`renameDebugApk` 同样触发，`adb shell pm path com.senk.gallery` 确认安装成功
-  - **用改名文件直接安装（真实使用场景）**：`adb install outputs/renamed/release/SenkGallery-Release.apk` 与 `.../debug/SenkGallery-Debug.apk` 各自在**先 clean uninstall** 的前提下均 `Success`，`versionName=1.0.0.0`。**注意**：debug 与 release 用不同密钥签名（debug 走 debug keystore，release 走 `local.properties` 的密钥），二者互相覆盖安装必然报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`——这是 Android 签名校验的正常行为，与改名无关（验证过程中确实撞到过一次，已确认原因）
-  - 配置缓存：`Reusing configuration cache.` 正常复用；全量门禁 336 任务 BUILD SUCCESSFUL、单测 16/16、lint 0 error / 7 warning（较基线 9 条少 2 条：`ChromeOsAbiSupport` 与 `OldTargetApi`，无新增）
-- **未覆盖**：Windows 之外平台、Android Studio 内部 Run 流程的实测（只验证了命令行 `installDebug` 与 `adb install`）。
+  - `clean` + `assembleDebug assembleRelease`：产物为 `SenkGallery-Debug.apk` / `SenkGallery-Release.apk`，目录内**无 `main-*.apk`**；`output-metadata.json` 的 `outputFile` 同步为 `SenkGallery-Debug.apk` / `SenkGallery-Release.apk`
+  - `apksigner verify` release 产物：V3.0 签名有效，证书 SHA-1 `（签名指纹已脱敏）` 与 `local.properties` 的 release 密钥一致（改名不影响签名）
+  - **`installDebug`**：`Installed on 1 device.`，`adb shell pm path com.senk.gallery` 正常返回；**`adb install` 直接装改名后的 release 包**：`Success`
+  - **未配置签名的分支**（临时移走 `local.properties` 的 4 项 `RELEASE_*`）：仍产出 `SenkGallery-Release.apk`（内容为未签名包），`outputFile` 一致；恢复签名后重跑正常
+  - 配置缓存 `Reusing configuration cache.` 正常复用；全量门禁 BUILD SUCCESSFUL、单测 16/16 全绿、lint 0 error / 7 warning（较基线 9 条少 2 条：`ChromeOsAbiSupport` 与 `OldTargetApi`，无新增）
+  - 幂等性：连续构建产物名稳定；`clean` 后重建一致
+- **未覆盖**：Windows 之外平台、Android Studio 图形界面 Run 流程的实测（只验证了命令行 `installDebug` 与 `adb install`）、屏幕密度拆分场景下的多 output 命名。
 

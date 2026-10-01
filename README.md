@@ -46,21 +46,33 @@ Gallery/
 ```bash
 ./gradlew :main:assembleDebug
 ./gradlew :core-data:testDebugUnitTest
-adb install -r main/build/outputs/renamed/debug/SenkGallery-Debug.apk
+adb install -r main/build/outputs/apk/debug/SenkGallery-Debug.apk
 ```
 
 ## APK 产物与命名
 
-每次 `assembleDebug` / `assembleRelease` 会产出**两份字节相同**的 APK——AGP 标准产物保持原样（Android Studio 的 Run/Debug 与 `installDebug`/`installRelease` 都依赖它的标准文件名与 `output-metadata.json`），另有一份改好名的副本方便分发：
+`assembleDebug` / `assembleRelease` 直接产出改名后的 APK（不再有 `main-*.apk`）：
 
-| 变体 | AGP 标准产物 | 改名副本 |
-|---|---|---|
-| debug | `main/build/outputs/apk/debug/main-debug.apk` | `main/build/outputs/renamed/debug/SenkGallery-Debug.apk` |
-| release | `main/build/outputs/apk/release/main-release.apk`<br>（未配置签名时 `main-release-unsigned.apk`） | `main/build/outputs/renamed/release/SenkGallery-Release.apk` |
+| 变体 | 产物 |
+|---|---|
+| debug | `main/build/outputs/apk/debug/SenkGallery-Debug.apk` |
+| release | `main/build/outputs/apk/release/SenkGallery-Release.apk`<br>（未配置签名时同名，内容为未签名包） |
 
-改名由 `main/build.gradle` 里的 `RenameApkTask` 完成，挂在 `package<Variant>` 之后（`finalizedBy`），因此 `assemble*` 与 `install*` 两条路径都会自动产出副本；无变化时任务为 `UP-TO-DATE`，不会重复复制。未配置签名时副本仍叫 `SenkGallery-Release.apk`（内容为未签名包）。
+改名用的是 AGP **公开**的 Variant API —— `VariantOutput.outputFileName`（`Property<String>`，AGP 源码注释：*"It is safe to modify it once you need custom artifact name"*）：
 
-> 为什么不是直接改 AGP 的输出名：AGP 8 起 `applicationVariants.all { outputFileName = ... }` 已随老 Variant API 移除，新 API 的 `BuiltArtifact.outputFile` 是只读 `String`；唯一官方途径是 `Artifacts.transform` + `BuiltArtifacts.save()`（需 WorkAction 与 `BuiltArtifactsLoader`），为改名引入这套机制不划算。**改文件名/加新变体**只需编辑 `main/build.gradle` 的 `apkDisplayNames` 映射。
+```groovy
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.outputs.forEach { it.outputFileName.set(apkDisplayNames[variant.name]) }
+    }
+}
+```
+
+AGP 会把新名字贯彻到所有下游产物，实测同步生效的有：APK 本体、`output-metadata.json` 的 `outputFile`（Android Studio 靠它定位产物）、以及 release 的 `baselineProfiles/*/SenkGallery-Release.dm`。因此 Studio 的 Run/Debug 与 `installDebug`/`installRelease` 照常工作。
+
+**改文件名 / 加新变体**只需编辑 `main/build.gradle` 的 `apkDisplayNames` 映射。
+
+> 注意：老写法 `applicationVariants.all { outputFileName = ... }` 已随老 Variant API 在 AGP 8 移除，以上是 8.0+ / 9.x 的现行写法。若日后启用 **ABI 拆分**，一个变体会产生多个 output，固定文件名会互相覆盖——`main/build.gradle` 里有显式拦截（ABI 拆分与 `ndk.abiFilters` 本就互斥，AGP 会直接报 `Conflicting configuration`）。
 
 ## Release 签名
 
@@ -75,9 +87,9 @@ RELEASE_KEY_PASSWORD=
 
 ```bash
 ./gradlew :main:assembleRelease
-# 已配置签名 -> main/build/outputs/apk/release/main-release.apk
-# 未配置签名 -> main-release-unsigned.apk（不影响他人 clone 后构建）
-# 两种情况都会另出一份改名副本 -> outputs/renamed/release/SenkGallery-Release.apk
+# 两种情况下产物都叫 main/build/outputs/apk/release/SenkGallery-Release.apk
+#   已配置签名 -> 已签名包
+#   未配置签名 -> 未签名包（不影响他人 clone 后构建）
 ```
 
 **四项缺一不可**，任一为空即视为未配置并产出未签名包——这样开源仓库在没有密钥的情况下依然能构建。

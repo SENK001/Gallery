@@ -85,6 +85,103 @@ android {
     }
 }
 
+// ---------------------------------------------------------------------------
+// APK 产物改名：main-debug.apk -> SenkGallery-Debug.apk，release 同理
+//
+// 为什么不直接改 AGP 的输出名：
+// AGP 8 起 `applicationVariants.all { outputFileName = ... }` 已随老 Variant API 一并移除，
+// 新 API 里 `BuiltArtifact.outputFile` 是只读的 String（已核对 AGP 9.2.1 源码
+// gradle-api-9.2.1-sources.jar 的 BuiltArtifact.kt），没有公开写法能在打包时改文件名。
+// 唯一官方途径是 Artifacts.transform + BuiltArtifacts.save()，需要 WorkAction 与
+// BuiltArtifactsLoader，为改个名字引入这套东西不值当。
+//
+// 这里改为「AGP 照常产出标准名，构建完成后复制一份改好名的副本」：
+//   main/build/outputs/apk/debug/main-debug.apk            AGP 标准产物，保持不变
+//   main/build/outputs/renamed/debug/SenkGallery-Debug.apk  改名副本（字节相同）
+// 标准产物仍在原路径，Android Studio 的 Run/Debug 与 installDebug/installRelease
+// 都靠 output-metadata.json + 标准文件名定位，因此完全不受影响，只是多出一份副本。
+// 副本放在 outputs/renamed/ 而不是 outputs/apk/ 下面：必须与 apkDir 这个
+// @InputDirectory 平级，不能嵌进去，否则副本自身会成为「输入」的一部分，
+// 造成任务每次都要重跑。两份都会随 clean 一起清除。
+// ---------------------------------------------------------------------------
+abstract class RenameApkTask extends DefaultTask {
+
+    /** AGP 打包出标准 APK 的目录（约定路径 outputs/apk/<variant>）。 */
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getApkDir()
+
+    /** 改名副本的输出目录（与 apkDir 平级，不嵌套）。 */
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    /** 目标文件名，如 SenkGallery-Debug.apk。 */
+    @Input
+    abstract Property<String> getDisplayName()
+
+    @TaskAction
+    void rename() {
+        File apkDir = apkDir.get().asFile
+        String target = displayName.get()
+        // 标准产物的名字由 AGP 决定：配置了签名是 main-release.apk，未配置签名则是
+        // main-release-unsigned.apk（见 README「Release 签名」）。因此执行期精确匹配
+        // 这两个候选，而不是「挑任意一个 .apk」——后者会在目录里存在别的 apk 时选错。
+        def apks = (apkDir.listFiles() ?: new File[0])
+            .findAll { it.isFile() && it.name.endsWith('.apk') }
+        File src = apks.find { it.name.endsWith('-unsigned.apk') }
+            ?: apks.find { !it.name.endsWith('-unsigned.apk') }
+        if (src == null) {
+            throw new GradleException("[apk] 在 ${apkDir} 下没找到 .apk，无法改名为 ${target}")
+        }
+        if (apks.size() > 1) {
+            logger.lifecycle("[apk] ${apkDir} 下有多个 apk ${apks*.name}，采用 ${src.name}")
+        }
+
+        File outDir = outputDir.get().asFile
+        if (outDir.exists()) {
+            outDir.deleteDir()   // 清掉上一次的副本，避免残留旧名文件
+        }
+        outDir.mkdirs()
+        File dst = new File(outDir, target)
+        dst.bytes = src.bytes
+        logger.lifecycle("[apk] ${src.name} -> ${target}" +
+            "  (${String.format('%.2f', dst.length() / 1024.0 / 1024.0)}MB)")
+    }
+}
+
+// 变体名 -> 改名后的文件名。新增变体时在这里补一行即可。
+def apkDisplayNames = [
+    debug  : 'SenkGallery-Debug.apk',
+    release: 'SenkGallery-Release.apk',
+]
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        def displayName = apkDisplayNames[variant.name]
+        if (displayName == null) {
+            return
+        }
+        def variantName = variant.name
+        def apkOutputDir = layout.buildDirectory.dir("outputs/apk/${variantName}")
+        def renameTask = tasks.register("rename${variantName.capitalize()}Apk", RenameApkTask) {
+            it.displayName.set(displayName)
+            // 标准产物所在目录。用约定路径而不是 variant.artifacts.get(SingleArtifact.APK)：
+            // 后者在 Groovy 里会因泛型擦除报
+            // "Cannot cast java.lang.Class to com.android.build.api.artifact.Artifact$Single"，
+            // 而该路径是 AGP 的稳定约定（与 output-metadata.json 同级）。
+            it.apkDir.set(apkOutputDir)
+            // 改名副本的输出目录：与 apkDir 平级，绝不能嵌在它里面。
+            it.outputDir.set(layout.buildDirectory.dir("outputs/renamed/${variantName}"))
+        }
+        // package<Variant> 完成后再改名；assemble<Variant> 与 install<Variant>
+        // 都会经过它，因此两条路径都能拿到改名副本。这里用 matching + configureEach
+        // 延迟绑定：任务此刻还没注册，直接 tasks.named 会报 Task not found。
+        tasks.matching { it.name == "package${variantName.capitalize()}" }.configureEach {
+            it.finalizedBy(renameTask)
+        }
+    }
+}
+
 dependencies {
     api project(':main-ui')
     implementation libs.androidx.activity.ktx

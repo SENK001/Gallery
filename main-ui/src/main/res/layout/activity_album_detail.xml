@@ -16,7 +16,7 @@
     android:id="@+id/album_detail_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gallery_chrome_surface">
+    style="@style/Widget.Gallery.ChromeSurface">
 
     <!-- 宫格铺满全屏（首行的位置由 topInset 预留，见 Activity） -->
     <com.senk.gallery.ui.gl.GlThumbnailGridView
@@ -30,23 +30,22 @@
         android:id="@+id/album_status_bar_bg"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/gallery_chrome_surface" />
+        style="@style/Widget.Gallery.ChromeSurface" />
 
     <!--
       标题栏：marginTop 让开状态栏（不能用 paddingTop，那会把它撑高）。
-      **背景保持透明，靠父容器（@id/album_detail_root）的 gallery_chrome_surface 显示**：
+      颜色全部来自 Widget.Gallery.Toolbar：**背景透明**，靠父容器
+      （@id/album_detail_root）的 chrome 底色显示：
         · 静止 → 透出主题底色（浅色为白、深色自动变深）+ 深色标题/返回键
-        · 上划 → 交给 album_toolbar_scrim 渐变遮罩（标题/返回键转白）
+        · 上划 → 交给 album_toolbar_scrim 渐变遮罩（标题/返回键转白，由代码切换）
       不写死不透明背景，深色模式才能跟随主题，上划时也不会有白底残留。
     -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
+        style="@style/Widget.Gallery.Toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/transparent"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/gallery_text_primary"
-        app:titleTextColor="@color/gallery_text_primary" />
+        app:navigationIcon="@drawable/ic_arrow_back" />
 
     <!-- 上划后的黑色渐变遮罩：高 = 状态栏 + 标题栏，由 Activity 控制显隐 -->
     <View

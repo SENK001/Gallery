@@ -74,6 +74,28 @@ class GlImagePagerRenderer(
         .asFloatBuffer()
     private var placeholderLight = 0
     private var placeholderDark = 0
+
+    /**
+     * 占位底色与清屏色由宿主注入（来自主题色板），**不在这里写死字面量**：
+     * 同一个占位色原先在 3 个文件里各写了一遍，是最容易漏改的地方。
+     * 默认值仅为兜底，正常路径都会由 [GlImageViewer] 注入。
+     */
+    private var clearLightArgb = 0xFFFFFFFF.toInt()
+    private var clearDarkArgb = 0xFF000000.toInt()
+    private var placeholderLightArgb = 0xFFEEEEEE.toInt()
+    private var placeholderDarkArgb = 0xFF222222.toInt()
+
+    fun setMediaColors(
+        clearLight: Int,
+        clearDark: Int,
+        placeholderLight: Int,
+        placeholderDark: Int,
+    ) {
+        clearLightArgb = clearLight
+        clearDarkArgb = clearDark
+        placeholderLightArgb = placeholderLight
+        placeholderDarkArgb = placeholderDark
+    }
     private val fitRect = RectF()
     private val iconRect = RectF()
     private val neighborIconRect = RectF()
@@ -143,8 +165,8 @@ class GlImagePagerRenderer(
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         textureStore.clear()
         badgeCache.evictAll()
-        placeholderLight = createPlaceholderTexture(0xFFEEEEEE.toInt())
-        placeholderDark = createPlaceholderTexture(0xFF222222.toInt())
+        placeholderLight = createPlaceholderTexture(placeholderLightArgb)
+        placeholderDark = createPlaceholderTexture(placeholderDarkArgb)
         maxTextureSize = GlUtils.maxTextureSize()
         videoTextureId = createExternalTexture()
         videoManager.attachTexture(videoTextureId)
@@ -167,11 +189,15 @@ class GlImagePagerRenderer(
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        if (lightBackground) {
-            GLES20.glClearColor(1f, 1f, 1f, 1f)
-        } else {
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-        }
+        // 清屏色按"观看底色"（lightBackground）取，而不是按系统深浅色：
+        // 二者是正交维度，见 setMediaColors 的说明
+        val clear = if (lightBackground) clearLightArgb else clearDarkArgb
+        GLES20.glClearColor(
+            ((clear shr 16) and 0xFF) / 255f,
+            ((clear shr 8) and 0xFF) / 255f,
+            (clear and 0xFF) / 255f,
+            1f,
+        )
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         textureStore.drainUploads()
         badgeCache.drainDeletes()

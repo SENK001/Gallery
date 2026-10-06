@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  底部导航**图标**色。两个状态色都来自主题色板（含 values-night），
+  因此深色模式下选中/未选中态都会自动换成对应的浅色值。
+  布局通过 @style/Widget.Gallery.NavIcon 引用，不在控件上直接写 tint。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@color/nav_item_selected" android:state_selected="true" />
-    <item android:color="@color/nav_icon_unselected" />
+    <item android:color="@color/gallery_nav_selected" android:state_selected="true" />
+    <item android:color="@color/gallery_nav_icon_unselected" />
 </selector>

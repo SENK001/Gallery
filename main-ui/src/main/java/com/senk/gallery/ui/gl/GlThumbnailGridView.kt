@@ -9,6 +9,7 @@ import android.view.ViewConfiguration
 import android.widget.OverScroller
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.ui.R
+import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.util.DisplayUtils
 import kotlin.math.abs
 import kotlin.math.sign
@@ -79,6 +80,7 @@ class GlThumbnailGridView @JvmOverloads constructor(
      */
     fun setSurfaceBackgroundColor(color: Int) {
         renderer.setClearColor(color)
+        renderer.setPlaceholderColor(ThemeUtils.surfacePlaceholder(context))
         requestRender()
     }
 

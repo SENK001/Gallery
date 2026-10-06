@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  主题色板（浅色模式）—— main 模块。
+
+  main-ui 里定义的通用语义色（gallery_text_*、gallery_surface_*、gallery_brand_*）
+  通过 `api project(':main-ui')` 资源合并后可直接引用，**不要在这里重复定义**。
+  本文件只放 main 模块自己的语义色，且**必须与 values-night/colors.xml 成对**。
+
+  命名与 main-ui 保持一致：`gallery_<类别>_<用途>`。
+-->
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <!-- ========== 底部胶囊导航 ========== -->
+    <!-- 选中态图标/文字：用品牌主色 -->
+    <color name="gallery_nav_selected">@color/gallery_brand_primary</color>
+    <!-- 未选中态图标 -->
+    <color name="gallery_nav_icon_unselected">#E6000000</color>
+    <!-- 未选中态文字 -->
+    <color name="gallery_nav_text_unselected">#99000000</color>
 
-    <!-- 隐私政策同意页（取值对齐系统应用首启页）。 -->
-    <color name="privacy_text_primary">#DE000000</color>
-    <color name="privacy_text_secondary">#8A000000</color>
-    <color name="privacy_button_primary">#FF3482FF</color>
-    <color name="privacy_button_neutral">#FFF2F2F2</color>
-
-    <!-- 底部胶囊导航（选中态参考高德地图）。 -->
-    <color name="nav_item_selected">#FF1E7DFF</color>
-    <color name="nav_icon_unselected">#E6000000</color>
-    <color name="nav_text_unselected">#99000000</color>
+    <!-- ========== 权限提示层 ========== -->
+    <!-- 未授权时的全屏提示层底色 -->
+    <color name="gallery_permission_surface">@color/gallery_surface_content</color>
 </resources>

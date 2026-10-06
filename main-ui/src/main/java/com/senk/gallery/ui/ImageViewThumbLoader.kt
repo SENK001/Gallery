@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Size
 import android.widget.ImageView
+import com.senk.gallery.ui.theme.ThemeUtils
 import java.util.concurrent.Executors
 
 object ImageViewThumbLoader {
@@ -18,10 +19,10 @@ object ImageViewThumbLoader {
         imageView.tag = tag
         if (uriString.isNullOrEmpty()) {
             imageView.setImageBitmap(null)
-            imageView.setBackgroundColor(0xFFEEEEEE.toInt())
+            imageView.setBackgroundColor(ThemeUtils.surfacePlaceholder(imageView.context))
             return
         }
-        imageView.setBackgroundColor(0xFFEEEEEE.toInt())
+        imageView.setBackgroundColor(ThemeUtils.surfacePlaceholder(imageView.context))
         imageView.setImageBitmap(null)
         executor.execute {
             val bitmap: Bitmap? = try {

@@ -4,8 +4,8 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24"
-    android:tint="@android:color/white">
+    android:tint="@color/gallery_media_on_scrim">
     <path
-        android:fillColor="@android:color/white"
+        android:fillColor="@color/gallery_media_on_scrim"
         android:pathData="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" />
 </vector>

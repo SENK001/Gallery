@@ -5,7 +5,7 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gallery_chrome_surface"
+    style="@style/Widget.Gallery.ChromeSurface"
     tools:context=".MainActivity">
 
     <!--
@@ -29,7 +29,7 @@
             android:id="@+id/permission_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@android:color/white"
+            style="@style/Widget.Gallery.PermissionOverlay"
             android:gravity="center"
             android:orientation="vertical"
             android:padding="32dp"
@@ -40,8 +40,8 @@
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:text="@string/permission_title"
-                android:textColor="@color/gallery_text_primary"
-                android:textSize="17sp" />
+                android:textSize="17sp"
+                style="@style/TextAppearance.Gallery.PermissionTitle" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -49,8 +49,8 @@
                 android:layout_marginTop="8dp"
                 android:gravity="center"
                 android:text="@string/permission_message"
-                android:textColor="@color/gallery_text_secondary"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                style="@style/TextAppearance.Gallery.PermissionMessage" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/permission_button"
@@ -71,7 +71,7 @@
         android:id="@+id/status_bar_bg"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/gallery_chrome_surface" />
+        style="@style/Widget.Gallery.ChromeSurface" />
 
     <!--
       标题栏。高度用 actionBarSize，状态栏高度用 **marginTop** 让开
@@ -87,10 +87,8 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/transparent"
-        app:elevation="0dp"
         app:title="@string/app_name"
-        app:titleTextColor="@color/gallery_text_primary" />
+        style="@style/Widget.Gallery.Toolbar" />
 
     <!--
       上划时的黑色渐变遮罩（visible=gone，由 MainActivity 控制）。
@@ -108,10 +106,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="16dp"
-        app:cardBackgroundColor="#F0FFFFFF"
-        app:cardCornerRadius="34dp"
-        app:cardElevation="10dp"
-        app:strokeWidth="0dp">
+        style="@style/Widget.Gallery.NavCard">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -145,7 +140,7 @@
                         android:contentDescription="@string/gallery_tab_photos"
                         android:duplicateParentState="true"
                         android:src="@drawable/ic_tab_photos"
-                        app:tint="@color/nav_item_tint" />
+                        style="@style/Widget.Gallery.NavIcon" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -153,8 +148,8 @@
                         android:layout_marginTop="1dp"
                         android:duplicateParentState="true"
                         android:text="@string/gallery_tab_photos"
-                        android:textColor="@color/nav_item_text"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        style="@style/Widget.Gallery.NavLabel" />
 
                 </LinearLayout>
 
@@ -186,7 +181,7 @@
                         android:contentDescription="@string/gallery_tab_albums"
                         android:duplicateParentState="true"
                         android:src="@drawable/ic_tab_albums"
-                        app:tint="@color/nav_item_tint" />
+                        style="@style/Widget.Gallery.NavIcon" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -194,8 +189,8 @@
                         android:layout_marginTop="1dp"
                         android:duplicateParentState="true"
                         android:text="@string/gallery_tab_albums"
-                        android:textColor="@color/nav_item_text"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        style="@style/Widget.Gallery.NavLabel" />
 
                 </LinearLayout>
 

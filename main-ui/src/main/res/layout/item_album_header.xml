@@ -7,6 +7,6 @@
     android:paddingTop="14dp"
     android:paddingEnd="16dp"
     android:paddingBottom="6dp"
-    android:textColor="@color/gallery_text_primary"
+    style="@style/Widget.Gallery.AlbumSectionHeader"
     android:textSize="15sp"
     android:textStyle="bold" />

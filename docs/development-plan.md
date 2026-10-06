@@ -79,13 +79,13 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 - `MainActivity`（main 模块）：MaterialToolbar + ViewPager2（照片 / 相册），Tab 切换由**底部悬浮胶囊导航栏**驱动：MaterialCardView 磨砂白底，条目图标在上、文字在下，选中项图标与文字为蓝色并整体带半透明灰色大圆角衬底（衬底包住图标和文字，可透出下层内容，与导航栏背景同一类半透明效果），样式参考高德地图底部栏
   - **两页的顶部样式不同**（2026-10-01 改版，见 §10）：
-    - 「照片」页：宫格**铺满整个窗口**（含状态栏与系统导航栏区域），缩略图可滚到屏幕最底边；标题栏与胶囊导航都是**覆盖层**（`FrameLayout` 叠加，不占布局）。静止时标题栏是 **不透明白底 + 深色标题**，宫格第一行位于其下方；上划到缩略图来到标题栏下方后，标题栏变透明、改由**黑色线性渐变遮罩**（`MainActivity.buildScrim()` 代码绘制，上深下透明）盖住，标题改用白色
-    - 「相册」页：**保持原样** —— 不透明白底标题栏 + 深色标题，内容不吃到状态栏/标题栏下面（由 `AlbumsFragment` 自己按「状态栏 + 标题栏」加 `paddingTop`）
+    - 「照片」页：宫格**铺满整个窗口**（含状态栏与系统导航栏区域），缩略图可滚到屏幕最底边；标题栏与胶囊导航都是**覆盖层**（`FrameLayout` 叠加，不占布局）。静止时标题栏为白色（**自身透明，透出父容器的 `gallery_surface_chrome` 主题底色**）+ 深色标题，宫格第一行位于其下方；上划到缩略图来到标题栏下方后，改由**黑色线性渐变遮罩**（`ToolbarScrimDrawable` 代码绘制，上深下透明）盖住，标题改用白色
+    - 「相册」页：**保持原样** —— 白底标题栏 + 深色标题，内容不吃到状态栏/标题栏下面（由 `AlbumsFragment` 自己按「状态栏 + 标题栏」加 `paddingTop`）
     - 顶部样式切换在 `MainActivity.applyChrome(page)`；滚动驱动在 `onGridScrolled(scrollY)`（40px 死区，避免刚滑动就闪变）
   - 状态栏底条 `status_bar_bg`（高度 = 状态栏 inset）+ 标题栏（`marginTop` 让开状态栏）+ 胶囊导航（`marginBottom` 让开手势条）；**渐变遮罩的高度 = 状态栏 + 标题栏**，因此 `scrim` 是一个覆盖这两段的独立 View
 - `PhotosFragment`：GL 宫格（不分组），滑到底分页加载；顶部预留 = 状态栏 + 标题栏（`GridGeometry.topInset`，走 insets 监听设置），让**第一行落在标题栏下方**；底部预留 = 胶囊导航占位 + 系统导航栏高度（`bottomPadding`）；`onGridScroll` 回调上抛给宿主驱动标题栏切换
 - `AlbumsFragment`：RecyclerView 多类型 — “常用”3 列网格 + “更多”列表（小封面/名称/数量），section 标题
-- `AlbumDetailActivity`：相册内容 GL 宫格 + 分页。**与首页「照片」页完全一致的铺满式布局**（2026-10-01 改版，见 §10）：宫格铺满整个窗口（含状态栏与系统导航栏区域），标题栏/状态栏底条/渐变遮罩均为覆盖层；**静止时标题栏为不透明白底 + 深色标题/返回键，第一行缩略图落在标题栏下方**（`grid.setTopInset(状态栏 + 标题栏)`，与照片页同一套算法）；上划过 40px 死区后标题栏让位给渐变遮罩，标题与返回键转白色（`navigationIcon?.setTint(...)` 随状态切换）
+- `AlbumDetailActivity`：相册内容 GL 宫格 + 分页。**与首页「照片」页完全一致的铺满式布局**（2026-10-01 改版，见 §10）：宫格铺满整个窗口（含状态栏与系统导航栏区域），标题栏/状态栏底条/渐变遮罩均为覆盖层；**静止时标题栏为白色（自身透明，透出父容器 `gallery_surface_chrome` 主题底色）+ 深色标题/返回键，第一行缩略图落在标题栏下方**（`grid.setTopInset(状态栏 + 标题栏)`，与照片页同一套算法）；上划过 40px 死区后标题栏让位给渐变遮罩，标题与返回键转白色（`navigationIcon?.setTint(...)` 随状态切换）
 - `ViewerActivity`：白底 + 标题栏（日期/序号）+ 底部功能菜单（分享/收藏/详情）；单击内容 -> 黑底沉浸（隐藏系统栏+工具栏+底栏），再单击恢复；左右滑切换，滑到视频显示封面 + GL 绘制的播放图标，**单击播放图标**进入播放器（点击其他区域与照片一致进入沉浸模式，命中测试用渲染器记录的图标矩形）
   - GL 视图恒定铺满整个内容区（`match_parent`，整个会话内尺寸不变）：照片按当前页宽高比 fit 绘制在视口中央，留白由 GL 清屏按模式绘制成与窗口背景相同的颜色（正常白 #FFFFFF / 沉浸黑），视觉上与窗口留白无差别
   - 大图纹理：解码最长边 = min(GL_MAX_TEXTURE_SIZE, 视口最长边)（约一屏分辨率），纹理缓存 96MB（可容纳 当前页 + 前后各一页 的工作集）；放大超过约 1.2x 为纹理放大（后续可做按需高分解码）
@@ -103,6 +103,60 @@ URI 设计（cursor 列即 UI 数据接口）：
   - 底部栏：进度条位于栏上缘（通栏），下方一行 左→右 = 播放/暂停、`当前 / 总时长`（`gallery_time_format`）、横屏切换（最右，图标随朝向切 `ic_fullscreen`/`ic_fullscreen_exit`）
   - 横屏切换：`requestedOrientation` 在 `SCREEN_ORIENTATION_LANDSCAPE`/`PORTRAIT` 间切换，`onConfigurationChanged` 更新图标（manifest 已声明 configChanges，不重建 Activity）
 - 主题调整：查看器固定浅色白底
+
+### 3.3 颜色与主题（**规范，改动前必读**）
+
+**硬性规则**：
+
+1. **颜色只允许定义在 `colors.xml`**，且 `values/` 与 `values-night/` **必须成对**。
+   漏掉一份，深色模式下就回退到浅色值 —— 典型表现是「白块」或「近黑字压近黑底、文字看不见」。
+   由 `scripts/check-color-pairs.py` 校验（含「引用了不存在的颜色」这类改名未收尾的检查）。
+2. **XML 里不在控件上直接写颜色属性**（`android:textColor` / `android:background` / `*Tint`），
+   统一在 `styles.xml` 定义 style 后挂到控件上。布局只描述结构，不掺主题细节。
+3. **Kotlin/Java 里取色一律走 `com.senk.gallery.ui.theme.ThemeUtils`**，
+   不写 `ContextCompat.getColor`、不写 `Color.WHITE` 之类字面量。
+   加颜色的流程：两份 colors.xml 同时加 → `ThemeUtils` 加取值方法 → 用。
+4. **点号样式名要补中间命名空间**：`Widget.Gallery.Toolbar` 被当作 `Widget.Gallery` 的子样式，
+   而框架里没有 `Widget` / `TextAppearance` / `ShapeAppearance` 这几个基础样式，
+   因此 `styles.xml` 里用 `parent=""` 显式声明 `Widget.Gallery` 等中间样式，否则 AAPT 报
+   `resource style/Widget not found`。
+
+**命名**：`gallery_<类别>_<用途>`，同类前缀一致便于检索 ——
+`text_*` 文字、`surface_*` 容器底色、`icon_*` 图标、`brand_*` 品牌色、
+`media_*` 媒体层、`perm_*` 隐私/权限页、`divider_*` 分隔装饰。
+
+**分层结构（关键，踩过坑）**：标题栏**自身透明**，它「透出」的其实是下面依次几层 ——
+`pager` 里的页面背景（`fragment_photos` / `fragment_albums`）→ 再往下是**宫格 GL surface 的清屏色**
+（`GlGridRenderer.glClearColor`）。所以要让顶部随主题变色，**这三层要一起用主题色**，
+只改 toolbar 自己不够。见 §10 坑 18。
+
+**有意不跟随主题的颜色**（必须理解语义再改，不要"顺手统一"）：
+
+| 范围 | 为什么恒定 |
+|---|---|
+| `media_*`（视频控件层、沉浸查看器、进度条） | 压在**任意视频画面**上，必须恒定「半透明黑底 + 白字/白图标」才能兼顾亮暗画面；跟随主题会在浅色模式下变成浅底白字，直接不可读 |
+| 查看器 `media_placeholder_light/dark` | 表达「用哪种观看底色」，由 `lightBackground` 布尔驱动，与系统深浅色是**正交维度** |
+| 上划渐变遮罩（黑→透明） | 语义是「把下方缩略图压暗」；终点透明是「透出图片」而非「透出 surface」。配套文字恒白 |
+| `BadgeCache` 里的角标色 | 画在**任意用户照片**之上，背景不可知，必须恒定对比 |
+| 启动图标 `ic_launcher_*` 的 69 处字面色 | 品牌资产；且 `ic_launcher.xml` 把 foreground 复用为 `monochrome`，系统会自行着色 |
+
+**工具条背景有两大类，别混用**（本轮就误把所有工具条都设成了透明）：
+
+| 样式 | 背景 | 用在 |
+|---|---|---|
+| `Widget.Gallery.Toolbar` | **透明**（透出下层 chrome 底色） | **只有**首页「照片」页与相册详情页 —— 这两页的内容铺到标题栏之下、标题栏是纯覆盖层，上划时还要换成渐变遮罩 |
+| `Widget.Gallery.Toolbar.Surface` | **不透明**内容底色 | 其余页面：查看器、地图页等。它们的内容**不铺到标题栏下面**，标题栏必须自己有不透明底色，否则会透出内容或被 GL surface 清屏色顶穿 |
+| `Widget.Gallery.Toolbar.Media` | **半透明深色**（`gallery_media_scrim`） | 视频播放器 —— 压在任意视频画面上，恒定「半透明黑底 + 白字白图标」 |
+
+同理，查看器顶部/底部栏用 `Widget.Gallery.ViewerBar`（不透明），**不是**透明。
+
+**判据**：改任何工具条前先问「这页的内容会不会画到标题栏下面？」
+会 → 透明（覆盖层版式）；不会 → 不透明。
+
+**主题父类**：`values/themes.xml` 用 `Theme.Material3.Light`，
+`values-night/themes.xml` 必须用 `Theme.Material3.Dark`（或统一用 DayNight）。
+**若深色父类仍写 Light**，深色下 Material 组件（MaterialButton / MaterialCardView /
+MaterialAlertDialog）会继续按 Light 解析 `?attr/colorSurface` 等，弹窗与水波纹会突兀地保持浅色。
 
 ## 4. main（壳）
 
@@ -371,4 +425,28 @@ URI 设计（cursor 列即 UI 数据接口）：
   - **深色模式**（`adb shell cmd uimode night yes`）：照片页与相册详情页的 `y=2..355` 整条变为 `(28,27,31)`（标题栏区域跟随主题）；上划后缩略图仍正常透出
   - 全量门禁 BUILD SUCCESSFUL、单测 16/16、lint 0 error / 7 warning（与基线一致，无新增）
 - **未覆盖**：状态栏/标题栏高度差异较大的其它机型与 ROM（本机状态栏 152px、`actionBarSize` 208px，遮罩按 insets 自适应，但未在第二台设备验证）、横屏；深色模式**只验证了这两个宫格页**，相册页/查看器/地图页等仍写死白色，未做整体深色适配。
+
+### 2026-10-06 颜色与主题规范化（全项目）
+
+- **需求**：① XML 统一用 style 设色，不在控件上写颜色；② 每个颜色都必须有浅色 + 深色两份；③ 定义主题工具类，Kotlin/Java 取色一律走它。
+- **改前现状**（审计基线 `276edbc`，规范见 §3.3）：颜色定义 16 个、**缺 night 版本 15 个**（`main` 模块 9 色**全部**没有 night，且 `main/values-night/` 连 `colors.xml` 都不存在）；XML 硬编码颜色字面量 **97 处**、`@android:color/*` 28 处、`@color/` 直接引用 54 处（其中 48 处指向无 night 的颜色）；KT/JAVA 取色设色 **42 处**；`?attr/color*` 使用 **0 处**；style 只有 4 个定义。
+- **做了什么**：
+  - 重写色板为语义命名 `gallery_<类别>_<用途>`：main-ui 23 色 + main 4 色 + 2 个 ColorStateList，**全部成对**
+  - 新增 `main-ui/.../ui/theme/ThemeUtils.kt` 作为**代码取色唯一入口**（含 `isNightMode` 与 `applySystemBarAppearance`）
+  - 新增 `main-ui/values/styles.xml` 与 `main/values/styles.xml`，把颜色从布局搬进 style
+  - `values-night/themes.xml` 父类 `Theme.Material3.Light` → **`Theme.Material3.Dark`**
+  - 新增 `scripts/check-color-pairs.py` 做配对与悬空引用校验
+- **踩过的坑**：
+  1. **点号样式名缺中间命名空间**：`Widget.Gallery.Toolbar` 隐含继承 `Widget.Gallery`，而框架没有 `Widget`，AAPT 报 `resource style/Widget not found`。用 `parent=""` 显式补齐 `Widget.Gallery` / `TextAppearance.Gallery` / `ShapeAppearance.Gallery`。
+  2. **同一元素不能有两个 `style=`**：批量替换颜色属性时，`?attr/borderlessButtonStyle` 已占位，再插一个 `style=` 直接导致 XML 解析失败（`AttributeNotUnique`）。正确做法是把颜色并进同一个 style 用继承表达，或用 `app:tint` 之类属性。
+  3. **改名必须一次收尾**：把 `gallery_chrome_surface` 改名 `gallery_surface_chrome` 后漏掉 4 处引用（2 个 xml + 2 个 kt），工作区一度是**不可编译**状态。现已由 `check-color-pairs.py` 的「悬空引用」检查兜住。
+  4. **「深色下标题看不见」是真缺陷**（非本轮引入）：静止态取 `gallery_text_primary`（`#DE000000`，改前**无 night**），而底色在 night 下是 `#1C1B1F` → 近黑压近黑。**底色有了 night、前景色没有**，正是「必须成对」最典型的受害者。
+  5. **同一个占位色写了三遍**：`0xFFEEEEEE` 分别出现在 `GlImagePagerRenderer`、`GlGridRenderer`（写成 `Color.rgb(238,238,238)`）、`ImageViewThumbLoader`。已收进色板并由宿主注入。
+  6. **把「透明工具条」当成了通用做法**：照片页/相册详情页的标题栏确实是透明的（覆盖层版式），但**查看器、地图页的标题栏、以及查看器的底部菜单栏原本都是不透明的**，被我一并设成了透明 —— 会透出下面的 GL 画面。已拆出 `Widget.Gallery.Toolbar.Surface`，并写明判据：**这页的内容会不会画到标题栏下面？会 → 透明；不会 → 不透明**。见 §3.3 的工具条背景对照表。
+- **验证（真机 Redmi / Android 16 / 1280×2772）**：
+  - `scripts/check-color-pairs.py`：**29 个颜色全部成对、无悬空引用**
+  - 浅色：照片页 / 相册页顶部 `y=2/120/300` 全为 `255`；隐私首启页背景 `255`
+  - 深色（`cmd uimode night yes`）：照片页 / 相册页顶部 `y=2/120/300` 全为 `(28,27,31)`；相册页**标题、分组标题、相册名/数量、胶囊导航**全部可读（截图确认，无白块）
+  - 全量门禁 BUILD SUCCESSFUL、单测 16/16、lint **0 error / 5 warning**（由 7 降为 5，样式化顺带消掉 2 条）
+- **未覆盖**：**地图页**受百度 `TextureMapView` 制约 —— 底图由 SDK 绘制、不跟随 `uiMode`，写死的 toolbar/底卡无法单独改深色（会出现「深色标题栏压浅色地图」），需与底图一起处理；查看器沉浸态的深色底与主题正交，只确认了非沉浸态。
 

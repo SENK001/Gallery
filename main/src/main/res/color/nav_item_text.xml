@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  底部导航**文字**色。与 nav_item_tint.xml 同源同状态，
+  布局通过 @style/Widget.Gallery.NavLabel 引用，不在控件上直接写 textColor。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@color/nav_item_selected" android:state_selected="true" />
-    <item android:color="@color/nav_text_unselected" />
+    <item android:color="@color/gallery_nav_selected" android:state_selected="true" />
+    <item android:color="@color/gallery_nav_text_unselected" />
 </selector>

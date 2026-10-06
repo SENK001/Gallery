@@ -4,7 +4,7 @@
     android:id="@+id/viewer_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    style="@style/Widget.Gallery.RootSurface">
 
     <com.senk.gallery.ui.gl.GlImageViewer
         android:id="@+id/image_viewer"
@@ -16,23 +16,21 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="@android:color/white"
         android:minHeight="?attr/actionBarSize"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/gallery_text_primary"
         app:subtitleTextColor="@color/gallery_text_secondary"
-        app:titleTextColor="@color/gallery_text_primary" />
+        style="@style/Widget.Gallery.Toolbar.Surface" />
 
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="@android:color/white"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingTop="6dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="10dp"
+        style="@style/Widget.Gallery.ViewerBar">
 
         <ImageButton
             android:id="@+id/action_share"
@@ -42,7 +40,7 @@
             android:layout_weight="1"
             android:contentDescription="@string/gallery_share"
             android:src="@drawable/ic_share"
-            app:tint="@color/gallery_text_primary" />
+            app:tint="@color/gallery_icon_on_surface" />
 
         <ImageButton
             android:id="@+id/action_favorite"
@@ -52,7 +50,7 @@
             android:layout_weight="1"
             android:contentDescription="@string/gallery_favorite"
             android:src="@drawable/ic_favorite_border"
-            app:tint="@color/gallery_text_primary" />
+            app:tint="@color/gallery_icon_on_surface" />
 
         <ImageButton
             android:id="@+id/action_info"
@@ -62,7 +60,7 @@
             android:layout_weight="1"
             android:contentDescription="@string/gallery_info"
             android:src="@drawable/ic_info"
-            app:tint="@color/gallery_text_primary" />
+            app:tint="@color/gallery_icon_on_surface" />
 
     </LinearLayout>
 
@@ -108,7 +106,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:lineSpacingExtra="4dp"
-                    android:textColor="@color/gallery_text_primary"
+                    style="@style/TextAppearance.Gallery.Body"
                     android:textSize="14sp" />
 
                 <FrameLayout
@@ -136,7 +134,7 @@
                             android:layout_height="wrap_content"
                             android:lineSpacingExtra="2dp"
                             android:padding="12dp"
-                            android:textColor="@color/gallery_text_primary"
+                            style="@style/TextAppearance.Gallery.Body"
                             android:textSize="14sp" />
                     </LinearLayout>
 
@@ -154,7 +152,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:lineSpacingExtra="4dp"
-                    android:textColor="@color/gallery_text_primary"
+                    style="@style/TextAppearance.Gallery.Body"
                     android:textSize="14sp" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

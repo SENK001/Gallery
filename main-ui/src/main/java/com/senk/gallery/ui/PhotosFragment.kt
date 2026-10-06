@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
@@ -13,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.gl.GlThumbnailGridView
+import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.util.DisplayUtils
 import kotlinx.coroutines.launch
 
@@ -40,7 +40,7 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             setColumns(COLUMNS)
             // 标题栏是透明的，透出的其实是宫格 surface 的底色——必须跟随主题，
             // 否则深色模式下标题栏区域会保持白色
-            setSurfaceBackgroundColor(ContextCompat.getColor(requireContext(), R.color.gallery_chrome_surface))
+            setSurfaceBackgroundColor(ThemeUtils.surfaceContent(requireContext()))
             onItemClick = { item -> openViewer(item) }
             onLoadMore = { loadPage(reset = false) }
             onScrollChanged = { scrollY -> onGridScroll?.invoke(scrollY) }

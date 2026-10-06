@@ -31,6 +31,7 @@ import com.baidu.mapapi.map.MarkerOptions
 import com.baidu.mapapi.map.TextureMapView
 import com.google.android.material.appbar.MaterialToolbar
 import com.senk.gallery.data.entity.MediaItem
+import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.gl.GlImageViewer
 import com.senk.gallery.util.DateFormats
@@ -78,7 +79,7 @@ class ViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.decorView.setBackgroundColor(Color.WHITE)
+        window.decorView.setBackgroundColor(ThemeUtils.surfaceContent(this))
         setContentView(R.layout.activity_viewer)
         SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)
         rootView = findViewById(R.id.viewer_root)
@@ -503,14 +504,14 @@ class ViewerActivity : AppCompatActivity() {
             controller.hide(WindowInsetsCompat.Type.systemBars())
             toolbar.isVisible = false
             bottomBar.isVisible = false
-            window.decorView.setBackgroundColor(Color.BLACK)
-            rootView.setBackgroundColor(Color.BLACK)
+            window.decorView.setBackgroundColor(ThemeUtils.mediaScrim(this))
+            rootView.setBackgroundColor(ThemeUtils.mediaScrim(this))
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
             toolbar.isVisible = true
             bottomBar.isVisible = true
             updatePageUi()
-            window.decorView.setBackgroundColor(Color.WHITE)
+            window.decorView.setBackgroundColor(ThemeUtils.surfaceContent(this))
             rootView.setBackgroundColor(Color.WHITE)
         }
     }

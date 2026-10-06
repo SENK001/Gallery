@@ -1,18 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  主题色板（浅色模式）。**所有颜色必须在这里与 values-night/colors.xml 成对定义**，
+  这样系统切到深色模式时无需任何代码分支即可适配。
+
+  命名约定：`gallery_<类别>_<用途>`，同类前缀一致便于检索
+    text_*     文字
+    surface_*  容器/内容底色
+    icon_*     图标
+    brand_*    品牌色
+    media_*    媒体层（有意不跟随主题）
+    perm_*     权限/隐私页
+
+  XML 中**不要在控件上直接写颜色或 @color 引用**，统一在 styles.xml 定义 style 再挂到控件上。
+  代码中取色一律走 `com.senk.gallery.ui.theme.ThemeUtils`。
+  两份 colors.xml 的名字集合由 `scripts/check-color-pairs.py` 校验。
+-->
 <resources>
+    <!-- ========== 文字 ========== -->
+    <!-- 主要文字：标题、列表主文案 -->
     <color name="gallery_text_primary">#DE000000</color>
+    <!-- 次要文字：说明、副标题 -->
     <color name="gallery_text_secondary">#8A000000</color>
-    <color name="gallery_white">#FFFFFFFF</color>
-    <color name="gallery_black">#FF000000</color>
+    <!-- 画在深色遮罩/媒体层上的文字与图标（视频控件、上划后的标题栏） -->
+    <color name="gallery_text_on_scrim">#FFFFFFFF</color>
 
-    <!-- 首页标题栏静止时的底色（不透明白底 + 深色文字）。 -->
-    <color name="gallery_toolbar_surface">#FFFFFFFF</color>
-
+    <!-- ========== 容器底色 ========== -->
     <!--
-      标题栏 / 状态栏底条「透出」的底色 —— 即父容器的背景。
-      标题栏自身设为透明，靠这层底色显示；用主题色而不是写死白色，
-      因此系统切到深色模式时由 values-night 覆盖，标题栏区域自动变深，
-      不需要为深色模式单独加分支。
+      chrome 底色：标题栏、状态栏底条、各页根布局。
+      标题栏自身是透明的，透出的就是这层，因此深色模式必须一起变深。
     -->
-    <color name="gallery_chrome_surface">#FFFFFFFF</color>
+    <color name="gallery_surface_chrome">#FFFFFFFF</color>
+    <!-- 内容底色：宫格 GL surface 的清屏色、全屏页面背景 -->
+    <color name="gallery_surface_content">#FFFFFFFF</color>
+    <!-- 查看器底部详情面板 / 地图卡片底色 -->
+    <color name="gallery_surface_sheet">#FFF2F3F5</color>
+    <!-- 缩略图未解码出来时的占位底色 -->
+    <color name="gallery_surface_placeholder">#FFEEEEEE</color>
+    <!-- 底部胶囊导航卡片底色（半透明白，让下方缩略图隐约透出） -->
+    <color name="gallery_surface_nav_card">#F0FFFFFF</color>
+
+    <!-- ========== 图标 ========== -->
+    <!-- 工具条/按钮上的图标（返回、收藏、分享、信息等） -->
+    <color name="gallery_icon_on_surface">#DE000000</color>
+    <!-- 画在深色遮罩/媒体层上的图标 -->
+    <color name="gallery_icon_on_scrim">#FFFFFFFF</color>
+    <!-- 未选中态图标（底部导航） -->
+
+    <!-- ========== 分隔/装饰 ========== -->
+    <!-- 查看器底部详情面板的把手 -->
+    <color name="gallery_divider_on_surface">#33000000</color>
+    <!-- 底部导航选中态底 -->
+    <color name="gallery_nav_item_selected_bg">#1A000000</color>
+
+    <!-- ========== 品牌色 ========== -->
+    <!-- 选中态主色（底部导航选中、主按钮） -->
+    <color name="gallery_brand_primary">#FF3482FF</color>
+    <!-- 画在主色按钮上的文字/图标 -->
+    <color name="gallery_brand_on_primary">#FFFFFFFF</color>
+    <!-- 中性按钮底色 -->
+    <color name="gallery_brand_neutral">#FFF2F2F2</color>
+
+    <!-- ========== 媒体层（有意不跟随主题） ========== -->
+    <!--
+      视频播放器控件与全屏图片查看器的深色底。
+      这两处是「媒体观看」场景，按惯例恒定深色，切换系统深浅色时不改变观感，
+      但仍在此成对定义，避免散落成字面量。
+    -->
+    <color name="gallery_media_scrim">#99000000</color>
+    <color name="gallery_media_control_bg">#66000000</color>
+    <color name="gallery_media_on_scrim">#FFFFFFFF</color>
+    <!-- 进度条轨道（半透明白），恒不走主题 -->
+    <color name="gallery_media_progress_track">#66FFFFFF</color>
+    <!--
+      查看器占位底：亮底/深底两态各一个，**有意不跟随主题** ——
+      它们表达的是「当前用哪种观看底色」（由 lightBackground 驱动），
+      与系统深浅色是正交的两个维度。
+    -->
+    <color name="gallery_media_placeholder_light">#FFEEEEEE</color>
+    <color name="gallery_media_placeholder_dark">#FF222222</color>
+
+    <!-- ========== 隐私/权限页 ========== -->
+    <!-- 权限图标圆底 -->
+    <color name="gallery_perm_icon_bg">#FFF0F0F0</color>
+    <!-- 同意按钮上方遮罩（渐隐提示可继续滚动） -->
+    <color name="gallery_perm_fade">#1F000000</color>
 </resources>

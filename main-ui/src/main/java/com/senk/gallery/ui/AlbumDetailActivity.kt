@@ -23,6 +23,7 @@ import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.data.provider.GalleryCursorReader
 import com.senk.gallery.ui.gl.GlThumbnailGridView
+import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.util.SystemBarUtils
 import kotlinx.coroutines.launch
 
@@ -56,7 +57,7 @@ class AlbumDetailActivity : AppCompatActivity() {
         grid.setColumns(COLUMNS)
         // 标题栏是透明的，透出的其实是宫格 surface 的底色——必须跟随主题，
         // 否则深色模式下标题栏区域会保持白色
-        grid.setSurfaceBackgroundColor(ContextCompat.getColor(this, R.color.gallery_chrome_surface))
+        grid.setSurfaceBackgroundColor(ThemeUtils.surfaceContent(this))
         grid.onItemClick = { item -> openViewer(item) }
         grid.onLoadMore = { loadPage(reset = false) }
         grid.onScrollChanged = { scrollY -> onGridScrolled(scrollY) }
@@ -148,30 +149,32 @@ class AlbumDetailActivity : AppCompatActivity() {
     }
 
     /**
-     * 标题栏背景**始终透明**，静止时靠父容器（`@id/album_detail_root`）的主题底色显示
-     * （`gallery_chrome_surface`，深色模式由 values-night 自动覆盖），
-     * 上划时由 `album_toolbar_scrim` 渐变遮罩接管。这里只切换文字/图标颜色与遮罩显隐。
+     * 标题栏背景**始终透明**，静止时靠父容器（`@id/album_detail_root`）的 chrome 底色显示
+     * （`gallery_surface_chrome`，深色模式由 values-night 自动覆盖），
+     * 上划时由 `album_toolbar_scrim` 渐变遮罩接管。
+     *
+     * 这里只切换**文字/图标颜色**与遮罩显隐，颜色一律经 [ThemeUtils] 取，
+     * 因此深色模式下「静止」分支会取到近白色文字，不会出现近黑字压近黑底。
      */
     private fun applyChrome(overGrid: Boolean) {
         if (overGrid) {
-            // 遮罩是深色，标题与返回键转白、状态栏图标转浅色
-            toolbar.setTitleTextColor(android.graphics.Color.WHITE)
-            toolbar.navigationIcon?.setTint(android.graphics.Color.WHITE)
+            // 遮罩是深色：标题与返回键转白、状态栏图标转浅色
+            toolbar.setTitleTextColor(ThemeUtils.textOnScrim(this))
+            toolbar.navigationIcon?.setTint(ThemeUtils.iconOnScrim(this))
             scrim.isVisible = true
             statusBarBg.isVisible = false
-            SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = false)
         } else {
-            // 静止：深色标题/返回键，透出父容器的主题底色
-            toolbar.setTitleTextColor(
-                ContextCompat.getColor(this, R.color.gallery_text_primary),
-            )
-            toolbar.navigationIcon?.setTint(
-                ContextCompat.getColor(this, R.color.gallery_text_primary),
-            )
+            // 静止：跟随主题的前景色（浅色下为深色、深色下为浅色），透出 chrome 底色
+            toolbar.setTitleTextColor(ThemeUtils.textPrimary(this))
+            toolbar.navigationIcon?.setTint(ThemeUtils.iconOnSurface(this))
             scrim.isVisible = false
             statusBarBg.isVisible = true
-            SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)
         }
+        // 系统栏图标明暗与底色一致：静止为 chrome 底色，上划为深色遮罩
+        ThemeUtils.applySystemBarAppearance(
+            this,
+            if (overGrid) ThemeUtils.mediaScrim(this) else ThemeUtils.surfaceChrome(this),
+        )
     }
 
     private fun registerObserver() {

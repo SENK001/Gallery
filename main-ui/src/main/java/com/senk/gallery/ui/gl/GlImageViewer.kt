@@ -18,6 +18,7 @@ import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import com.senk.gallery.data.entity.MediaItem
+import com.senk.gallery.ui.theme.ThemeUtils
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -28,7 +29,15 @@ class GlImageViewer @JvmOverloads constructor(
 ) : GLSurfaceView(context, attrs) {
 
     private val videoManager = VideoPlayManager(context)
-    private val renderer = GlImagePagerRenderer(videoManager)
+    private val renderer = GlImagePagerRenderer(videoManager).apply {
+        // 颜色一律来自主题色板，不在这里写死字面量
+        setMediaColors(
+            clearLight = ThemeUtils.surfaceContent(context),
+            clearDark = ThemeUtils.mediaScrim(context),
+            placeholderLight = ThemeUtils.mediaPlaceholderLight(context),
+            placeholderDark = ThemeUtils.mediaPlaceholderDark(context),
+        )
+    }
     private val executor = Executors.newFixedThreadPool(3)
     private val inFlight = ConcurrentHashMap<Long, Boolean>()
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop

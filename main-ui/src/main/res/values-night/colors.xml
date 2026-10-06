@@ -1,9 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  深色模式下的覆盖色。
-  标题栏与状态栏底条自身是透明的，靠父容器背景（gallery_chrome_surface）显示，
-  因此这里把它改为深色，标题栏区域会自动跟随系统深色模式，无需代码分支。
+  主题色板（深色模式）。**必须与 values/colors.xml 中的名字一一对应**，
+  缺少任何一个都会在深色模式下回退到浅色值（表现为「白块」或「看不见的字」）。
+  `scripts/check-color-pairs.py` 会校验两份文件的名字集合是否一致。
 -->
 <resources>
-    <color name="gallery_chrome_surface">#FF1C1B1F</color>
+    <!-- ========== 文字 ========== -->
+    <!-- 深色下用高不透明度白，保证与深底对比 -->
+    <color name="gallery_text_primary">#E6FFFFFF</color>
+    <color name="gallery_text_secondary">#99FFFFFF</color>
+    <!-- 深色遮罩上的文字本来就是白色，不变 -->
+    <color name="gallery_text_on_scrim">#FFFFFFFF</color>
+
+    <!-- ========== 容器底色 ========== -->
+    <color name="gallery_surface_chrome">#FF1C1B1F</color>
+    <color name="gallery_surface_content">#FF1C1B1F</color>
+    <color name="gallery_surface_sheet">#FF2A2A2E</color>
+    <color name="gallery_surface_placeholder">#FF2A2A2E</color>
+    <!-- 深色下胶囊导航卡片改为半透明深色 -->
+    <color name="gallery_surface_nav_card">#F02A2A2E</color>
+
+    <!-- ========== 图标 ========== -->
+    <color name="gallery_icon_on_surface">#E6FFFFFF</color>
+    <color name="gallery_icon_on_scrim">#FFFFFFFF</color>
+
+    <!-- ========== 分隔/装饰 ========== -->
+    <color name="gallery_divider_on_surface">#66FFFFFF</color>
+    <color name="gallery_nav_item_selected_bg">#33FFFFFF</color>
+
+    <!-- ========== 品牌色 ========== -->
+    <!-- 品牌主色在深色下略提亮，保证对比度 -->
+    <color name="gallery_brand_primary">#FF6EA8FF</color>
+    <color name="gallery_brand_on_primary">#FF10233F</color>
+    <color name="gallery_brand_neutral">#FF2A2A2E</color>
+
+    <!-- ========== 媒体层（不跟随主题，与浅色保持一致） ========== -->
+    <color name="gallery_media_scrim">#99000000</color>
+    <color name="gallery_media_control_bg">#66000000</color>
+    <color name="gallery_media_on_scrim">#FFFFFFFF</color>
+    <!-- 进度条轨道（半透明白），恒不走主题 -->
+    <color name="gallery_media_progress_track">#66FFFFFF</color>
+    <!--
+      查看器占位底：亮底/深底两态各一个，**有意不跟随主题** ——
+      它们表达的是「当前用哪种观看底色」（由 lightBackground 驱动），
+      与系统深浅色是正交的两个维度。
+    -->
+    <color name="gallery_media_placeholder_light">#FFEEEEEE</color>
+    <color name="gallery_media_placeholder_dark">#FF222222</color>
+
+    <!-- ========== 隐私/权限页 ========== -->
+    <color name="gallery_perm_icon_bg">#FF2A2A2E</color>
+    <color name="gallery_perm_fade">#1FFFFFFF</color>
 </resources>

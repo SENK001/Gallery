@@ -31,7 +31,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="middle"
             android:singleLine="true"
-            android:textColor="@color/gallery_text_primary"
+            style="@style/Widget.Gallery.AlbumName"
             android:textSize="15sp" />
 
         <TextView
@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:singleLine="true"
-            android:textColor="@color/gallery_text_secondary"
+            style="@style/Widget.Gallery.AlbumCount"
             android:textSize="12sp" />
 
     </LinearLayout>

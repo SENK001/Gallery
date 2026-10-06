@@ -4,7 +4,7 @@
     android:id="@+id/photo_map_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    style="@style/Widget.Gallery.RootSurface">
 
     <com.baidu.mapapi.map.TextureMapView
         android:id="@+id/photo_map"
@@ -16,32 +16,34 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="@android:color/white"
         android:minHeight="?attr/actionBarSize"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/gallery_text_primary"
-        app:titleTextColor="@color/gallery_text_primary" />
+        style="@style/Widget.Gallery.Toolbar.Surface" />
 
     <LinearLayout
         android:id="@+id/map_bottom_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="@android:color/white"
         android:orientation="vertical"
         android:paddingStart="20dp"
         android:paddingTop="16dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="16dp"
+        style="@style/Widget.Gallery.RootSurface">
 
         <TextView
             android:id="@+id/map_address"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:lineSpacingExtra="4dp"
-            android:textColor="@color/gallery_text_primary"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            style="@style/TextAppearance.Gallery.Body" />
 
+        <!--
+          导航按钮：图标颜色由 MediaIcon 不行 —— 它压在按钮底色上，
+          应跟随按钮的前景色（onPrimary），否则深色模式会出现白图标压浅色按钮。
+        -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/map_nav_button"
             android:layout_width="match_parent"
@@ -50,7 +52,8 @@
             android:text="@string/gallery_nav_start"
             android:visibility="gone"
             app:icon="@drawable/ic_nav"
-            app:iconGravity="textStart" />
+            app:iconGravity="textStart"
+            app:iconTint="@color/gallery_brand_on_primary" />
     </LinearLayout>
 
 </FrameLayout>

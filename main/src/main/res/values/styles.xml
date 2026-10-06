@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  样式集中定义（main 模块）。
+
+  **约定：布局里不在控件上直接写颜色**，统一引用这里的 style。
+  颜色只在 colors.xml（含 values-night）定义一次。
+
+  main-ui 的 Widget.Gallery.* / TextAppearance.Gallery.* 通过资源合并可直接引用。
+-->
+<resources>
+
+    <!-- ==================== 文本 ==================== -->
+
+    <style name="TextAppearance.Gallery.PermissionTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.Gallery.PermissionMessage" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+    </style>
+
+    <!-- ==================== 容器 ==================== -->
+
+    <!-- 未授权提示层：铺满内容区 -->
+    <style name="Widget.Gallery.PermissionOverlay">
+        <item name="android:background">@color/gallery_permission_surface</item>
+    </style>
+
+    <!-- ==================== 底部胶囊导航 ==================== -->
+
+    <!-- 胶囊卡片：半透明主题底色，让下方缩略图隐约透出（不能用不透明色替换） -->
+    <style name="Widget.Gallery.NavCard">
+        <item name="cardBackgroundColor">@color/gallery_surface_nav_card</item>
+        <item name="cardCornerRadius">34dp</item>
+        <item name="cardElevation">10dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <!--
+      导航项内的图标/文字：颜色随选中态变化，这里引用的是 res/color/ 下的
+      **ColorStateList**（selector），不是普通颜色 —— 两个状态色本身都在色板里，
+      因此深色模式同样会自动适配。
+    -->
+    <style name="Widget.Gallery.NavIcon">
+        <item name="android:tint">@color/nav_item_tint</item>
+    </style>
+
+    <style name="Widget.Gallery.NavLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textColor">@color/nav_item_text</item>
+    </style>
+
+    <!-- ==================== 隐私政策页 ==================== -->
+
+    <style name="TextAppearance.Gallery.PrivacyTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.Gallery.PrivacyBody" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+    </style>
+
+    <!-- 隐私页根布局：跟随主题的内容底色（原为写死 @android:color/white） -->
+    <style name="Widget.Gallery.PrivacyRoot">
+        <item name="android:background">@color/gallery_surface_content</item>
+    </style>
+
+</resources>

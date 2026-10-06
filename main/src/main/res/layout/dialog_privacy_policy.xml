@@ -15,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/privacy_policy_title"
-        android:textColor="@color/privacy_text_primary"
+        style="@style/TextAppearance.Gallery.PrivacyTitle"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:lineSpacingExtra="6dp"
             android:text="@string/privacy_policy_body"
-            android:textColor="@color/privacy_text_secondary"
+            style="@style/TextAppearance.Gallery.PrivacyBody"
             android:textIsSelectable="true"
             android:textSize="15sp" />
     </ScrollView>
@@ -47,6 +47,6 @@
         android:layout_gravity="end"
         android:layout_marginTop="6dp"
         android:text="@string/privacy_close"
-        android:textColor="@color/privacy_button_primary"
+        android:textColor="@color/gallery_brand_primary"
         android:textSize="16sp" />
 </LinearLayout>

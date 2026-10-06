@@ -1,7 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  深色模式主题。
+  **父主题必须是 Dark / DayNight 变体**：若这里仍继承 Theme.Material3.Light（改前的状态），
+  深色模式下 Material 组件（MaterialButton / MaterialCardView / MaterialAlertDialog /
+  MaterialToolbar）会继续按 Light 解析 ?attr/colorSurface、?attr/colorPrimary 等，
+  与我们自己的 values-night 颜色打架 —— 对话框、水波纹会突兀地保持浅色。
+
+  这里显式写 Dark 父类（而不是靠 values/themes.xml 的父类自动切换），
+  是为了防止将来有人改动浅色父类时意外影响深色分支。
+-->
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Gallery" parent="Theme.Material3.Light.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <style name="Base.Theme.Gallery" parent="Theme.Material3.Dark.NoActionBar">
     </style>
 </resources>

@@ -15,19 +15,17 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="#99000000"
         android:minHeight="?attr/actionBarSize"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@android:color/white"
-        app:titleTextColor="@android:color/white" />
+        style="@style/Widget.Gallery.Toolbar.Media" />
 
     <LinearLayout
         android:id="@+id/controls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="#99000000"
         android:orientation="vertical"
+        style="@style/Widget.Gallery.MediaControlsBar"
         android:paddingTop="4dp"
         android:paddingBottom="4dp">
 
@@ -37,9 +35,7 @@
             android:layout_height="wrap_content"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
-            android:progressBackgroundTint="#66FFFFFF"
-            android:progressTint="@android:color/white"
-            android:thumbTint="@android:color/white" />
+            style="@style/Widget.Gallery.MediaSeekBar" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -56,7 +52,7 @@
                 android:layout_height="44dp"
                 android:contentDescription="@string/gallery_play"
                 android:src="@drawable/ic_pause"
-                app:tint="@android:color/white" />
+                app:tint="@color/gallery_media_on_scrim" />
 
             <TextView
                 android:id="@+id/time_current"
@@ -64,8 +60,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="@string/gallery_time_initial"
-                android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                style="@style/TextAppearance.Gallery.OnScrim" />
 
             <Space
                 android:layout_width="0dp"
@@ -79,7 +75,7 @@
                 android:layout_height="44dp"
                 android:contentDescription="@string/gallery_rotate_screen"
                 android:src="@drawable/ic_fullscreen"
-                app:tint="@android:color/white" />
+                app:tint="@color/gallery_media_on_scrim" />
 
         </LinearLayout>
 

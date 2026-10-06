@@ -18,6 +18,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.senk.gallery.ui.AlbumsFragment
 import com.senk.gallery.ui.BaiduMapSdk
 import com.senk.gallery.ui.PhotosFragment
+import com.senk.gallery.ui.theme.ThemeUtils
 // 标题栏配色定义在 main-ui 模块，必须用库自己的 R 类引用（main 的 R 只含本模块资源）
 import com.senk.gallery.ui.R as UiR
 import com.senk.gallery.util.SystemBarUtils
@@ -168,25 +169,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 标题栏背景**始终透明**，静止时靠父容器（`@id/main`）的主题底色显示
-     * （`gallery_chrome_surface`，深色模式由 values-night 自动覆盖），
-     * 上划时由 `toolbar_scrim` 渐变遮罩接管。这里只切换文字颜色与遮罩显隐。
+     * 标题栏背景**始终透明**，静止时靠父容器（`@id/main`）的 chrome 底色显示
+     * （`gallery_surface_chrome`，深色模式由 values-night 自动覆盖），
+     * 上划时由 `toolbar_scrim` 渐变遮罩接管。
+     *
+     * 这里只切换文字颜色与遮罩显隐，颜色一律经 [ThemeUtils] 取，
+     * 因此深色模式「静止」分支会取到近白色标题，不会近黑字压近黑底。
      */
     private fun applyToolbarAppearance(overGrid: Boolean) {
         val bar = toolbar as? com.google.android.material.appbar.MaterialToolbar
         if (overGrid) {
-            // 遮罩是深色，标题转白、状态栏图标转浅色
-            bar?.setTitleTextColor(android.graphics.Color.WHITE)
+            // 遮罩是深色：标题转白、状态栏图标转浅色
+            bar?.setTitleTextColor(ThemeUtils.textOnScrim(this))
             scrim.isVisible = true
             statusBarBg.visibility = View.INVISIBLE
-            SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = false)
         } else {
-            // 静止：标题深色，透出父容器的主题底色
-            bar?.setTitleTextColor(ContextCompat.getColor(this, UiR.color.gallery_text_primary))
+            // 静止：跟随主题的前景色，透出 chrome 底色
+            bar?.setTitleTextColor(ThemeUtils.textPrimary(this))
             scrim.isVisible = false
             statusBarBg.visibility = View.VISIBLE
-            SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)
         }
+        // 系统栏图标明暗与底色一致：静止为 chrome 底色，上划为深色遮罩
+        ThemeUtils.applySystemBarAppearance(
+            this,
+            if (overGrid) ThemeUtils.mediaScrim(this) else ThemeUtils.surfaceChrome(this),
+        )
     }
 
     /**

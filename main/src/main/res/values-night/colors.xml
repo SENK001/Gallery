@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  主题色板（深色模式）—— main 模块。
+  **必须与 values/colors.xml 中的名字一一对应**（见 scripts/check-color-pairs.py）。
+
+  改前 main 模块 9 个颜色**全部没有** night 版本，深色下会整体回退成浅色值 ——
+  这是「深色模式只改了一半」的直接来源。
+-->
+<resources>
+    <!-- ========== 底部胶囊导航 ========== -->
+    <!-- 深色下用提亮后的品牌主色，保证在半透明深底上可读 -->
+    <color name="gallery_nav_selected">@color/gallery_brand_primary</color>
+    <color name="gallery_nav_icon_unselected">#99FFFFFF</color>
+    <color name="gallery_nav_text_unselected">#99FFFFFF</color>
+
+    <!-- ========== 权限提示层 ========== -->
+    <color name="gallery_permission_surface">@color/gallery_surface_content</color>
+</resources>

@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gallery_chrome_surface">
+    style="@style/Widget.Gallery.ChromeSurface">
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/album_list"
@@ -21,7 +21,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:text="@string/gallery_empty"
-        android:textColor="@color/gallery_text_secondary"
+        style="@style/TextAppearance.Gallery.Caption"
         android:textSize="14sp"
         android:visibility="gone" />
 

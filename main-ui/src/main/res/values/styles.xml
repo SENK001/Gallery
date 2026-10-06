@@ -1,7 +1,161 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  样式集中定义（main-ui 模块）。
+
+  **约定：布局里不在控件上直接写 android:textColor / android:background / *Tint 的颜色值**，
+  而是引用这里定义的 style。好处：
+    1. 颜色只在 colors.xml（含 values-night）里定义一次，切换深浅色无需改布局
+    2. 同一类控件（如所有正文、所有返回键）观感一致，改一处全生效
+    3. 布局文件只描述结构，不掺杂主题细节
+
+  命名：`Widget.Gallery.<控件/用途>`；纯文本语义用 `TextAppearance.Gallery.<层级>`。
+-->
 <resources>
+
+    <!--
+      中间命名空间样式。
+      Android 的点号命名隐含继承：`Widget.Gallery.Toolbar` 会被当作 `Widget.Gallery`
+      的子样式，而框架里**没有** `Widget` / `TextAppearance` / `ShapeAppearance` 这几个
+      基础样式，于是 AAPT 报 `resource style/Widget not found`。
+      下面这些样式自身用 `parent=""`（无父）显式声明，把命名空间"补齐"，
+      之后所有 `Widget.Gallery.*` 等再各自显式写 `parent=`。
+    -->
+    <style name="Widget.Gallery" parent="" />
+    <style name="TextAppearance.Gallery" parent="" />
+    <style name="ShapeAppearance.Gallery" parent="" />
+
+    <!-- ==================== 形状 ==================== -->
+
     <style name="ShapeAppearance.Gallery.Cover" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">8dp</item>
     </style>
+
+    <!-- ==================== 文本 ==================== -->
+
+    <style name="TextAppearance.Gallery.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.Gallery.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.Gallery.Caption" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+    </style>
+
+    <!-- ==================== 相册列表项（带各自的字号） ==================== -->
+
+    <!-- 相册名（网格/列表共用，字号由布局覆盖） -->
+    <style name="Widget.Gallery.AlbumName">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+    </style>
+
+    <!-- 相册内数量（网格/列表共用，字号由布局覆盖） -->
+    <style name="Widget.Gallery.AlbumCount">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+    </style>
+
+    <!-- 分组标题 -->
+    <style name="Widget.Gallery.AlbumSectionHeader">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- 画在深色遮罩/媒体层上的文本（视频控件、上划后的标题栏） -->
+    <style name="TextAppearance.Gallery.OnScrim" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/gallery_text_on_scrim</item>
+    </style>
+
+    <!-- ==================== 工具条 ==================== -->
+
+    <!--
+      工具条样式有**两类**，别混用：
+
+      · [Widget.Gallery.Toolbar]：**透明**背景，透出下层 chrome 底色。
+        只给「标题栏作为覆盖层叠在铺满内容之上」的页面用 ——
+        目前是首页「照片」页与相册详情页（上划时还要换渐变遮罩）。
+      · [Widget.Gallery.Toolbar.Surface]：**不透明**内容底色。
+        其余页面用它：查看器、地图页等。这些页面的内容不铺到标题栏下面，
+        标题栏必须自己有不透明底色，否则会透出内容或被 GL surface 清屏色顶穿。
+    -->
+    <style name="Widget.Gallery.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="titleTextColor">@color/gallery_text_primary</item>
+        <item name="navigationIconTint">@color/gallery_icon_on_surface</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="Widget.Gallery.Toolbar.Surface" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/gallery_surface_content</item>
+        <item name="titleTextColor">@color/gallery_text_primary</item>
+        <item name="navigationIconTint">@color/gallery_icon_on_surface</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <!-- 视频播放器工具条：压在任意视频画面上，恒定半透明深底 + 白字/白图标 -->
+    <style name="Widget.Gallery.Toolbar.Media" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/gallery_media_scrim</item>
+        <item name="titleTextColor">@color/gallery_media_on_scrim</item>
+        <item name="navigationIconTint">@color/gallery_media_on_scrim</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <!-- ==================== 页面容器 ==================== -->
+
+    <!-- 全屏页面根布局：内容底色 -->
+    <style name="Widget.Gallery.RootSurface">
+        <item name="android:background">@color/gallery_surface_content</item>
+    </style>
+
+    <!-- chrome 容器：标题栏/状态栏底条透出的那层 -->
+    <style name="Widget.Gallery.ChromeSurface">
+        <item name="android:background">@color/gallery_surface_chrome</item>
+    </style>
+
+    <!-- ==================== 查看器 ==================== -->
+
+    <!--
+      查看器顶部/底部工具条：**不透明内容底色**。
+      本页是「浅色详情面板」版式（底部面板 bg_viewer_sheet 是浅色），
+      工具条必须自己有不透明底，否则会透出下面的 GL 画面。
+      **注意：透明背景只属于照片页与相册详情页，别往这里套。**
+    -->
+    <style name="Widget.Gallery.ViewerBar">
+        <item name="android:background">@color/gallery_surface_content</item>
+    </style>
+
+    <!-- 查看器底部栏的图标按钮：跟随主题前景色 -->
+    <style name="Widget.Gallery.ViewerIcon">
+        <item name="android:tint">@color/gallery_icon_on_surface</item>
+    </style>
+
+    <!-- ==================== 视频播放器 ==================== -->
+
+    <!--
+      播放控件圆形按钮底。控件压在**任意视频画面**上，必须恒定「半透明黑底 + 白图标」，
+      才能同时兼顾亮画面与暗画面；**有意不跟随主题**。
+    -->
+    <style name="Widget.Gallery.MediaControl">
+        <item name="android:background">@color/gallery_media_control_bg</item>
+    </style>
+
+    <!-- 播放器底部控件条底色（同上，恒定半透明深色） -->
+    <style name="Widget.Gallery.MediaControlsBar">
+        <item name="android:background">@color/gallery_media_scrim</item>
+    </style>
+
+    <!-- 播放器进度条：恒定白系，跟随媒体层而非主题 -->
+    <style name="Widget.Gallery.MediaSeekBar">
+        <item name="android:progressBackgroundTint">@color/gallery_media_progress_track</item>
+        <item name="android:progressTint">@color/gallery_media_on_scrim</item>
+        <item name="android:thumbTint">@color/gallery_media_on_scrim</item>
+    </style>
+
+    <!-- 媒体层上的图标按钮 -->
+    <style name="Widget.Gallery.MediaIcon">
+        <item name="android:tint">@color/gallery_media_on_scrim</item>
+    </style>
+
 </resources>

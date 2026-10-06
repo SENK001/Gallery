@@ -56,6 +56,13 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
     private var clearG = 1f
     private var clearB = 1f
 
+    /**
+     * 缩略图未解码出来时的占位底色。由宿主按主题注入 —— 原先这里写死
+     * `Color.rgb(238,238,238)`，与查看器、ImageViewThumbLoader 各写一遍，
+     * 同一个占位色散在 3 个文件里，是最容易漏改的地方。
+     */
+    private var placeholderColor = 0xFFEEEEEE.toInt()
+
     /** 上次已上报的滚动量，避免每帧都回调宿主（RENDERMODE_WHEN_DIRTY 下可能逐帧变化）。 */
     private var lastNotifiedScrollY = Float.NaN
     private val cellRect = RectF()
@@ -95,6 +102,11 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
             -1f,
             1f,
         )
+    }
+
+    /** 设置占位底色（由宿主按主题解析后传入）。 */
+    fun setPlaceholderColor(color: Int) {
+        placeholderColor = color
     }
 
     /** 设置清屏底色（由宿主按主题解析后传入），需 [GlThumbnailGridView.requestRender] 才会生效。 */
@@ -245,7 +257,7 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
 
     private fun createPlaceholderTexture(): Int {
         val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.rgb(238, 238, 238))
+        bitmap.eraseColor(placeholderColor)
         val textureId = GlUtils.uploadTexture(bitmap)
         bitmap.recycle()
         return textureId

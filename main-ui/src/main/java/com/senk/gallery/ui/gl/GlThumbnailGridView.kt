@@ -48,7 +48,8 @@ class GlThumbnailGridView @JvmOverloads constructor(
         setRenderer(renderer)
         renderMode = RENDERMODE_WHEN_DIRTY
         // 默认 z-order：GL 面位于窗口后方，窗口层控件（如底部悬浮胶囊导航）可覆盖其上；
-        // 白底由渲染器 glClearColor 绘制（给 GLSurfaceView 设 View 背景会盖住 surface）
+        // 底色由渲染器 glClearColor 绘制（给 GLSurfaceView 设 View 背景会盖住 surface），
+        // 默认白色，宿主可用 setSurfaceBackgroundColor 按主题改成深色
         // 与屏幕边缘无间距，仅缩略图之间保留间隔
         renderer.geometry.padding = 0f
         renderer.geometry.gap = DisplayUtils.dp2px(context, 1.5f)
@@ -70,6 +71,18 @@ class GlThumbnailGridView @JvmOverloads constructor(
     }
 
     /**
+     * 设置宫格的清屏底色（`glClearColor`）。
+     *
+     * 宫格铺满全屏后，标题栏「透出」的其实是**本 surface 的底色**（透明标题栏之下就是它），
+     * 因此深色模式下必须一起变深，否则标题栏区域会突兀地保持白色。
+     * 宿主应传入按主题解析后的颜色（如 `R.color.gallery_chrome_surface`）。
+     */
+    fun setSurfaceBackgroundColor(color: Int) {
+        renderer.setClearColor(color)
+        requestRender()
+    }
+
+    /**
      * 顶部预留：宫格铺满全屏（含状态栏区域）后，第一行会被标题栏永久遮住，
      * 因此内容整体下移这么多，让首行完整可见。见 [GridGeometry.topInset]。
      */
@@ -81,6 +94,16 @@ class GlThumbnailGridView @JvmOverloads constructor(
 
     fun setBottomInset(insetPx: Int) {
         renderer.geometry.bottomInset = insetPx.coerceAtLeast(0).toFloat()
+        clampScroll()
+        requestRender()
+    }
+
+    /**
+     * 滚动到底时，**最后一行底边与屏幕底边之间保留的空白高度**。
+     * 用于让最后一行完整停在系统导航栏 / 悬浮导航上方（见 [GridGeometry.bottomPadding]）。
+     */
+    fun setBottomPadding(paddingPx: Int) {
+        renderer.geometry.bottomPadding = paddingPx.coerceAtLeast(0).toFloat()
         clampScroll()
         requestRender()
     }

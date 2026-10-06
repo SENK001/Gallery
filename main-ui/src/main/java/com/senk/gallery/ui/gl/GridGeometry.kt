@@ -17,7 +17,23 @@ class GridGeometry {
      * 不会跑到状态栏里；而 [bottomInset] 参与滚动（只是把内容总高撑长）。
      */
     var topInset = 0f
+
+    /**
+     * 底部额外余量：把**内容总高**撑长（`contentHeight` 含它）。
+     *
+     * 若目的是「滚到底时最后一行与屏幕底边之间留出空白」，**用 [bottomPadding]，不要用这个**：
+     * `bottomInset` 只是把内容加长，而滚动范围还受 `maxScroll` 控制，余量不足一行时
+     * 最后一行仍会贴着屏幕底边（真机实测踩过）。
+     */
     var bottomInset = 0f
+
+    /**
+     * 滚动到底时，**最后一行底边与屏幕底边之间要保留的空白高度**（由 [maxScroll] 保证，
+     * 与行高、余量取整无关）。
+     *
+     * 用途：底部被系统导航栏 / 悬浮导航遮挡时，设成它们的高度，最后一行即可完整停在它们上方。
+     */
+    var bottomPadding = 0f
     var viewportWidth = 0
     var viewportHeight = 0
     var itemCount = 0
@@ -34,17 +50,36 @@ class GridGeometry {
     val rowCount: Int
         get() = if (itemCount <= 0) 0 else (itemCount + columns - 1) / columns
 
-    val contentHeight: Float
+    /**
+     * 所有行的实际占据高度（**不含 [topInset]**，因为它是对内容的整体平移、不参与滚动）。
+     * 即「从第一行顶边到最后一行底边」的距离。
+     */
+    val rowsHeight: Float
         get() {
             if (rowCount <= 0) {
                 return 0f
             }
-            return topInset + padding * 2 + rowCount * cellSize + (rowCount - 1) * gap + bottomInset
+            return padding * 2 + rowCount * cellSize + (rowCount - 1) * gap + bottomInset
         }
 
-    /** 可滚动范围要扣掉顶部预留：这段是固定偏移，不属于可滚动内容。 */
+    /** 完整内容高度（含 [topInset]），供滚动范围与「是否需要滚动」判断使用。 */
+    val contentHeight: Float
+        get() = if (rowCount <= 0) 0f else topInset + rowsHeight
+
+    /**
+     * 可滚动范围。
+     *
+     * 目标是「滚到底时最后一行底边 = 屏高 − [bottomPadding]」。
+     * 最后一行底边（内容坐标）= `topInset + rowsHeight`（见 [cellY]），
+     * 减去 maxScroll 后应等于目标位置：
+     *   topInset + rowsHeight - maxScroll = viewportHeight - bottomPadding
+     * 即 `maxScroll = rowsHeight + topInset - viewportHeight + bottomPadding`。
+     *
+     * ⚠️ `topInset` 必须显式加进来：`rowsHeight` 不含它（见该属性的说明），
+     * 而 [cellY] 含它。漏掉会让最后一行多溢出整整一个 `topInset`（真机实测踩过）。
+     */
     val maxScroll: Float
-        get() = (contentHeight - topInset - viewportHeight).coerceAtLeast(0f)
+        get() = (rowsHeight + topInset - viewportHeight + bottomPadding).coerceAtLeast(0f)
 
     fun cellX(column: Int): Float = padding + column * (cellSize + gap)
 

@@ -47,6 +47,15 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
     private var uMatrix = 0
     private var nearEndNotified = false
 
+    /**
+     * 清屏底色（R/G/B，0..1）。默认白色；宿主可按主题传入深色，
+     * 否则深色模式下标题栏区域（由本 surface 填充）会突兀地保持白色。
+     * 见 [GlThumbnailGridView.setSurfaceBackgroundColor]。
+     */
+    private var clearR = 1f
+    private var clearG = 1f
+    private var clearB = 1f
+
     /** 上次已上报的滚动量，避免每帧都回调宿主（RENDERMODE_WHEN_DIRTY 下可能逐帧变化）。 */
     private var lastNotifiedScrollY = Float.NaN
     private val cellRect = RectF()
@@ -88,8 +97,15 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
         )
     }
 
+    /** 设置清屏底色（由宿主按主题解析后传入），需 [GlThumbnailGridView.requestRender] 才会生效。 */
+    fun setClearColor(color: Int) {
+        clearR = ((color shr 16) and 0xFF) / 255f
+        clearG = ((color shr 8) and 0xFF) / 255f
+        clearB = (color and 0xFF) / 255f
+    }
+
     override fun onDrawFrame(gl: GL10?) {
-        GLES20.glClearColor(1f, 1f, 1f, 1f)
+        GLES20.glClearColor(clearR, clearG, clearB, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         textureStore.drainUploads()
         badgeCache.drainDeletes()

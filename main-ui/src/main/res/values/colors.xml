@@ -5,7 +5,14 @@
     <color name="gallery_white">#FFFFFFFF</color>
     <color name="gallery_black">#FF000000</color>
 
-    <!-- 首页标题栏：照片页静止时为不透明白底 + 深色文字；
-         上划换成黑色渐变遮罩（bg_toolbar_scrim，在 main 模块）时隐藏标题。 -->
+    <!-- 首页标题栏静止时的底色（不透明白底 + 深色文字）。 -->
     <color name="gallery_toolbar_surface">#FFFFFFFF</color>
+
+    <!--
+      标题栏 / 状态栏底条「透出」的底色 —— 即父容器的背景。
+      标题栏自身设为透明，靠这层底色显示；用主题色而不是写死白色，
+      因此系统切到深色模式时由 values-night 覆盖，标题栏区域自动变深，
+      不需要为深色模式单独加分支。
+    -->
+    <color name="gallery_chrome_surface">#FFFFFFFF</color>
 </resources>

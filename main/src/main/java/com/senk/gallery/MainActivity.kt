@@ -167,24 +167,24 @@ class MainActivity : AppCompatActivity() {
         applyToolbarAppearance(overGrid = onPhotosPage && gridScrolledPast)
     }
 
+    /**
+     * 标题栏背景**始终透明**，静止时靠父容器（`@id/main`）的主题底色显示
+     * （`gallery_chrome_surface`，深色模式由 values-night 自动覆盖），
+     * 上划时由 `toolbar_scrim` 渐变遮罩接管。这里只切换文字颜色与遮罩显隐。
+     */
     private fun applyToolbarAppearance(overGrid: Boolean) {
         val bar = toolbar as? com.google.android.material.appbar.MaterialToolbar
         if (overGrid) {
-            // 标题栏背景交给遮罩；标题保留但换成白色（遮罩是深色，深色字会看不见）
-            toolbar.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            // 遮罩是深色，标题转白、状态栏图标转浅色
             bar?.setTitleTextColor(android.graphics.Color.WHITE)
             scrim.isVisible = true
-            statusBarBg.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            statusBarBg.visibility = View.INVISIBLE
             SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = false)
         } else {
-            toolbar.setBackgroundColor(
-                ContextCompat.getColor(this, UiR.color.gallery_toolbar_surface),
-            )
+            // 静止：标题深色，透出父容器的主题底色
             bar?.setTitleTextColor(ContextCompat.getColor(this, UiR.color.gallery_text_primary))
             scrim.isVisible = false
-            statusBarBg.setBackgroundColor(
-                ContextCompat.getColor(this, UiR.color.gallery_toolbar_surface),
-            )
+            statusBarBg.visibility = View.VISIBLE
             SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)
         }
     }

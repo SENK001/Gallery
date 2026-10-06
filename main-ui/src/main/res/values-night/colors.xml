@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  深色模式下的覆盖色。
+  标题栏与状态栏底条自身是透明的，靠父容器背景（gallery_chrome_surface）显示，
+  因此这里把它改为深色，标题栏区域会自动跟随系统深色模式，无需代码分支。
+-->
+<resources>
+    <color name="gallery_chrome_surface">#FF1C1B1F</color>
+</resources>

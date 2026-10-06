@@ -54,6 +54,9 @@ class AlbumDetailActivity : AppCompatActivity() {
         toolbar.setNavigationOnClickListener { finish() }
         applyInsets()
         grid.setColumns(COLUMNS)
+        // 标题栏是透明的，透出的其实是宫格 surface 的底色——必须跟随主题，
+        // 否则深色模式下标题栏区域会保持白色
+        grid.setSurfaceBackgroundColor(ContextCompat.getColor(this, R.color.gallery_chrome_surface))
         grid.onItemClick = { item -> openViewer(item) }
         grid.onLoadMore = { loadPage(reset = false) }
         grid.onScrollChanged = { scrollY -> onGridScrolled(scrollY) }
@@ -106,6 +109,10 @@ class AlbumDetailActivity : AppCompatActivity() {
             }
             scrim.background = ToolbarScrimDrawable(scrimHeight)
             grid.setTopInset(scrimHeight)
+            // 底部预留 = **系统导航栏高度**：本页没有悬浮胶囊导航，只需让最后一行
+            // 完整停在系统导航栏上方。用 setBottomPadding 而不是 setBottomInset ——
+            // 后者只把内容撑长，余量不足一行时最后一行仍会贴到屏幕底边（真机实测踩过）。
+            grid.setBottomPadding(bars.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(findViewById(R.id.album_detail_root))
@@ -140,20 +147,21 @@ class AlbumDetailActivity : AppCompatActivity() {
         applyChrome(past)
     }
 
+    /**
+     * 标题栏背景**始终透明**，静止时靠父容器（`@id/album_detail_root`）的主题底色显示
+     * （`gallery_chrome_surface`，深色模式由 values-night 自动覆盖），
+     * 上划时由 `album_toolbar_scrim` 渐变遮罩接管。这里只切换文字/图标颜色与遮罩显隐。
+     */
     private fun applyChrome(overGrid: Boolean) {
         if (overGrid) {
-            // 遮罩接管背景，标题栏自身透明 + 白字白图标
-            toolbar.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            // 遮罩是深色，标题与返回键转白、状态栏图标转浅色
             toolbar.setTitleTextColor(android.graphics.Color.WHITE)
             toolbar.navigationIcon?.setTint(android.graphics.Color.WHITE)
             scrim.isVisible = true
             statusBarBg.isVisible = false
             SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = false)
         } else {
-            // 静止：不透明白底 + 深色标题/返回键
-            toolbar.setBackgroundColor(
-                ContextCompat.getColor(this, R.color.gallery_toolbar_surface),
-            )
+            // 静止：深色标题/返回键，透出父容器的主题底色
             toolbar.setTitleTextColor(
                 ContextCompat.getColor(this, R.color.gallery_text_primary),
             )

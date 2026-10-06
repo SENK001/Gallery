@@ -5,7 +5,7 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
+    android:background="@color/gallery_chrome_surface"
     tools:context=".MainActivity">
 
     <!--
@@ -64,29 +64,30 @@
     </FrameLayout>
 
     <!--
-      状态栏底条：白色，让状态栏区域与相册页/照片页的顶部底色一致。
-      高度由 MainActivity 按 insets 设置（不同机型状态栏高度不同）。
+      状态栏底条：用主题底色 gallery_chrome_surface（深色模式下自动变深），
+      让状态栏区域与标题栏的底色一致。高度由 MainActivity 按 insets 设置。
     -->
     <View
         android:id="@+id/status_bar_bg"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/gallery_toolbar_surface" />
+        android:background="@color/gallery_chrome_surface" />
 
     <!--
       标题栏。高度用 actionBarSize，状态栏高度用 **marginTop** 让开
       （不能改 paddingTop：那会把 toolbar 撑高成 statusBar+actionBarSize，
       标题在整块里居中后就落到状态栏与内容交界处，看着像被截断——真机实测踩过）。
-      背景由 MainActivity 切换：
-        · 照片页静止 → 不透明白底 + 深色标题，宫格第一行在其下方
-        · 照片页上划 → 变透明，改由下面的 scrim 盖住（标题隐藏）
-        · 相册页     → 始终不透明白底 + 深色标题（原样）
+
+      **背景保持透明，靠父容器（@id/main）的 gallery_chrome_surface 显示**：
+        · 静止 → 透出主题底色（浅色模式为白、深色模式自动变深）+ 深色标题
+        · 上划 → 交给 toolbar_scrim 渐变遮罩（标题转白），缩略图从下方滚过
+      不写死不透明背景，是为了深色模式能跟随主题，且上划时不会有白底残留。
     -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@color/gallery_toolbar_surface"
+        android:background="@android:color/transparent"
         app:elevation="0dp"
         app:title="@string/app_name"
         app:titleTextColor="@color/gallery_text_primary" />

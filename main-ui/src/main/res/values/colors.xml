@@ -4,4 +4,8 @@
     <color name="gallery_text_secondary">#8A000000</color>
     <color name="gallery_white">#FFFFFFFF</color>
     <color name="gallery_black">#FF000000</color>
+
+    <!-- 首页标题栏：照片页静止时为不透明白底 + 深色文字；
+         上划换成黑色渐变遮罩（bg_toolbar_scrim，在 main 模块）时隐藏标题。 -->
+    <color name="gallery_toolbar_surface">#FFFFFFFF</color>
 </resources>

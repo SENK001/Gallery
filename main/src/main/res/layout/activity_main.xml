@@ -8,68 +8,98 @@
     android:background="@android:color/white"
     tools:context=".MainActivity">
 
-    <LinearLayout
+    <!--
+      pager 铺满整个窗口，toolbar / 胶囊导航作为覆盖层叠在其上——
+      这样「照片」页的宫格缩略图才能画到屏幕最底边（含系统导航栏区域）。
+      「相册」页不要这个效果，由 MainActivity.applyChromeForPage() 给 root 加回
+      「状态栏 + 标题栏」内边距来还原成原来的占位式布局。
+      toolbar 使用黑色渐变遮罩（bg_toolbar_scrim），随宫格滚动淡入淡出，
+      见 MainActivity.onGridScrolled()。
+    -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:layout_height="match_parent">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/pager"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/permission_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:background="@android:color/white"
-            app:title="@string/app_name"
-            app:titleTextColor="@color/gallery_text_primary" />
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
 
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
-
-            <androidx.viewpager2.widget.ViewPager2
-                android:id="@+id/pager"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
-            <LinearLayout
-                android:id="@+id/permission_view"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@android:color/white"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:gravity="center"
-                android:orientation="vertical"
-                android:padding="32dp"
-                android:visibility="gone">
+                android:text="@string/permission_title"
+                android:textColor="@color/gallery_text_primary"
+                android:textSize="17sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:text="@string/permission_title"
-                    android:textColor="@color/gallery_text_primary"
-                    android:textSize="17sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/permission_message"
+                android:textColor="@color/gallery_text_secondary"
+                android:textSize="13sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:text="@string/permission_message"
-                    android:textColor="@color/gallery_text_secondary"
-                    android:textSize="13sp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/permission_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/permission_grant" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/permission_button"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:text="@string/permission_grant" />
+        </LinearLayout>
 
-            </LinearLayout>
+    </FrameLayout>
 
-        </FrameLayout>
+    <!--
+      状态栏底条：白色，让状态栏区域与相册页/照片页的顶部底色一致。
+      高度由 MainActivity 按 insets 设置（不同机型状态栏高度不同）。
+    -->
+    <View
+        android:id="@+id/status_bar_bg"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/gallery_toolbar_surface" />
 
-    </LinearLayout>
+    <!--
+      标题栏。高度用 actionBarSize，状态栏高度用 **marginTop** 让开
+      （不能改 paddingTop：那会把 toolbar 撑高成 statusBar+actionBarSize，
+      标题在整块里居中后就落到状态栏与内容交界处，看着像被截断——真机实测踩过）。
+      背景由 MainActivity 切换：
+        · 照片页静止 → 不透明白底 + 深色标题，宫格第一行在其下方
+        · 照片页上划 → 变透明，改由下面的 scrim 盖住（标题隐藏）
+        · 相册页     → 始终不透明白底 + 深色标题（原样）
+    -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/gallery_toolbar_surface"
+        app:elevation="0dp"
+        app:title="@string/app_name"
+        app:titleTextColor="@color/gallery_text_primary" />
+
+    <!--
+      上划时的黑色渐变遮罩（visible=gone，由 MainActivity 控制）。
+      覆盖范围是「状态栏 + 标题栏」，用代码画的 LinearGradient 填充，见 MainActivity.buildScrim()。
+    -->
+    <View
+        android:id="@+id/toolbar_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/bottom_nav"

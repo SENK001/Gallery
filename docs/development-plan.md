@@ -68,7 +68,7 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 | 组件 | 实现 |
 |---|---|
-| `GlThumbnailGridView` | GLSurfaceView + `OverScroller` 自绘宫格，RENDERMODE_WHEN_DIRTY；4 列方形单元格居中裁剪；视频角标与动态照片角标共用缩略图底部 50% 区域的黑色→透明渐变纹理（底边约 70% 黑）；视频在左下角绘制圆形播放图标 + 加粗时长文字（11sp，图标与文字均按纹理原始尺寸、不拉伸）；动态照片角标按官方矢量图比例绘制：外圈 36 个白点 + 中间细圆环 + 中心圆环（带柔和阴影），同样置于左下角；角标样式参考系统相册（MIUI）；Executor 池 + LRU 纹理缓存；`GlGridRenderer` 只对**可见行（firstRow..lastRow）**发缩略图请求 —— ~~可见优先/离开取消~~ **未实现**（无优先级队列；`ThumbnailLoader` 仅在 shutdown 时批量 cancel，滚出屏幕的请求仍会跑完并进缓存）；点击回调 |
+| `GlThumbnailGridView` | GLSurfaceView + `OverScroller` 自绘宫格，RENDERMODE_WHEN_DIRTY；4 列方形单元格居中裁剪；视频角标与动态照片角标共用缩略图底部 50% 区域的黑色→透明渐变纹理（底边约 70% 黑）；视频在左下角绘制圆形播放图标 + 加粗时长文字（11sp，图标与文字均按纹理原始尺寸、不拉伸）；动态照片角标按官方矢量图比例绘制：外圈 36 个白点 + 中间细圆环 + 中心圆环（带柔和阴影），同样置于左下角；角标样式参考系统相册（MIUI）；Executor 池 + LRU 纹理缓存；`GlGridRenderer` 只对**可见行**发缩略图请求——判定方式是**逐行用 `cellRect` 的真实 y 与视口求交**（`rowTop + cellSize > viewTop && rowTop < viewBottom`），**不是整除反推首/末行**（后者在有 `topInset` 偏移时会差一行，见 §10）；~~可见优先/离开取消~~ **未实现**（无优先级队列；`ThumbnailLoader` 仅在 shutdown 时批量 cancel，滚出屏幕的请求仍会跑完并进缓存）；点击回调；`GridGeometry` 有 `topInset`（内容整体下移的固定偏移，**不参与滚动**）与 `bottomInset`（撑长内容总高，**参与滚动**）两种内边距，`maxScroll` 只扣前者 |
 | `GlImageViewer` | GLSurfaceView 自绘左右翻页（拖动跟手 + fling），前后页纹理预加载；`ImageDecoder` 目标尺寸采样（受 GL_MAX_TEXTURE_SIZE 限制）—— ~~EXIF 方向矩阵~~ **无矩阵代码**：`ImageDecoder`（API 28+）解码时已自动套用 EXIF 方向，故不再手写方向变换；双击/双指缩放；方向锁横纵手势（横向翻页/纵向上划 detail 面板）；单击回调切换沉浸；视频页显示封面+播放按钮 |
 | `GlVideoView` | GLSurfaceView 渲染（播放逻辑全部委托 `VideoPlayManager`），aspect-fit（尺寸/朝向直接采用 MediaPlayer 旋转后的显示尺寸）；默认 z-order（`setZOrderOnTop(false)`，控制层窗口视图需盖在其上）；生命周期管理 —— ~~音频焦点处理~~ **未实现**（仅 `setAudioAttributes(USAGE_MEDIA/CONTENT_TYPE_MOVIE)`，未 `requestAudioFocus`） |
 | `VideoPlayManager` | MediaPlayer + SurfaceTexture(OES) 播放状态机封装：`VideoSource.File`（独立文件）/ `VideoSource.Embedded`（文件尾部内嵌 MP4 + 长度）；`attachTexture` 在 GL 线程绑定 OES 纹理（GL 上下文重建后自动换绑并重建播放器）；start/pause/seekTo/stop/release、prepared/duration/position/尺寸与帧到达回调；播放器页与查看器动态照片共用 |
@@ -77,10 +77,15 @@ URI 设计（cursor 列即 UI 数据接口）：
 
 ### 3.2 主界面与查看器
 
-- `MainActivity`（main 模块）：MaterialToolbar + ViewPager2（照片 / 相册），Tab 切换由**底部悬浮胶囊导航栏**驱动：MaterialCardView 磨砂白底，条目图标在上、文字在下，选中项图标与文字为蓝色并整体带半透明灰色大圆角衬底（衬底包住图标和文字，可透出下层内容，与导航栏背景同一类半透明效果），样式参考高德地图底部栏；宫格区域与胶囊不重叠
-- `PhotosFragment`：GL 宫格（不分组），滑到底分页加载
+- `MainActivity`（main 模块）：MaterialToolbar + ViewPager2（照片 / 相册），Tab 切换由**底部悬浮胶囊导航栏**驱动：MaterialCardView 磨砂白底，条目图标在上、文字在下，选中项图标与文字为蓝色并整体带半透明灰色大圆角衬底（衬底包住图标和文字，可透出下层内容，与导航栏背景同一类半透明效果），样式参考高德地图底部栏
+  - **两页的顶部样式不同**（2026-10-01 改版，见 §10）：
+    - 「照片」页：宫格**铺满整个窗口**（含状态栏与系统导航栏区域），缩略图可滚到屏幕最底边；标题栏与胶囊导航都是**覆盖层**（`FrameLayout` 叠加，不占布局）。静止时标题栏是 **不透明白底 + 深色标题**，宫格第一行位于其下方；上划到缩略图来到标题栏下方后，标题栏变透明、改由**黑色线性渐变遮罩**（`MainActivity.buildScrim()` 代码绘制，上深下透明）盖住，标题改用白色
+    - 「相册」页：**保持原样** —— 不透明白底标题栏 + 深色标题，内容不吃到状态栏/标题栏下面（由 `AlbumsFragment` 自己按「状态栏 + 标题栏」加 `paddingTop`）
+    - 顶部样式切换在 `MainActivity.applyChrome(page)`；滚动驱动在 `onGridScrolled(scrollY)`（40px 死区，避免刚滑动就闪变）
+  - 状态栏底条 `status_bar_bg`（高度 = 状态栏 inset）+ 标题栏（`marginTop` 让开状态栏）+ 胶囊导航（`marginBottom` 让开手势条）；**渐变遮罩的高度 = 状态栏 + 标题栏**，因此 `scrim` 是一个覆盖这两段的独立 View
+- `PhotosFragment`：GL 宫格（不分组），滑到底分页加载；顶部预留 = 状态栏 + 标题栏（`GridGeometry.topInset`，走 insets 监听设置），让**第一行落在标题栏下方**；`onGridScroll` 回调上抛给宿主驱动标题栏切换
 - `AlbumsFragment`：RecyclerView 多类型 — “常用”3 列网格 + “更多”列表（小封面/名称/数量），section 标题
-- `AlbumDetailActivity`：相册内容 GL 宫格 + 分页
+- `AlbumDetailActivity`：相册内容 GL 宫格 + 分页。**与首页「照片」页完全一致的铺满式布局**（2026-10-01 改版，见 §10）：宫格铺满整个窗口（含状态栏与系统导航栏区域），标题栏/状态栏底条/渐变遮罩均为覆盖层；**静止时标题栏为不透明白底 + 深色标题/返回键，第一行缩略图落在标题栏下方**（`grid.setTopInset(状态栏 + 标题栏)`，与照片页同一套算法）；上划过 40px 死区后标题栏让位给渐变遮罩，标题与返回键转白色（`navigationIcon?.setTint(...)` 随状态切换）
 - `ViewerActivity`：白底 + 标题栏（日期/序号）+ 底部功能菜单（分享/收藏/详情）；单击内容 -> 黑底沉浸（隐藏系统栏+工具栏+底栏），再单击恢复；左右滑切换，滑到视频显示封面 + GL 绘制的播放图标，**单击播放图标**进入播放器（点击其他区域与照片一致进入沉浸模式，命中测试用渲染器记录的图标矩形）
   - GL 视图恒定铺满整个内容区（`match_parent`，整个会话内尺寸不变）：照片按当前页宽高比 fit 绘制在视口中央，留白由 GL 清屏按模式绘制成与窗口背景相同的颜色（正常白 #FFFFFF / 沉浸黑），视觉上与窗口留白无差别
   - 大图纹理：解码最长边 = min(GL_MAX_TEXTURE_SIZE, 视口最长边)（约一屏分辨率），纹理缓存 96MB（可容纳 当前页 + 前后各一页 的工作集）；放大超过约 1.2x 为纹理放大（后续可做按需高分解码）
@@ -276,4 +281,62 @@ URI 设计（cursor 列即 UI 数据接口）：
   - 配置缓存 `Reusing configuration cache.` 正常复用；全量门禁 BUILD SUCCESSFUL、单测 16/16 全绿、lint 0 error / 7 warning（较基线 9 条少 2 条：`ChromeOsAbiSupport` 与 `OldTargetApi`，无新增）
   - 幂等性：连续构建产物名稳定；`clean` 后重建一致
 - **未覆盖**：Windows 之外平台、Android Studio 图形界面 Run 流程的实测（只验证了命令行 `installDebug` 与 `adb install`）、屏幕密度拆分场景下的多 output 命名。
+
+### 2026-10-01 首页改版：照片页宫格铺满 + 滚动渐变标题栏
+
+- **需求**：① 宫格缩略图铺满整屏（含系统导航栏区域）；② 静止时正常显示标题栏（不透明白底 + 标题），**第一行位于标题栏下方**；③ 上划到缩略图来到标题栏下方时，标题栏变成**半透明黑色线性渐变遮罩**（上深下透明）并露出缩略图；④ 「相册」页**保持原样**。
+- **最终结构**（`activity_main.xml`）：根 `FrameLayout` → 内层 `FrameLayout`（pager 铺满）→ 覆盖层依次为 `status_bar_bg`（白条，高=状态栏 inset）、`toolbar`（`?attr/actionBarSize`，`marginTop`=状态栏）、`toolbar_scrim`（渐变遮罩，高=状态栏+标题栏）、`bottom_nav`（胶囊导航）。
+- **实现要点**：
+  - `MainActivity.applyOverlayInsets()`：根布局**不吃 inset**，inset 只分给覆盖层——`status_bar_bg` 高度、`toolbar` 的 `marginTop`/左右 margin、`scrim` 的高度、`bottom_nav` 的 `marginBottom`
+  - `MainActivity.applyChrome(page)` 决定顶部样式；`onGridScrolled(scrollY)` 在**40px 死区**后切换（避免刚滑动一帧就闪变），切页时重置滚动态
+  - 渐变遮罩由 `main-ui` 的 **`ToolbarScrimDrawable`** 代码绘制 `LinearGradient`（**单段：顶部最深约 55% 黑 → 向下线性渐隐到全透明**），**不用资源 shape**；首页与相册详情页共用同一套观感参数
+  - **`AlbumDetailActivity` 同样是宫格页，做了同样的改版**（照片页改完后按同一套做法铺开）：`activity_album_detail.xml` 改为 `FrameLayout`（宫格铺满 + `album_status_bar_bg` + `toolbar` + `album_toolbar_scrim` 覆盖层），`grid.setTopInset(状态栏 + 标题栏)` 让第一行落在标题栏下方（**与照片页同一套算法，不要写成 0**），`onScrollChanged` 驱动同一套 40px 死区切换，静止态不透明白底 + 深色标题/返回键、遮罩态用 `navigationIcon?.setTint()` 转白色
+  - `GridGeometry.topInset`：新的「内容固定下移」偏移，**不参与滚动**（与参与滚动的 `bottomInset` 区分），`maxScroll` 要扣掉它；`PhotosFragment` 通过 insets 监听设为「状态栏 + 标题栏」，让第一行落在标题栏下方
+  - 滚动回调链：`GlGridRenderer.onScrollChanged`（GL 线程）→ `GlThumbnailGridView` post 到主线程 → `PhotosFragment.onGridScroll` → `MainActivity.onGridScrolled`（相册详情页则由 Activity 直接接收）
+- **踩过的坑（全部为真机实测，按发现顺序）**：
+  1. **`toolbar` 的 `paddingTop` 会把控件撑高**：加 `paddingTop = 状态栏高度` 后 toolbar 从 208px 变成 360px，标题在整块里居中 → 落在状态栏与内容交界处，看着像被截断（实测标题 bounds y 165–195）。**必须用 `marginTop` 让开状态栏，不能动 padding**。
+  2. **`wrap_content` 的 toolbar 会塌缩**：按标题文字高度量成 123px，与预留的 `actionBarSize`（208px）不一致。必须显式 `layout_height="?attr/actionBarSize"`。
+  3. **`insets` 监听 ≠ `getRootWindowInsets()`**：在 `onViewCreated` 里直接读 `getRootWindowInsets()` 会得到 `null`（视图尚未 attach），inset 全部按 0 处理，顶部预留完全失效。必须用 `ViewCompat.setOnApplyWindowInsetsListener` + `requestApplyInsets`。
+  4. **改 `layoutParams` 后必须重新赋值**：只改 `layoutParams.height` 不会触发 `requestLayout`，新高度不生效（遮罩高度实测踩到）。要写 `view.layoutParams = params`。
+  5. **ViewPager2 的 Fragment 是懒创建的**：`setAdapter` 之后立刻遍历 `supportFragmentManager.fragments` 拿不到照片页，`onGridScroll` 一直是 `null`，**滚动回调从未生效**。需在首帧后（`pager.post {}`）补挂，并在 `onPageSelected` 兜底。
+  6. **`GlGridRenderer` 用整除反推可视行会漏一行**（**「第一行不显示」的真正根因**）：
+     ```kotlin
+     firstRow = ((scrollY + topInset - padding) / rowStride).toInt()   // (0+360)/321.2 = 1
+     ```
+     `topInset` 不是 `rowStride` 的整数倍时，停在顶部会算出 `firstRow = 1`，**第 0 行永远不绘制**；它的槽位（y=0..316）又正好被标题栏盖住，于是顶部空出一格。**改为逐行用 `cellRect` 的真实 y 与视口求交**，不再做整除反推。用日志打出几何量（`vp/cell/topInset/rows/first/last`）才定位到——**此前几轮靠调数值猜测都无效，先加日志是正确的第一步**。
+  7. **`PhotosFragment` 的 `ViewCompat`/`WindowInsetsCompat` 曾一度变成未使用导入**（去掉预留后又加回来），Kotlin 不会报错，需自行清理。
+  8. **库资源要用库的 `R`**：标题栏配色定义在 `main-ui`，`MainActivity`（`main` 模块）里必须 `import com.senk.gallery.ui.R as UiR`，否则 `R.color.xxx` 解析不到（main 的 R 只含本模块资源）。
+  9. **渐变遮罩两版都不对，最后靠"降不透明度 + 拉长衰减"解决**：
+     - 第一版单 `gradient`：标题位于竖直约 3/4 处，那里已衰减到近乎透明，深色标题被浅色缩略图"吞掉"
+     - 第二版顶部 80% 黑、到高度处归零：实测反馈**太生硬**，像一条硬边黑带
+     - 最终：顶部 **55%** 黑（`0x8C`）→ 整块高度线性渐隐到透明，过渡柔和且缩略图仍透得出
+  10. **一度写了个自绘 `ToolbarScrim` Drawable 想要"正确"分段，实测渐变未生效，已删除**——回退到最简单可靠的「一个白条 + 一个代码画 shader 的遮罩 View」。**复杂度没有换来正确性时就该退回去**。
+  11. **改版期间一度误伤「相册」页**：把根布局 inset 整体去掉后，相册页内容也顶到了状态栏下面。**照片页要"铺满"、相册页要"避让"，两者需求相反**——最终由 `AlbumsFragment` 自己加 `paddingTop`（状态栏 + 标题栏）来还原，而不是靠根布局统一处理。
+  12. **本页改版牵连三处**（容易漏）：`GridGeometry`（新增 `topInset` 并调整 `maxScroll`/`cellY`/`indexAt`）、`GlGridRenderer`（可见行判定）、`GlThumbnailGridView`（新增 `setTopInset` 与 `onScrollChanged`，并把 GL 线程回调 post 到主线程）。
+  13. **同一套改版要覆盖两处宫格页，别只改首页**：`AlbumDetailActivity` 也是「GL 宫格 + 标题栏」结构（`activity_album_detail.xml` 原来是 `LinearLayout`：toolbar 占位 + grid 在下方），**首轮只改了首页，相册详情页仍是旧布局**，被指出后才补齐。两处的差异只有：相册详情页多一个**返回键与动态标题**（`app:navigationIcon` + `setTitle`），因此标题栏转白时要额外 `navigationIcon?.setTint(白)`；且没有底部胶囊导航（宫格 `bottomInset` 不需要预留）。**抽公共件**：渐变遮罩抽到 `main-ui` 的 `ToolbarScrimDrawable` 供两页共用，避免两套参数漂移。
+  14. **补相册详情页时又把"静止态"做错了一次**：第一版给了它「透明标题栏 + 缩略图从 y=0 铺满」的静止态（`setTopInset(0)`），而**照片页的既定行为是「不透明白底标题栏 + 第一行在标题栏下方」**（`setTopInset(状态栏 + 标题栏)`）。两页的静止态必须一致——**改第二处时应逐条对照第一处的已验证行为，而不是凭"铺满"的印象重做一遍**。
+  15. **"顶部像留白"的诊断绕了远路（本条如实记录过程）**：曾把该现象归因为「遮罩顶部就是最深的 55% 黑，把缩略图压成均匀灰带」，并据此改成「顶部透明 → 状态栏下沿最深」。**这个改法实际不成立**：后续实测确认，顶部最深时缩略图同样能正常显示在状态栏区域（`y=2` 处取样有照片色差，不是固定灰度），因此**顶部最深才是最终采用的观感**，已改回单段渐变。
+      - 绕远路的原因：**用像素采样代替了看图**——采样到 `y=2` 是灰色就认为是"被压暗"，但没先确认按需求该不该压暗。真正有效的做法是把截图**看一眼**，再结合实际取舍判断。
+      - 保留此条是为了提醒：**本项目的遮罩观感需求以真机截图为准，不要仅凭像素数值推断"应该是怎样"**；数值只用来验证"是否与预期一致"。
+  16. **"回退"要精确到范围**：曾把「遮罩分两段」整体 revert，结果连静止态的边距/白底标题栏判断也被牵连绕了一圈。**回退前先确认哪些是已验证正确的、哪些是这次要撤的**。
+  17. **⭐ 验证含渐变的改动时，先把渐变的 alpha 置 0（临时屏蔽）再验证**（本项目硬性约定）：
+      - **目的**：把「底层行为」与「观感」分开验证，避免把**渐变的压暗**误判成**布局问题**。
+        第 15 条那次绕远路正是反面教材——`y=2` 采样到灰色，无法区分是"缩略图没铺到"还是"铺到了但被压暗"。
+      - **做法**：临时把 `ToolbarScrimDrawable` 的 `START_ALPHA` 改为 `0x00`（或把 `scrim.isVisible` 临时置 false / 在 `applyChrome` 里跳过设背景），重新构建真机截图。
+        此时应能**直接看到未压暗的缩略图**：若顶部仍是纯白 → 是布局/边距问题（查 `topInset`）；
+        若能看到缩略图 → 布局正确，剩下的只是渐变观感问题（调 alpha / 渐隐区间）。
+      - **顺序**：① 先屏蔽渐变验证布局 → ② 再恢复渐变调观感 → ③ 最后移除临时代码并确认无残留。
+      - **辅助判据（不屏蔽时也能用）**：在同一高度取**多个 x**、看取值是否**互不相同**。
+        互不相同 = 有图像内容透出；完全一致（如 `(116,116,116)`）才可能是被压平或真的空白。
+        仅取单点、或只看一行，都不足以判断。
+  18. **本类"同一套观感"的改动，改完必须两页都取像素验证**：第 13~17 条都是同一种失误的不同侧面。**可复用判据表**：
+      - 静止：`y=0..355` = `255`（白底标题栏）、首行缩略图 `y≈400`
+      - 滑动：`y=2` 处同一高度多个 x 的取值**互不相同**（有照片内容）；遮罩自顶部最深（约 55% 黑）向下递减（实测 `y=120:162 → y=152:174 → y=320:240`）
+- **验证（真机 Redmi / Android 16 / 手势导航 / 1280×2772）**：
+  - 冷启动静止：顶部 `y=10` 为 `255,255,255`（白底标题栏），标题 bounds `[52,207][196,304]`（完整落在标题栏内，不再跨界），首行缩略图从 `y≈360` 开始绘制（实测 y=500 行已有多张缩略图，`GLDBG` 显示 `topInset=360 rows=50 count=200`）
+  - 上划后：遮罩自顶部最深向下递减（实测 `y=120:162 → y=152:174 → y=320:240`），顶部缩略图仍可见（`y=2` 处 `x200/x640/x1100` 各有不同取值，非纯白）
+  - 切到「相册」页：顶部全为 `255`（白底标题栏 + 深色标题，原样）
+  - **相册详情页**（进入「全部」相册）：静止时 `y=0..355` 全为 `255`（白色标题栏，标题区最暗像素 `min=33` 即深色标题可见），首行缩略图从 `y≈400` 起（与照片页同一位置）；上划后 `y=2` 处非白（`x200=(59,50,43)` / `x1100=(52,51,51)`，缩略图已显示在状态栏区域），标题/返回键转白
+  - 全量门禁 BUILD SUCCESSFUL、单测 16/16、lint 0 error / 7 warning（与基线一致，无新增）
+- **未覆盖**：状态栏/标题栏高度差异较大的其它机型与 ROM（本机状态栏 152px、`actionBarSize` 208px，遮罩按 insets 自适应，但未在第二台设备验证）、横屏、深色模式（全应用强制浅色）。
 

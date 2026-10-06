@@ -30,6 +30,12 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
     var onRequestThumbnail: ((MediaItem, Int) -> Unit)? = null
     var onNearEnd: (() -> Unit)? = null
 
+    /**
+     * 滚动位置变化回调（**在 GL 线程触发**），参数为当前 scrollY。
+     * 宿主需自行 post 到主线程再更新 UI。
+     */
+    var onScrollChanged: ((Float) -> Unit)? = null
+
     private val badgeCache = BadgeCache(density)
     private val projection = FloatArray(16)
     private val vertices = FloatArray(16)
@@ -40,6 +46,9 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
     private var uTexture = 0
     private var uMatrix = 0
     private var nearEndNotified = false
+
+    /** 上次已上报的滚动量，避免每帧都回调宿主（RENDERMODE_WHEN_DIRTY 下可能逐帧变化）。 */
+    private var lastNotifiedScrollY = Float.NaN
     private val cellRect = RectF()
     private val badgeRect = RectF()
     private var placeholderTexture = 0
@@ -60,6 +69,7 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
         badgeCache.evictAll()
         placeholderTexture = createPlaceholderTexture()
         nearEndNotified = false
+        lastNotifiedScrollY = Float.NaN
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -99,11 +109,21 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
         }
         val scrolled = scrollY
         val size = geometry.cellSize
-        val firstRow = ((scrolled - geometry.padding) / (size + geometry.gap)).toInt()
-            .coerceAtLeast(0)
-        val lastRow = ((scrolled + geometry.viewportHeight) / (size + geometry.gap)).toInt()
-            .coerceAtMost(geometry.rowCount - 1)
-        for (row in firstRow..lastRow) {
+        // 逐行测试「该行是否与视口相交」，而不是用整除反推首/末行。
+        // 整除写法在有 topInset 偏移时会差一行（真机实测：停在顶部时算出 first=1，
+        // 于是第 0 行永远不画，顶部空出一格 —— 这就是「第一行不显示」的根因）。
+        // 每行按 cellRect 的实际坐标判断，天然正确，也不依赖 padding/gap 的取整行为。
+        val rowStride = size + geometry.gap
+        val viewTop = scrolled
+        val viewBottom = scrolled + geometry.viewportHeight
+        for (row in 0 until geometry.rowCount) {
+            val rowTop = geometry.topInset + geometry.padding + row * rowStride
+            if (rowTop + size <= viewTop) {
+                continue // 已划出屏幕上沿，且下沿也在视口之上
+            }
+            if (rowTop >= viewBottom) {
+                break // 行按 y 递增，后面的更靠下，可直接结束
+            }
             for (column in 0 until geometry.columns) {
                 val index = row * geometry.columns + column
                 if (index >= snapshot.size) {
@@ -121,10 +141,16 @@ class GlGridRenderer(private val density: Float = 1.5f) : GLSurfaceView.Renderer
             nearEndNotified = true
             onNearEnd?.invoke()
         }
+        if (scrolled != lastNotifiedScrollY) {
+            lastNotifiedScrollY = scrolled
+            onScrollChanged?.invoke(scrolled)
+        }
     }
 
     fun resetNearEnd() {
         nearEndNotified = false
+        // 换数据（刷新/分页）后强制上报一次滚动量，宿主可据此重算标题栏状态。
+        lastNotifiedScrollY = Float.NaN
     }
 
     private fun drawEmptyState() {

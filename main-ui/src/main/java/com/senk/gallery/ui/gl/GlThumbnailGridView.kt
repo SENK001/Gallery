@@ -37,6 +37,12 @@ class GlThumbnailGridView @JvmOverloads constructor(
     var onItemClick: ((MediaItem) -> Unit)? = null
     var onLoadMore: (() -> Unit)? = null
 
+    /**
+     * 滚动回调（**已切到主线程**）。宿主用它驱动标题栏渐变透明度。
+     * 参数为当前 scrollY（0 = 已到顶部）。
+     */
+    var onScrollChanged: ((Float) -> Unit)? = null
+
     init {
         setEGLContextClientVersion(2)
         setRenderer(renderer)
@@ -52,10 +58,24 @@ class GlThumbnailGridView @JvmOverloads constructor(
         renderer.onNearEnd = {
             post { onLoadMore?.invoke() }
         }
+        // 渲染回调在 GL 线程，必须切到主线程再交给宿主改 View
+        renderer.onScrollChanged = { scrollY ->
+            post { onScrollChanged?.invoke(scrollY) }
+        }
     }
 
     fun setColumns(columns: Int) {
         renderer.geometry.columns = columns.coerceAtLeast(1)
+        requestRender()
+    }
+
+    /**
+     * 顶部预留：宫格铺满全屏（含状态栏区域）后，第一行会被标题栏永久遮住，
+     * 因此内容整体下移这么多，让首行完整可见。见 [GridGeometry.topInset]。
+     */
+    fun setTopInset(insetPx: Int) {
+        renderer.geometry.topInset = insetPx.coerceAtLeast(0).toFloat()
+        clampScroll()
         requestRender()
     }
 

@@ -1,31 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  相册详情页：与首页「照片」页同样的铺满式结构——宫格铺满整个窗口
+  （含状态栏与系统导航栏区域），标题栏、状态栏底条、渐变遮罩都是覆盖层
+  （FrameLayout 叠加，不占布局空间）。
+
+  交互（与照片页一致）：
+    · 静止时标题栏为**不透明白底** + 深色标题/返回键，宫格第一行位于标题栏下方
+      （由 Activity 的 setTopInset(状态栏 + 标题栏) 保证）
+    · 上划到有缩略图来到标题栏下方后，标题栏让位给黑色渐变遮罩（顶部透明）、
+      标题/返回键转白色，缩略图滚到状态栏区域
+  渐变遮罩的绘制见 main-ui 的 ToolbarScrimDrawable。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/album_detail_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
-    android:orientation="vertical">
+    android:background="@android:color/white">
 
+    <!-- 宫格铺满全屏（首行的位置由 topInset 预留，见 Activity） -->
+    <com.senk.gallery.ui.gl.GlThumbnailGridView
+        android:id="@+id/album_grid"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 状态栏底条：白色（静止时让状态栏区域有底色），高度由 Activity 按 insets 设置；
+         上划后由 Activity 隐藏，让缩略图直接铺到状态栏区域 -->
+    <View
+        android:id="@+id/album_status_bar_bg"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/gallery_toolbar_surface" />
+
+    <!-- 标题栏：不透明白底覆盖层，marginTop 让开状态栏（不能用 paddingTop，那会把它撑高） -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/white"
+        android:background="@color/gallery_toolbar_surface"
         app:navigationIcon="@drawable/ic_arrow_back"
         app:navigationIconTint="@color/gallery_text_primary"
         app:titleTextColor="@color/gallery_text_primary" />
 
-    <FrameLayout
+    <!-- 上划后的黑色渐变遮罩：高 = 状态栏 + 标题栏，由 Activity 控制显隐 -->
+    <View
+        android:id="@+id/album_toolbar_scrim"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:visibility="gone" />
 
-        <com.senk.gallery.ui.gl.GlThumbnailGridView
-            android:id="@+id/album_grid"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-    </FrameLayout>
-
-</LinearLayout>
+</FrameLayout>

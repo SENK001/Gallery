@@ -29,7 +29,7 @@ Gallery/
 
 | 组件 | 说明 |
 |---|---|
-| `GlThumbnailGridView` | GL 宫格（`OverScroller` 自绘、异步解码 + LRU 纹理缓存、仅对可见行发请求；无优先级队列/离开取消）。可见行按**每行与视口求交**判定，不做整除反推（后者会漏首行，见 [docs/development-plan.md](docs/development-plan.md) §10）。首页「照片」页与相册详情页均为**铺满式**布局（标题栏为覆盖层、**自身透明**靠主题底色显示，上划后转黑色渐变遮罩）。底部留白用 `bottomPadding`（滚到底时最后一行停在系统导航栏/胶囊导航上方），清屏底色按主题设置 |
+| `GlThumbnailGridView` | GL 宫格（`OverScroller` 自绘、异步解码 + LRU 纹理缓存、仅对可见行发请求；无优先级队列/离开取消）。可见行按**每行与视口求交**判定，不做整除反推（后者会漏首行，见 [docs/development-plan.md](docs/development-plan.md) §10）。首页「照片」页与相册详情页均为**铺满式**布局（标题栏为覆盖层、**自身透明**靠主题底色显示，上划后转黑色渐变遮罩；**遮罩声明在标题栏之前**，标题/返回键因此绘制在渐变之上，顺序颠倒会变成「文字与背景同色」）。底部留白用 `bottomPadding`（滚到底时最后一行停在系统导航栏/胶囊导航上方），清屏底色按主题设置 |
 | `GlImageViewer` | 大图查看器（翻页/缩放/沉浸，`ImageDecoder` 采样且由它隐式应用 EXIF 方向，无手写方向矩阵） |
 | `GlVideoView` | GL 视频渲染（aspect-fit，委托 `VideoPlayManager`） |
 | `VideoPlayManager` | `MediaPlayer + SurfaceTexture(OES)` 状态机；支持 `File` / `Embedded`（动态照片内嵌 MP4）两种源，播放器页与查看器共用 |

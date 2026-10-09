@@ -130,6 +130,13 @@ URI 设计（cursor 列即 UI 数据接口）：
 （`GlGridRenderer.glClearColor`）。所以要让顶部随主题变色，**这三层要一起用主题色**，
 只改 toolbar 自己不够。见 §10 坑 18。
 
+**覆盖层的声明顺序也是「关键，踩过坑」**：照片页与相册详情页的渐变遮罩必须在布局里
+**声明在 `toolbar` 之前**。两页的 `toolbar` 与遮罩 View elevation 都是 0
+（`Widget.Gallery.Toolbar` 里的 `elevation` 是 **Material 属性**、不是 `android:elevation`），
+`FrameLayout` 完全按**声明顺序**绘制 —— 遮罩声明在后面就会把标题/返回键压在渐变之下，
+白字与白底被同一层渐变乘成同一个灰度，表现是「标题文字和背景一个颜色」。
+见 §10「2026-10-10 标题栏文字改为绘制在渐变遮罩之上」。
+
 **有意不跟随主题的颜色**（必须理解语义再改，不要"顺手统一"）：
 
 | 范围 | 为什么恒定 |
@@ -339,7 +346,7 @@ MaterialAlertDialog）会继续按 Light 解析 `?attr/colorSurface` 等，弹�
 ### 2026-10-01 首页改版：照片页宫格铺满 + 滚动渐变标题栏
 
 - **需求**：① 宫格缩略图铺满整屏（含系统导航栏区域）；② 静止时正常显示标题栏（不透明白底 + 标题），**第一行位于标题栏下方**；③ 上划到缩略图来到标题栏下方时，标题栏变成**半透明黑色线性渐变遮罩**（上深下透明）并露出缩略图；④ 「相册」页**保持原样**。
-- **最终结构**（`activity_main.xml`）：根 `FrameLayout` → 内层 `FrameLayout`（pager 铺满）→ 覆盖层依次为 `status_bar_bg`（主题色条，高=状态栏 inset）、`toolbar`（`?attr/actionBarSize`，`marginTop`=状态栏，**背景透明**）、`toolbar_scrim`（渐变遮罩，高=状态栏+标题栏）、`bottom_nav`（胶囊导航）。
+- **最终结构**（`activity_main.xml`）：根 `FrameLayout` → 内层 `FrameLayout`（pager 铺满）→ 覆盖层依次为 `status_bar_bg`（主题色条，高=状态栏 inset）、`toolbar_scrim`（渐变遮罩，高=状态栏+标题栏）、`toolbar`（`?attr/actionBarSize`，`marginTop`=状态栏，**背景透明**）、`bottom_nav`（胶囊导航）。**注：`toolbar_scrim` 与 `toolbar` 的前后顺序于 2026-10-10 修正**——遮罩必须声明在 `toolbar` 之前，否则会盖住标题文字（见该条记录）。
 - **顶部底色的分层（很重要，见坑 18）**：标题栏自身透明，**它"透出"的其实是下面依次几层**——`pager` 里的页面背景（`fragment_photos` / `fragment_albums`）、再往下是**宫格 GL surface 的清屏色**。因此要让顶部随主题变色，必须**这三层一起改成主题色**（`gallery_chrome_surface` + `GlThumbnailGridView.setSurfaceBackgroundColor`），只改 toolbar 自己不够。
 - **实现要点**：
   - `MainActivity.applyOverlayInsets()`：根布局**不吃 inset**，inset 只分给覆盖层——`status_bar_bg` 高度、`toolbar` 的 `marginTop`/左右 margin、`scrim` 的高度、`bottom_nav` 的 `marginBottom`
@@ -449,4 +456,27 @@ MaterialAlertDialog）会继续按 Light 解析 `?attr/colorSurface` 等，弹�
   - 深色（`cmd uimode night yes`）：照片页 / 相册页顶部 `y=2/120/300` 全为 `(28,27,31)`；相册页**标题、分组标题、相册名/数量、胶囊导航**全部可读（截图确认，无白块）
   - 全量门禁 BUILD SUCCESSFUL、单测 16/16、lint **0 error / 5 warning**（由 7 降为 5，样式化顺带消掉 2 条）
 - **未覆盖**：**地图页**受百度 `TextureMapView` 制约 —— 底图由 SDK 绘制、不跟随 `uiMode`，写死的 toolbar/底卡无法单独改深色（会出现「深色标题栏压浅色地图」），需与底图一起处理；查看器沉浸态的深色底与主题正交，只确认了非沉浸态。
+
+### 2026-10-10 标题栏文字改为绘制在渐变遮罩之上（照片页 / 相册详情页）
+
+- **现象**：上划进入渐变遮罩态后，标题栏文字与背景**颜色相同、分不清** —— 照片页的「相册」、相册详情页的「全部」与返回键都是如此；下方是亮色缩略图时最明显。
+- **根因（是 z-order，不是配色）**：两页的遮罩 View 在 `FrameLayout` 里**声明在 `toolbar` 之后**，因此被绘制在标题文字**之上**。数值上正好解释「同色」：标题是白字（255），遮罩顶部约 55% 黑，标题条处最大可达亮度被压到 `255 × (1 − α(y))` —— 真机实测**标题框内最大值 226**（y≈207）、**同 y 背景区最大值 233**（y≈304），
+  两者被同一层渐变乘成**同一个上限**；白底 + 白字时更是精确相等（同为 115）。
+  所以这不是「对比度偏低」，而是**逐像素同色** —— 加深遮罩、改文字颜色、加文字阴影都只是掩盖，治不了本。
+- **修法**：把遮罩的声明挪到 `toolbar` **之前**（`activity_main.xml`、`activity_album_detail.xml` 两处），标题与返回键即绘制在渐变之上；同时修正两处已经写反/失效的注释。
+  判定依据（改动前必读）：`Widget.Gallery.Toolbar` 里的 `elevation` 是 **Material 属性**（`attr/elevation`，给 AppBarLayout 读），**不是** `android:elevation`；继承链 `Widget.Material3.Toolbar → Widget.AppCompat.Toolbar` 也不设 background/elevation ⇒ `toolbar` 与遮罩的 View elevation **同为 0**，`FrameLayout` **完全按声明顺序绘制**。（`bottom_nav` 的 `cardElevation 10dp` 仍在遮罩之上，未受影响。）
+- **踩过的坑**：
+  1. **「标题栏背景透明」≠「标题在遮罩之上」**：透明的只是背景，文字仍受声明顺序支配。这类缺陷**在 `colors.xml` / `styles.xml` 里查不出来**，必须看布局的子 View 顺序（本项目前一轮刚做完颜色规范化，容易惯性往配色方向找）。
+  2. **验证判据必须能区分「文字」与「透出的内容」**：修复前标题框内**纯白像素 = 0**（最大值 226/233，与同 y 背景区一致）；修复后同一框内出现 **2894** 个纯白字形像素（最大值 255），而同 y 背景区仍是 **0** 个纯白像素。只看「最大值」或「均值」会被亮色缩略图骗过（内容本身也能到 233）。
+  3. **截图不能写 `/sdcard`**：`adb shell screencap -p /sdcard/xxx.png` 会让 MediaStore 变化 → `PhotosFragment` 的 ContentObserver 触发 `loadPage(reset = true)` → `grid.scrollToTop()`，**每截一张图就把宫格弹回顶部**。实测：滑动后 2s 的画面与滑动前的画面**逐像素完全相同（差值 0.00）**，一度被误判成「应用有 bug、上划后自己弹回顶部」。截图与 `uiautomator dump` 一律走 `/data/local/tmp`（不进 MediaStore）。
+  4. **`toolbar_scrim` 不出现在 `uiautomator dump` 里**（纯 `View`、无 contentDescription，被无障碍树过滤），所以**不能**用「dump 里有没有遮罩节点」判断是否已上划；改用「与该页静止截图对比标题条亮度」。
+  5. **`monkey` 只把已有任务带到前台**：上次测试遗留的查看器会顶在最前面，静止态截图会抓成**整屏单张照片**。每次先 `am force-stop` 再拉起。
+  6. **失效注释一并修正**：`activity_main.xml` 曾写「黑色渐变遮罩（`bg_toolbar_scrim`）」——该 drawable **全仓不存在**（遮罩是代码画的 `ToolbarScrimDrawable`）；同一段里的 `applyChromeForPage()` 也**不存在**（真实方法是 `applyChrome(page)` / `applyOverlayInsets()`）。
+- **验证（真机 / Android 16 / 手势导航 / 1280×2772）**：
+  - 上划态（浅色）：照片页标题框 max **255**、纯白像素 **2894**（20.72%），同 y 背景 max 233、纯白 **0** → PASS；相册详情页标题框 max **255**、纯白 **2426**（17.37%），背景 max 233、纯白 **0** → PASS
+  - 上划态（深色，`cmd uimode night yes`）：照片页纯白 **2454**、相册详情页纯白 **2263**，背景均 0 纯白 → PASS
+  - 静止态无回归（浅色/深色 × 两页）：标题条主题底色占比 **98.2%–98.4%**，首行缩略图起始 **y=360** —— 与改前逐项一致
+  - 「相册」Tab 上划后标题条白色占比 98.4%（**不出现遮罩**，行为未变）
+  - 门禁：`:main:assembleDebug` BUILD SUCCESSFUL；单测 **16/16**；lint **0 error / 5 warning**（与基线一致，无新增）；`scripts/check-color-pairs.py` 29 色全部成对、无悬空引用
+- **未覆盖**：其它机型/ROM 的状态栏高度与 `actionBarSize` 差异、横屏；本次**只改 View 声明顺序**，未触碰渐变参数（`START_ALPHA = 0x8C` 维持本文件 2026-10-01 第 9 条的结论）。
 

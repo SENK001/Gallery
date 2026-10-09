@@ -11,9 +11,9 @@
     <!--
       pager 铺满整个窗口，toolbar / 胶囊导航作为覆盖层叠在其上——
       这样「照片」页的宫格缩略图才能画到屏幕最底边（含系统导航栏区域）。
-      「相册」页不要这个效果，由 MainActivity.applyChromeForPage() 给 root 加回
-      「状态栏 + 标题栏」内边距来还原成原来的占位式布局。
-      toolbar 使用黑色渐变遮罩（bg_toolbar_scrim），随宫格滚动淡入淡出，
+      「相册」页不要这个效果，由 AlbumsFragment 自己给列表加回「状态栏 + 标题栏」
+      内边距来还原成原来的占位式布局（MainActivity.applyChrome() 只切顶部配色）。
+      照片页上划后标题栏由代码绘制的黑色渐变遮罩接管（main-ui 的 ToolbarScrimDrawable），
       见 MainActivity.onGridScrolled()。
     -->
     <FrameLayout
@@ -74,6 +74,22 @@
         style="@style/Widget.Gallery.ChromeSurface" />
 
     <!--
+      上划时的黑色渐变遮罩（visible=gone，由 MainActivity 控制）。
+      覆盖范围是「状态栏 + 标题栏」，用代码画的 LinearGradient 填充，见 MainActivity.buildScrim()。
+
+      ⚠️ **必须声明在 toolbar 之前**：toolbar 与遮罩的 View elevation 都是 0
+      （Widget.Gallery.Toolbar 里的 elevation 是 Material 属性、不是 android:elevation），
+      FrameLayout 完全按声明顺序绘制 —— 放到 toolbar 之后就会盖住标题文字：
+      白字与白底被同一层渐变乘成同一个灰度（真机实测上划后同为 115），
+      表现就是「标题文字和背景一个颜色、分不清」。
+    -->
+    <View
+        android:id="@+id/toolbar_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <!--
       标题栏。高度用 actionBarSize，状态栏高度用 **marginTop** 让开
       （不能改 paddingTop：那会把 toolbar 撑高成 statusBar+actionBarSize，
       标题在整块里居中后就落到状态栏与内容交界处，看着像被截断——真机实测踩过）。
@@ -82,6 +98,9 @@
         · 静止 → 透出主题底色（浅色模式为白、深色模式自动变深）+ 深色标题
         · 上划 → 交给 toolbar_scrim 渐变遮罩（标题转白），缩略图从下方滚过
       不写死不透明背景，是为了深色模式能跟随主题，且上划时不会有白底残留。
+
+      **声明在 toolbar_scrim 之后**：标题才画在渐变之上（顺序颠倒就会变成"文字与背景同色"，
+      见上面遮罩那段注释）。
     -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
@@ -89,16 +108,6 @@
         android:layout_height="?attr/actionBarSize"
         app:title="@string/app_name"
         style="@style/Widget.Gallery.Toolbar" />
-
-    <!--
-      上划时的黑色渐变遮罩（visible=gone，由 MainActivity 控制）。
-      覆盖范围是「状态栏 + 标题栏」，用代码画的 LinearGradient 填充，见 MainActivity.buildScrim()。
-    -->
-    <View
-        android:id="@+id/toolbar_scrim"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:visibility="gone" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/bottom_nav"

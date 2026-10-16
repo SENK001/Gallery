@@ -76,7 +76,7 @@ class GlThumbnailGridView @JvmOverloads constructor(
      *
      * 宫格铺满全屏后，标题栏「透出」的其实是**本 surface 的底色**（透明标题栏之下就是它），
      * 因此深色模式下必须一起变深，否则标题栏区域会突兀地保持白色。
-     * 宿主应传入按主题解析后的颜色（如 `R.color.gallery_chrome_surface`）。
+     * 宿主应传入按主题解析后的颜色（如 `R.color.gallery_surface_chrome`）。
      */
     fun setSurfaceBackgroundColor(color: Int) {
         renderer.setClearColor(color)

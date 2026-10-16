@@ -133,7 +133,7 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
                 rows.add(AlbumListAdapter.Row.Header(getString(R.string.gallery_section_more)))
                 more.forEach { rows.add(AlbumListAdapter.Row.Album(it, isCommon = false)) }
             }
-            // 最近删除：暂缓功能，详见 docs/development-plan.md
+            // 最近删除：暂缓功能，详见 docs/backlog.md
             adapter?.submit(rows)
             emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
             loading = false

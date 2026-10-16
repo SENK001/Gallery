@@ -28,7 +28,7 @@ import android.graphics.drawable.Drawable
  *
  * 不屏蔽时的辅助判据：同一高度取**多个 x**、看取值是否**互不相同**——
  * 互不相同说明有图像内容透出；只取单点或完全一致（如清一色 `(116,116,116)`）
- * 不足以判断是"被压平"还是"真的空白"（此处曾误判过一次，见 docs/development-plan.md §10）。
+ * 不足以判断是"被压平"还是"真的空白"（此处曾误判过一次，见 docs/history.md 的 2026-10-01 条目）。
  *
  * 首页（`MainActivity`）与相册详情页（`AlbumDetailActivity`）共用。
  */

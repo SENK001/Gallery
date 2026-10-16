@@ -64,7 +64,7 @@
     </FrameLayout>
 
     <!--
-      状态栏底条：用主题底色 gallery_chrome_surface（深色模式下自动变深），
+      状态栏底条：用主题底色 gallery_surface_chrome（深色模式下自动变深），
       让状态栏区域与标题栏的底色一致。高度由 MainActivity 按 insets 设置。
     -->
     <View
@@ -94,7 +94,7 @@
       （不能改 paddingTop：那会把 toolbar 撑高成 statusBar+actionBarSize，
       标题在整块里居中后就落到状态栏与内容交界处，看着像被截断——真机实测踩过）。
 
-      **背景保持透明，靠父容器（@id/main）的 gallery_chrome_surface 显示**：
+      **背景保持透明，靠父容器（@id/main）的 gallery_surface_chrome 显示**：
         · 静止 → 透出主题底色（浅色模式为白、深色模式自动变深）+ 深色标题
         · 上划 → 交给 toolbar_scrim 渐变遮罩（标题转白），缩略图从下方滚过
       不写死不透明背景，是为了深色模式能跟随主题，且上划时不会有白底残留。

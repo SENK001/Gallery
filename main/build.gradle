@@ -4,7 +4,7 @@ plugins {
 
 // 百度地图 AK 与 release 签名口令都不进版本库：统一从 local.properties 读取（该文件已被 .gitignore 忽略）。
 // 未配置 AK 时注入空串，SDK 初始化会失败但应用不崩溃（地图/逆地理编码功能不可用）。
-// 未配置签名时 release 产出未签名包（产物名同为 SenkGallery-Release.apk），不影响他人 clone 后构建。
+// 未配置签名时 release 产出未签名包（产物名同为 SenkGallery-Release-<ABI>.apk），不影响他人 clone 后构建。
 // 配置方式见 docs/build-and-release.md 与 local.properties.example。
 def localProps = new Properties()
 def propsFile = rootProject.file('local.properties')
@@ -20,6 +20,18 @@ def releaseStorePassword = localProps.getProperty('RELEASE_STORE_PASSWORD', '')
 def releaseKeyAlias = localProps.getProperty('RELEASE_KEY_ALIAS', '')
 def releaseKeyPassword = localProps.getProperty('RELEASE_KEY_PASSWORD', '')
 def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
+// ABI 通过构建变体选择（flavor 维度 abi）：百度地图 SDK 自带 4 个 ABI 的 .so，
+// 单 ABI 打包 APK ≈33–40MB（视 ABI 而定），4 个 ABI 全打包 ≈90MB；
+// 模拟器调试需要 x86_64（或 x86），真机需要 arm64（或 armv7），universal 供分发/兼容用。
+// flavor 名 -> ndk.abiFilters；空列表 = 不做 ABI 过滤（全部打包）。
+def abiFlavorFilters = [
+    arm64    : ['arm64-v8a'],
+    armv7    : ['armeabi-v7a'],
+    x86      : ['x86'],
+    x86_64   : ['x86_64'],
+    universal: [],
+]
 
 android {
     namespace 'com.senk.gallery'
@@ -39,17 +51,22 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders = [baiduMapApiKey: baiduMapApiKey]
+    }
 
-        // ABI 过滤：按当前连接的设备动态决定，没插设备时退回 arm64-v8a。
-        // 原因：百度地图 SDK 自带 4 个 ABI 的 .so，全打包 APK ≈90MB、只留 arm64-v8a ≈39MB；
-        // 但 arm64-v8a 的包装不进 x86_64 模拟器，而模拟器调试很常用。
-        // 探测逻辑与全部覆盖项（-Pgallery.abiFilters / .abiAuto / .adb / .abiDeviceSerial）
-        // 见根 build.gradle 顶部注释。
-        def resolvedAbis = rootProject.galleryAbiFilters()
-        logger.lifecycle("[abi] :main abiFilters = ${resolvedAbis ?: '(未过滤，打包全部 ABI)'}")
-        ndk {
-            if (!resolvedAbis.isEmpty()) {
-                abiFilters.addAll(resolvedAbis)
+    // ABI 变体：变体名 = <flavor><BuildType>（如 arm64Debug / x86_64Release / universalRelease）。
+    // 各 flavor 的 abiFilters 见上方 abiFlavorFilters；universal 不做过滤（4 个 ABI 全打包）。
+    // 用 register 而非 create（create 在新版 API 检查中标记 @Deprecated）：元素惰性创建，
+    // AGP 枚举 flavor 时会把全部元素实例化，实测 10 变体、ABI 过滤与产物改名均正常。
+    flavorDimensions.add('abi')
+    productFlavors {
+        abiFlavorFilters.each { flavorName, filters ->
+            register(flavorName) {
+                dimension = 'abi'
+                if (!filters.isEmpty()) {
+                    ndk {
+                        abiFilters.addAll(filters)
+                    }
+                }
             }
         }
     }
@@ -86,7 +103,9 @@ android {
 }
 
 // ---------------------------------------------------------------------------
-// APK 产物改名：main-debug.apk -> SenkGallery-Debug.apk，release 同理
+// APK 产物改名：main-<flavor><BuildType>.apk -> SenkGallery-<BuildType>-<ABI>.apk
+//
+// 例：arm64Debug -> SenkGallery-Debug-arm64-v8a.apk；universalRelease -> SenkGallery-Release-universal.apk
 //
 // 用 AGP 的公开 Variant API 直接改产物名（而不是打包完再复制一份副本）：
 //
@@ -95,27 +114,26 @@ android {
 // `VariantOutput.outputFileName` 是公开的 `Property<String>`，AGP 源码里明确写着
 // "It is safe to modify it once you need custom artifact name"（@Incubating）。
 // AGP 会把这个名字一路贯彻到所有下游产物，实测同时生效的有：
-//   - outputs/apk/<variant>/SenkGallery-<Variant>.apk        （APK 本体）
-//   - outputs/apk/<variant>/output-metadata.json 的 outputFile（Studio 定位产物用）
-//   - outputs/apk/<variant>/baselineProfiles/*/SenkGallery-<Variant>.dm
-// 因此 Android Studio 的 Run/Debug 与 installDebug/installRelease 都照常工作，
+//   - outputs/apk/<flavor>/<buildType>/SenkGallery-<BuildType>-<ABI>.apk  （APK 本体）
+//   - 同目录 output-metadata.json 的 outputFile（Studio 定位产物用）
+//   - 同目录 baselineProfiles/*/SenkGallery-<BuildType>-<ABI>.dm
+// 因此 Android Studio 的 Run/Debug 与 installArm64Debug 等 install 任务都照常工作，
 // 磁盘上也不会留下 main-*.apk 这一份多余产物。
 //
 // 注意：老写法 applicationVariants.all { outputFileName = ... } 已随老 Variant API
 // 在 AGP 8 移除；这里是 8.0+ / 9.x 的现行写法。
 // ---------------------------------------------------------------------------
-// 变体名 -> 改名后的文件名。新增变体时在这里补一行即可。
-def apkDisplayNames = [
-    debug  : 'SenkGallery-Debug.apk',
-    release: 'SenkGallery-Release.apk',
-]
-
 androidComponents {
     onVariants(selector().all()) { variant ->
-        def displayName = apkDisplayNames[variant.name]
-        if (displayName == null) {
+        // 单维度（abi）工程：取 (dimension, flavorName) 对里的 flavor 名
+        def abiFlavor = variant.productFlavors.find { it.first == 'abi' }?.second
+        if (abiFlavor == null) {
             return
         }
+        def filters = abiFlavorFilters[abiFlavor]
+        // 非 universal 的 flavor 只含一个 ABI，过滤值即文件名里的 ABI 标识
+        def abiLabel = (filters == null || filters.isEmpty()) ? 'universal' : filters[0]
+        def displayName = "SenkGallery-${variant.buildType.capitalize()}-${abiLabel}.apk"
         // outputs 在 ABI/密度拆分时会有多项，而这里「一变体一个固定名」会让多项
         // 重名互相覆盖。本应用不启用任何拆分：ABI 拆分与 ndk.abiFilters 互斥
         // （AGP 直接报 Conflicting configuration），密度拆分也未启用。

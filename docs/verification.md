@@ -5,10 +5,10 @@
 ## 1. 最小门禁（每次改动）
 
 ```bash
-./gradlew :main:assembleDebug --offline            # 编译通过
+./gradlew :main:assembleArm64Debug --offline       # 编译通过（真机默认目标；全变体用 :main:assembleDebug）
 ./gradlew :core-data:testDebugUnitTest \
           :common-util:testDebugUnitTest --offline # 单元测试
-./gradlew :main:lintDebug --offline                # lint
+./gradlew :main:lintArm64Debug --offline           # lint
 python scripts/check-color-pairs.py                # 颜色成对 + 悬空引用
 ```
 
@@ -48,8 +48,9 @@ lint 的版本检查类告警（`GradleDependency` / `NewerVersionAvailable`）�
 ```bash
 ADB=$ANDROID_HOME/platform-tools/adb
 
-# 安装（产物名见 build-and-release.md）
-$ADB install -r main/build/outputs/apk/debug/SenkGallery-Debug.apk
+# 安装（产物名见 build-and-release.md；真机 arm64 / 模拟器 x86_64）
+$ADB install -r main/build/outputs/apk/arm64/debug/SenkGallery-Debug-arm64-v8a.apk
+# $ADB install -r main/build/outputs/apk/x86_64/debug/SenkGallery-Debug-x86_64.apk
 
 # 模拟首启（清空同意状态与权限）
 $ADB shell pm clear com.senk.gallery

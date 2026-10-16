@@ -28,8 +28,8 @@ Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 
 | 深色模式 | 应用主题整体已适配；**地图页除外**——百度 `TextureMapView` 底图不跟随 `uiMode`，写死的工具栏/底卡无法单独改深色（会出现「深色栏压浅色地图」），需与底图一起处理 |
 | 查看器沉浸态 | 深色底与主题正交，当前只确认了非沉浸态的主题表现 |
 | 收藏写回 | 仅验证「允许」授权路径；拒绝授权后的回退分支未单独验证 |
-| 动态 ABI | `-Pgallery.abiFilters=none` 的 4 ABI 全打包产物未实际验证；arm64 真机上「连接时自动探测」未单独复验（10-01 用断开设备验证了退回分支）；多 ABI 同时存在时的 16KB page size 对齐未验证 |
-| 构建平台 | 只在 Windows 命令行验证过（`installDebug` / `adb install`）；Android Studio 图形 Run 流程、其它操作系统、屏幕密度拆分下多 output 的命名未实测 |
+| ABI 变体 | 10 个变体均已离线段构建并核对产物名 / `lib/` 内容 / 体积（2026-10-17），但未做安装验证（改动时无设备/模拟器连接）、Android Studio Build Variants 图形流程未复验；`universal` 内多 ABI 同时存在时的 16KB page size 对齐未验证 |
+| 构建平台 | 只在 Windows 命令行验证过（`adb install`；ABI 变体改造后各 `install<变体>` 任务未复验）；Android Studio 图形 Run 流程、其它操作系统、屏幕密度拆分下多 output 的命名未实测 |
 | GL 画面 | 不在 `uiautomator` 视图树中，无自动化断言手段，只能截图逐像素判断 |
 
 ## 3. 明确不做（避免误当缺陷）

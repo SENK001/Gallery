@@ -20,19 +20,27 @@ Android 相册应用：照片宫格、相册分类、大图查看器、视频播
 要求：Android SDK **37.2**（compileSdk）、**JDK 21**（daemon 缺省自动下载）、`local.properties` 指向 SDK（Android Studio 自动生成）。minSdk / targetSdk 36，即设备需 **Android 16+**。
 
 ```bash
-./gradlew :main:assembleDebug
-adb install -r main/build/outputs/apk/debug/SenkGallery-Debug.apk
+# 真机（arm64-v8a）；模拟器换成 :main:assembleX86_64Debug，安装路径改为对应的 x86_64/debug
+./gradlew :main:assembleArm64Debug
+adb install -r main/build/outputs/apk/arm64/debug/SenkGallery-Debug-arm64-v8a.apk
 ```
 
-| 变体 | 产物 |
-|---|---|
-| debug | `main/build/outputs/apk/debug/SenkGallery-Debug.apk` |
-| release | `main/build/outputs/apk/release/SenkGallery-Release.apk`（未配置签名时同名，内容为未签名包） |
+`:main:assembleDebug` 会一次构建全部 5 个 ABI 变体（arm64 / armv7 / x86 / x86_64 / universal）。
 
-- 打包 ABI **按当前连接的设备自动决定**：无设备退回 `arm64-v8a`（debug ≈38.7MB，全打包约 90MB），x86_64 模拟器调试会自动带上 `x86_64`；可用 `-Pgallery.abiFilters` / `-Pgallery.abiAuto` 等手动覆盖。
+| 变体（各含 Debug / Release） | ABI | 产物（以 debug 为例） |
+|---|---|---|
+| `arm64` | `arm64-v8a` | `main/build/outputs/apk/arm64/debug/SenkGallery-Debug-arm64-v8a.apk` |
+| `armv7` | `armeabi-v7a` | `main/build/outputs/apk/armv7/debug/SenkGallery-Debug-armeabi-v7a.apk` |
+| `x86` | `x86` | `main/build/outputs/apk/x86/debug/SenkGallery-Debug-x86.apk` |
+| `x86_64` | `x86_64` | `main/build/outputs/apk/x86_64/debug/SenkGallery-Debug-x86_64.apk` |
+| `universal` | 4 个全打包 | `main/build/outputs/apk/universal/debug/SenkGallery-Debug-universal.apk` |
+
+release 产物同构（`<flavor>/release/SenkGallery-Release-<ABI>.apk`）；未配置签名时为未签名包，文件名不变。
+
+- 打包 ABI 由**构建变体**决定：`arm64` / `armv7` / `x86` / `x86_64` 各只打包一个 ABI（debug ≈33–40MB），`universal` 不做过滤、4 个 ABI 全打包（debug ≈90MB）。
 - 百度地图 AK 与 release 签名都从 `local.properties` 注入（模板见 [local.properties.example](local.properties.example)）：缺失时地图功能不可用 / 产出未签名包，**不影响构建与其余功能**。
 
-完整细节（工具链版本、ABI 探测分支、签名与 keytool、依赖清单）见 [构建与发布](docs/build-and-release.md)。
+完整细节（工具链版本、ABI 变体、签名与 keytool、依赖清单）见 [构建与发布](docs/build-and-release.md)。
 
 ## 文档
 
@@ -45,7 +53,7 @@ adb install -r main/build/outputs/apk/debug/SenkGallery-Debug.apk
 | [ui-guide.md](docs/ui-guide.md) | 页面结构、insets 分配、权限流程、手势与状态 |
 | [gl-rendering.md](docs/gl-rendering.md) | GL 宫格/查看器/视频的绘制、几何与异步管线 |
 | [theme.md](docs/theme.md) | 色板、styles 约定、`ThemeUtils`、颜色校验 |
-| [build-and-release.md](docs/build-and-release.md) | 工具链、动态 ABI、签名、AK、产物命名、依赖 |
+| [build-and-release.md](docs/build-and-release.md) | 工具链、ABI 变体、签名、AK、产物命名、依赖 |
 | [verification.md](docs/verification.md) | 门禁命令、通过线、真机流程、基线数据 |
 | [history.md](docs/history.md) | 日期化实测结论与缺陷根因 |
 | [backlog.md](docs/backlog.md) | 待办、验证盲区与明确不做 |

@@ -11,7 +11,7 @@
 | [ui-guide.md](ui-guide.md) | 页面结构、insets 分配、权限/隐私流程、手势与状态切换 |
 | [gl-rendering.md](gl-rendering.md) | GL 宫格/查看器/视频的几何、纹理、线程与异步管线；窗口层排查 |
 | [theme.md](theme.md) | 色板、styles 约定、`ThemeUtils`、颜色成对校验 |
-| [build-and-release.md](build-and-release.md) | 工具链、动态 ABI、签名与 AK、APK 产物命名、依赖清单 |
+| [build-and-release.md](build-and-release.md) | 工具链、ABI 变体、签名与 AK、APK 产物命名、依赖清单 |
 | [verification.md](verification.md) | 门禁命令、通过线、真机流程、GL 专项判据、本机基线数据 |
 | [history.md](history.md) | 日期化的实测结论与缺陷根因（含结论被推翻的「更正记录」） |
 | [backlog.md](backlog.md) | 未实现 / 未覆盖 / 明确不做的唯一收口 |

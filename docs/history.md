@@ -183,6 +183,8 @@ W System.err: java.lang.ClassNotFoundException:
 - **端到端（x86_64 模拟器）**：`adb install` → 首启隐私页 → 主界面 → 推入带 GPS EXIF 的测试 JPEG 并触发媒体扫描 → 宫格 → 查看器 → 详情面板。关键证据：logcat 出现 `nativeloader: Load .../lib/x86_64/libBaiduMapSDK_map_v8_2_0.so ... ok`、`[BD]buildtime: map-engine libapp_BaiduMapApplib.so`，地图卡片正常渲染（水印 + 蓝点），EXIF 中文标签显示；无崩溃。`ClassNotFoundException: BmBaseView/BmImageView` 在 x86_64 上同样出现且同样被 SDK 内部降级（非本次引入）。
 - 未覆盖项见 [backlog](backlog.md)。
 
+**更正记录（2026-10-17）**：本节机制已**整体删除**，ABI 改为 flavor 维度、由构建变体选择（见文末 2026-10-17 条目）。原因：它把「构建目标」绑在「当前插着的设备」上——多设备、无设备（CI）与 Studio 图形流程的结果都不确定，且产物名不带 ABI、分不清包里装的是哪套 so。全部 `-Pgallery.*` 覆盖项随之删除。
+
 ### 2. APK 产物改名（`SenkGallery-Debug.apk` / `SenkGallery-Release.apk`）
 
 **需求**：产物名从 AGP 默认的 `main-*.apk` 改为 `SenkGallery-*.apk`。
@@ -209,6 +211,8 @@ androidComponents { onVariants(selector().all()) { variant ->
 **ABI 拆分守卫**：固定文件名在 ABI 拆分（一个变体多个 output）时会互相覆盖；已在 `onVariants` 中仅当 `android.splits.abi.isEnable()` 且 `outputs.size() > 1` 时报错（不能对所有多 output 变体报错，否则误伤密度拆分；且 ABI 拆分与 `ndk.abiFilters` 本就互斥，该守卫在当前配置下不可达，属防御性代码）。新增变体时记得在 `apkDisplayNames` 补一行。
 
 **验证**：`clean` + `assembleDebug assembleRelease` 产物名正确、无 `main-*.apk`、`output-metadata.json` 同步；`apksigner verify` release V3.0 签名有效且证书 SHA-1 与本地 release 密钥一致；`installDebug` 与直接 `adb install` 改名后的 release 包均成功；**未配置签名的分支**（临时移走 4 项 `RELEASE_*`）仍产出 `SenkGallery-Release.apk`（内容为未签名包）且 `outputFile` 一致，恢复签名后正常；配置缓存正常复用；门禁 BUILD SUCCESSFUL、单测 16/16、lint 0 error / 7 warning（较基线少 2 条，无新增）；产物名在连续构建与 clean 重建下稳定。
+
+**更正记录（2026-10-17）**：`apkDisplayNames` 变体名查表已被 flavor 感知的通用命名取代（见文末条目）：产物名现为 `SenkGallery-<BuildType>-<ABI>.apk`，不再需要「新增变体时补一行」；改名机制（公开 Variant API、`outputFileName`、ABI 拆分守卫）本身不变。
 
 ### 3. 首页改版：照片页宫格铺满 + 滚动渐变标题栏
 
@@ -319,3 +323,41 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 「相册」Tab 上划后标题条白色占比 98.4%（不出现遮罩，行为未变）；
 - 门禁：`:main:assembleDebug` BUILD SUCCESSFUL；单测 16/16；lint 0 error / 5 warning（与基线一致）；`check-color-pairs.py` 29 色全部成对；
 - 本轮证据与工具（本机 `verification-reports/`）：`capture.sh`（可复现截图流程）、`analyze_title.py`（纯白字形像素计数）、`check_static.py`（静止态回归判据）及 before/after/dark 三组截图。
+
+---
+
+## 2026-10-17 ABI 选择改为构建变体（删除动态探测）
+
+**背景**：2026-10-01 起 ABI 由「当前连接的设备」在配置阶段动态探测（根 `build.gradle` 的 `galleryAbiFilters()` + 6 个 `-Pgallery.*` 覆盖项，见该条目及其更正记录）。它把构建目标绑在设备连接状态上：多设备/无设备/Studio 图形流程结果不确定，且产物名不带 ABI。改为把 ABI 做成 flavor 维度，由**构建变体**显式选择，产物名带上 ABI。
+
+**实现**（`main/build.gradle`；根 `build.gradle` 的动态探测模块整体删除）：
+
+- `flavorDimensions.add('abi')` + `productFlavors`；flavor 名 -> `ndk.abiFilters` 的单一事实来源是顶部 `abiFlavorFilters` 映射：
+
+| flavor | ABIs | debug 实测 | release 实测 |
+|---|---|---|---|
+| `arm64` | `arm64-v8a` | 38.69MB | 35.94MB |
+| `armv7` | `armeabi-v7a` | 33.13MB | 30.38MB |
+| `x86` | `x86` | 40.01MB | 37.25MB |
+| `x86_64` | `x86_64` | 40.32MB | 37.57MB |
+| `universal` | 不过滤（4 个全打包） | 90.49MB | 87.74MB |
+
+- 共 10 个变体，变体名 = `<flavor><BuildType>`（`arm64Debug` … `universalRelease`）；聚合任务 `assembleDebug` / `assembleRelease` 构建全部 5 个 flavor；
+- 产物改名规则改为 `SenkGallery-<BuildType>-<ABI>.apk`（如 `SenkGallery-Debug-x86_64.apk`、`SenkGallery-Release-universal.apk`），路径 `outputs/apk/<flavor>/<buildType>/`；baseline profile `.dm` 与 `output-metadata.json` 自动跟随；
+- `-Pgallery.abiFilters / .abiAuto / .adb / .abiDeviceSerial / .androidSdk` 与 `gallerySdkDir / galleryAdb / galleryExec / galleryDetectDeviceAbis` 全部删除。
+
+**Gradle/AGP 适配（对后续有效）**：
+
+1. AGP 9 公开 DSL 里 `flavorDimensions` 是 `MutableList`，用 `.add('abi')`；`ProductFlavor.dimension` 是属性，用 `dimension = 'abi'` 赋值（方法调用写法不可靠）；
+2. `ndk { abiFilters.addAll(...) }` 可正常用于 Groovy：与既有的 `compileSdk { }` 一样走「属性 + Kotlin 函数类型参数」的 DSL 调用；
+3. `variant.productFlavors` 是 `List<Pair<dimension, flavorName>>`（`ComponentIdentity` 提供），改名逻辑据此取 flavor 名，不再依赖变体名查表；
+4. flavor 名 `x86_64` 带下划线**合法**，变体/任务名原样保留（`assembleX86_64Debug`、`installX86_64Debug`）；
+5. 容器元素创建用惰性 `register(name) { ... }`、不用 `create(...)`：`create` 在新版 Gradle API 的检查中标记 `@Deprecated`；实测 AGP 枚举变体时会把惰性注册的 flavor 全部实例化（10 变体、ABI 过滤、产物改名、baseline profile 均正常）。
+
+**验证**（本机 Windows 命令行 / `--offline`；`clean` 后实测）：
+
+- 10 个变体全部构建成功（`assembleDebug` + `assembleRelease`）；逐 APK 核对产物名、`outputs/apk/<flavor>/<buildType>/` 路径与 `lib/` 内容：单 ABI flavor 各含对应 ABI 的 4 个 so，`universal` 含 4 ABI × 4 = 16 个 so；体积见上表；
+- `output-metadata.json` 的 `outputFile` 与 `baselineProfiles/*/SenkGallery-Release-<ABI>.dm` 同步改名；
+- 配置缓存复用正常（`Reusing configuration cache`，91 tasks up-to-date）；
+- 门禁：`:main:lintArm64Debug` 0 error / 5 warning（与基线一致）；`:core-data:testDebugUnitTest :common-util:testDebugUnitTest` 全绿；
+- **未做**：安装验证（改动时无设备/模拟器连接）、Studio Build Variants 图形流程复验；见 [backlog](backlog.md)。

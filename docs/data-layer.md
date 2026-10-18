@@ -16,7 +16,7 @@ ExternalMediaProvider（core-data，exported=false + 临时授权）     ← 对
 ```
 
 - UI **不直接查询 MediaStore**；但对媒体文件的解码/播放则直接使用 `MediaItem.uri`（它本身就是 `content://media/...` 的 MediaStore URI），不经过本 Provider 转发。
-- `GalleryProvider` 只读（`insert` / `delete` 抛 `UnsupportedOperationException`），唯一写操作是把「收藏」写回 MediaStore；自建相册与复制写入分别走 `CustomAlbumStore` / `MediaWriter`（见 §6）。
+- `GalleryProvider` 只读（`insert` / `delete` 抛 `UnsupportedOperationException`），唯一写操作是「收藏」——但收藏写入的是**应用内自建收藏库**（`FavoriteStore`，不修改系统媒体库）；自建相册与复制写入分别走 `CustomAlbumStore` / `MediaWriter`（见 §6）。
 
 ## 1. 包与文件
 
@@ -34,6 +34,7 @@ ExternalMediaProvider（core-data，exported=false + 临时授权）     ← 对
 | `provider/MediaWriter.kt` | 物理复制写入：把媒体复制到目标 `RELATIVE_PATH` 目录（`IS_PENDING` 流程、流式复制、重名去重） |
 | `provider/ExternalMediaProvider.kt` | 对外代理 Provider：`content://com.senk.gallery.external/media/{id}` 只读代理到 MediaStore |
 | `album/CustomAlbumStore.kt` | 自建相册持久化（SharedPreferences + 版本化 JSON；线程安全、坏数据回退） |
+| `album/FavoriteStore.kt` | **自建收藏库**持久化（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列） |
 | `entity/MediaObject.java`、`MediaItem.java`、`MediaSet.java` | 领域对象基类 / 媒体条目 / 相册集合 |
 | `pojo/*.java` | 具体型号（相册子类与数据包，见 §2） |
 
@@ -109,7 +110,7 @@ MIME（`getType`）：`media` → `vnd.android.cursor.dir/vnd.gallery.media`；`
 
 - `query` 按 `UriMatcher` 分发到 `MediaStoreFetcher` / `AlbumResolver` / `ExifFetcher`；结果统一 `setNotificationUri(CONTENT_URI)`；未知 URI 返回 `null`。
 - **`UriMatcher` 按子节点注册顺序匹配**：`albums/folder/*`、`albums/app/*`、`albums/custom/*` 必须先于通配的 `albums/*` 注册（`GalleryProvider` 已按此顺序，「具体在前、通配在后」，改动注册处时不要打乱）。
-- `update` 仅支持 `media/{id}`：从 `ContentValues` 读 `is_favorite`，经 `queryItems` 解析出 MediaStore URI 后写 `MediaStore.MediaColumns.IS_FAVORITE`，成功后 `notifyChange`。Android 12+ 的授权流程（`RecoverableSecurityException`）由调用方（查看器/多选动作）处理，见 [界面与交互](ui-guide.md)。
+- `update` 仅支持 `media/{id}`：从 `ContentValues` 读 `is_favorite`，写入应用内自建收藏库 `FavoriteStore`（**不再写 MediaStore**），成功后 `notifyChange`。查看器/多选动作因此不需要 `RecoverableSecurityException` 系统授权流程（2026-10-19 变更）。
 - `insert` / `delete` 一律抛 `UnsupportedOperationException`；`call()` 未实现。写入路径见 §6。
 
 ### 3.4 变更通知与数据刷新
@@ -168,7 +169,7 @@ MediaStore.Files(外置卷) 变化
 | `screenshot` | 截屏 | 图片且路径 `Pictures/Screenshots/`、`DCIM/Screenshots/`、`Pictures/截图/`、`DCIM/截图/`，或文件名 `Screenshot_%`、`Screenshot-%`、`截屏%`、`屏幕截图%` |
 | `screen_record` | 录屏 | 视频且路径 `DCIM/ScreenRecorder/`、`Movies/ScreenRecorder/`、`DCIM/Screen recordings/`、`Movies/Screen recordings/`、`Pictures/ScreenRecordings/`、`DCIM/录屏/`，或文件名 `Screenrecorder%`、`ScreenRecord%`、`Screen recording%`、`录屏%`、`屏幕录制%` |
 | `live` | 动态照片 | XMP `LIKE '%MotionPhoto%'` 或 `'%MicroVideo%'` |
-| `favorite` | 收藏 | `is_favorite = 1` |
+| `favorite` | 收藏 | **应用内自建收藏库**（`FavoriteStore` 的成员；不再读 MediaStore `is_favorite`） |
 | `panorama` | 全景 | XMP `LIKE '%GPano:%'`，或尺寸兜底 `width >= 6000 AND width >= height * 3` |
 
 ### 5.2 我的相册（`category=custom`）
@@ -192,6 +193,7 @@ MediaStore.Files(外置卷) 变化
 | `folder` | `bucket_id = ?` |
 | `third_party` | 先做同样的桶分组取该包的桶集合，`bucket_id IN (…)`；桶集合为空时回退 `owner_package = ?` |
 | `custom` | 按 store 加入顺序的 id 集合（见 §5.2） |
+| `favorite` | 按 `FavoriteStore` 的 id 集合查 MediaStore，按拍摄时间倒序分页（id 超过 900 时退化为全量取回后内存分页） |
 | 常用类型 | 直接使用 §5.1 表的筛选串；未知类型回退为「全部」 |
 
 分页参数与 `media` 一致；结果行为 `Columns.ALL`。
@@ -202,7 +204,7 @@ MediaStore.Files(外置卷) 变化
 - 三方/目录/自建相册的 `bucket_id` / `owner_package` / `relative_path` 分别填充，常用相册该三列为空。
 - `AlbumResolver.albumItemsUri(type, bucketId, packageName)` 帮助调用方选择 `folder/…`、`app/…`、`custom/…` 或普通路径。
 
-## 6. 自建相册与写入
+## 6. 应用内数据与写入（自建相册 / 收藏 / 复制）
 
 ### 6.1 CustomAlbumStore（自建相册，逻辑集合）
 
@@ -213,7 +215,17 @@ MediaStore.Files(外置卷) 变化
 - 名称规则：trim 后 1–40 字符、拒绝 ISO 控制字符、忽略大小写重名；非法/重名 `create` 返回 `null`。
 - 已知限制：成员是逻辑 id，系统删除照片后 store 不主动清除（相册内容查询会跳过已删除 id，但 `item_count` 可能偏大）；重命名/封面/相册内移除的 UI 暂未提供（store API 已具备）。
 
-### 6.2 MediaWriter（物理复制）
+### 6.2 FavoriteStore（自建收藏库）
+
+- 位置：`core-data/.../album/FavoriteStore.kt`；SharedPreferences 文件 `gallery_favorites`，版本化 JSON：`{"version":1,"ids":[…媒体 id…]}`。
+- 语义：收藏是**应用私有数据**，不复制文件、**不修改系统媒体库的 `is_favorite`**。
+  - 背景：写回系统媒体库需要用户逐次系统授权（Android 12+ `RecoverableSecurityException`），批量收藏体验差且部分场景直接失败（2026-10-19 用户反馈「多选收藏提示失败」）。
+  - 读取：Provider 每次媒体查询取一次 `ids()` 快照，用其覆盖 `is_favorite` 列；「收藏」相册的列表/内容/封面都由本库计算（见 §5.1、§5.4）。
+  - 写入：`Provider.update(media/{id}, is_favorite)` → `FavoriteStore.setFavorite(id, favorite)` → `notifyChange`；多选收藏 = 逐条 update。
+- 线程安全：单锁 + 内存缓存（进程内唯一写入口），坏 JSON 回退空集合不崩溃。
+- 已知限制：收藏只在本应用内生效（系统相册/其它应用看不到）；旧版本写入 MediaStore 的收藏标记**不做迁移/导入**，也不再作为数据源；成员不主动 prune（媒体被删除后仍计入 `item_count`，内容查询会跳过）。
+
+### 6.3 MediaWriter（物理复制）
 
 - 位置：`core-data/.../provider/MediaWriter.kt`；`suspend copyToFolder(resolver, mediaIds, relativePath, onProgress): CopyResult`。
 - 流程：按源 mime 选 `Images`/`Video` 集合 → `insert(DISPLAY_NAME, MIME_TYPE, RELATIVE_PATH, IS_PENDING=1, DATE_TAKEN)` → 64KB 缓冲流式复制（循环内检查协程取消）→ `update(IS_PENDING=0)` 发布。
@@ -260,3 +272,4 @@ MediaStore.Files(外置卷) 变化
 - `MediaItem.exif` 是死字段：`ExifFetcher` 不回填它，也没有任何写入方；EXIF 只在详情页按需单查。
 - XMP 无文件回退（§8）；缩略图/EXIF 均无磁盘缓存。
 - 自建相册成员不主动 prune（§6.1 已知限制）；复制写入是尽力去重（并发写入/provider 规范化差异下仍可能被系统改名）。
+- 收藏是应用内自建库（§6.2）：系统相册不显示本应用收藏，旧系统收藏标记不导入；卸载/清除数据后收藏记录丢失。

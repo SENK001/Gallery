@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import com.senk.gallery.data.album.FavoriteStore
 
 class GalleryProvider : ContentProvider() {
 
@@ -55,16 +56,21 @@ class GalleryProvider : ContentProvider() {
         return cursor
     }
 
-    private fun queryInternal(uri: Uri, resolver: android.content.ContentResolver): Cursor? =
-        when (MATCHER.match(uri)) {
+    private fun queryInternal(uri: Uri, resolver: android.content.ContentResolver): Cursor? {
+        // 收藏是应用内自建库（FavoriteStore），查询时覆盖 MediaStore 的系统 is_favorite 列。
+        // 一次查询内只取一次快照；EXIF 查询用不到，但读取成本很低（内存缓存）。
+        val favoriteIds = FavoriteStore.get(context!!).ids()
+        return when (MATCHER.match(uri)) {
             CODE_MEDIA_DIR -> MediaStoreFetcher.queryMedia(
                 resolver,
                 limitOf(uri),
                 offsetOf(uri),
+                favoriteIds,
             )
             CODE_MEDIA_ITEM -> MediaStoreFetcher.queryMediaById(
                 resolver,
                 uri.pathSegments[1].toLong(),
+                favoriteIds,
             )
             CODE_MEDIA_EXIF -> ExifFetcher.queryExif(
                 resolver,
@@ -84,6 +90,7 @@ class GalleryProvider : ContentProvider() {
                 null,
                 limitOf(uri),
                 offsetOf(uri),
+                favoriteIds,
             )
             CODE_FOLDER_ITEMS -> AlbumResolver.queryAlbumItems(
                 context!!,
@@ -93,6 +100,7 @@ class GalleryProvider : ContentProvider() {
                 null,
                 limitOf(uri),
                 offsetOf(uri),
+                favoriteIds,
             )
             CODE_APP_ITEMS -> AlbumResolver.queryAlbumItems(
                 context!!,
@@ -102,6 +110,7 @@ class GalleryProvider : ContentProvider() {
                 Uri.decode(uri.pathSegments[2]),
                 limitOf(uri),
                 offsetOf(uri),
+                favoriteIds,
             )
             CODE_CUSTOM_ITEMS -> AlbumResolver.queryAlbumItems(
                 context!!,
@@ -111,10 +120,18 @@ class GalleryProvider : ContentProvider() {
                 null,
                 limitOf(uri),
                 offsetOf(uri),
+                favoriteIds,
             )
             else -> null
         }
+    }
 
+    /**
+     * 唯一写操作：收藏状态。
+     *
+     * **不再写系统媒体库**（避免 `RecoverableSecurityException` + 系统授权弹窗），改为写应用内
+     * 自建收藏库 [FavoriteStore]；写入后通知根 URI，收藏相册/查看器会刷新。
+     */
     override fun update(
         uri: Uri,
         values: ContentValues?,
@@ -124,23 +141,16 @@ class GalleryProvider : ContentProvider() {
         if (MATCHER.match(uri) != CODE_MEDIA_ITEM) {
             return 0
         }
-        val resolver = context?.contentResolver ?: return 0
-        val id = uri.pathSegments[1].toLong()
+        val ctx = context ?: return 0
+        val id = uri.pathSegments[1].toLongOrNull() ?: return 0
         val favorite = values?.getAsInteger(GalleryContract.Columns.FAVORITE) ?: return 0
-        val mediaUri = MediaStoreFetcher.queryItems(
-            resolver,
-            "${MediaStore.MediaColumns._ID} = ?",
-            arrayOf(id.toString()),
-            limit = 1,
-        ).firstOrNull()?.uri ?: return 0
-        val updateValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.IS_FAVORITE, favorite)
+        val changed = FavoriteStore.get(ctx).setFavorite(id, favorite == 1)
+        if (changed) {
+            ctx.contentResolver.notifyChange(GalleryContract.CONTENT_URI, null)
         }
-        val count = resolver.update(mediaUri, updateValues, null, null)
-        if (count > 0) {
-            resolver.notifyChange(GalleryContract.CONTENT_URI, null)
-        }
-        return count
+        // 与 ContentResolver.update 语义一致：返回受影响条目数（状态未变化时也可视为 1 条已确认）；
+        // 这里只在真正变化时返回 1，调用方不需要据此做额外处理。
+        return if (changed) 1 else 0
     }
 
     override fun getType(uri: Uri): String? = when (MATCHER.match(uri)) {

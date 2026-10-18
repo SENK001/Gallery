@@ -395,3 +395,27 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 深色模式抽查：照片页/多选/相册页/选图页/添加到底色与文字正常（截图见本机 `verification-reports/`）；
 - 无障碍：`uiautomator dump` 中每格含 `content-desc`（照片/视频+时间+选中态），多选态 `checkable=true`、选中格 `checked=true`；
 - 崩溃：`adb logcat -d -b crash` 无 `com.senk.gallery`。
+
+---
+
+## 2026-10-19 收藏改为应用内自建库（不再修改系统媒体库）
+
+**背景（用户反馈）**：多选模式下点「收藏」提示「收藏失败」。原实现把 `is_favorite` 写回系统媒体库：Android 12+ 需要用户逐次通过系统弹窗授权（`RecoverableSecurityException` + `MediaStore.createFavoriteRequest`），批量收藏时体验差，部分 ROM/媒体库状态下会直接失败；且本应用此前已把「删除」改为系统授权路径，收藏是最后一个依赖系统写权限的动作。产品决定：**收藏改用自建库，不再修改媒体库**。
+
+**实现**：
+
+- 新增 `core-data/album/FavoriteStore`（SharedPreferences `gallery_favorites` + 版本化 JSON）：只保存媒体 id，应用私有、不复制文件；单锁 + 内存缓存；坏 JSON 回退空集合。
+- `GalleryProvider`：
+  - 查询：每次媒体查询取一次 `FavoriteStore.ids()` 快照，经 `MediaStoreFetcher.readItem(cursor, favoriteIds)` **覆盖** `is_favorite` 列（覆盖点只有这一处，`/media`、`/media/{id}`、各相册内容查询统一生效）。
+  - 写入：`update(media/{id}, is_favorite)` 写 `FavoriteStore`（不再 `resolver.update(MediaStore…IS_FAVORITE)`），变化时 `notifyChange`。
+- `AlbumResolver`：「收藏」常用相册的计数/封面/内容改由 `FavoriteStore` 计算（收藏内容按拍摄时间倒序分页；id 数量 ≤900 直接 `_id IN` 查询，超出则全量取回内存分页）；其它相册内容查询把 `favoriteIds` 透传给 `MediaStoreFetcher` 以正确显示爱心状态。
+- UI：`SelectionActions.favorite` 改为逐条 `update` 本地 Provider（无系统授权回调）；`ViewerActivity` 删除 `RecoverableSecurityException`/`REQUEST_FAVORITE`/`onActivityResult` 授权链路，直接写本地；照片页/相册详情页移除收藏授权 `ActivityResultLauncher`。
+- 文档：data-layer 新增 §6.2、ui-guide 12.4、architecture/backlog/verification 同步；「收藏不同步系统媒体库、旧系统收藏标记不导入」列入 backlog「明确不做」。
+
+**真机验证（Redmi / Android 16）**：
+
+- 多选 1 张 → 收藏：无系统授权弹窗，Toast「已收藏 1 项」，自动退出多选；相册页出现「收藏 1 项」→ 打开只有该张；查看器爱心为实心 → 点按取消收藏（同样无弹窗）→ 返回相册页「收藏」相册消失；
+- 收藏状态由 Provider 覆盖后，照片页/相册页/查看器三处一致；
+- 崩溃：`adb logcat -d -b crash` 无记录；门禁：构建 + 单测 23/23 + lint 0 error/3 warning + 颜色校验通过。
+
+**遗留（有意/已记录）**：收藏仅应用内可见（系统相册不显示）；旧版本写入 MediaStore 的收藏标记不做迁移；收藏库随应用数据清除而丢失（见 [backlog](backlog.md)）。

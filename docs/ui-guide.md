@@ -120,8 +120,8 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 进入方式：标题栏「多选」按钮，或长按格子（进入时选中该格）。退出：关闭图标、返回键、或用户把已选取消到 0 项（自动退出）。
 - 底部动作栏 `view_selection_action_bar.xml`（分享/收藏/添加到/删除，图标+中文，深色模式跟随主题）：
   - **分享**：单张 `ACTION_SEND`、多张 `ACTION_SEND_MULTIPLE` + `ClipData` + `FLAG_GRANT_READ_URI_PERMISSION`。
-  - **收藏**：逐条写回 Provider（`is_favorite`）；遇 `RecoverableSecurityException` 用 `MediaStore.createFavoriteRequest` 走系统授权，授权后重试。
-  - **添加到**：启动 `AddToAlbumActivity`（见 §7），返回 `RESULT_OK` 后退出多选。
+  - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
+  - **添加到**：启动 `AddToAlbumActivity`（见 §11），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
 - 「全选」只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。
 - 多选时宫格底部预留切换为动作栏高度，避免最后一行被动作栏遮挡。
@@ -196,7 +196,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 ### 12.2 顶栏 / 底栏
 
 - 内部模式顶栏：标题 = 拍摄时间（`DateFormats.formatDateTime`），副标题 =「当前张 / 总数」（`gallery_position_format`，如 `3 / 223`）。
-- 底栏三个按钮：分享（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`，`createChooser`）、收藏（写回 MediaStore，见 12.4）、详情（打开面板）。
+- 底栏三个按钮：分享（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`，`createChooser`）、收藏（写入应用内自建收藏库，见 12.4）、详情（打开面板）。
 
 ### 12.3 沉浸模式与手势
 
@@ -204,15 +204,16 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 查看器内部手势：双击缩放（2.5× / 复位）、双指缩放（1×–5×）、放大态拖动平移、非放大时横滑翻页、上划拉起详情面板；单击落在视频页播放图标内 → 进播放器，否则切换沉浸。
 - 动态照片：长按播放内嵌视频、松手/翻页/退后台停止。
 
-### 12.4 收藏写回
+### 12.4 收藏（应用内自建库）
 
 ```
 点收藏 → contentResolver.update(mediaUri(id), is_favorite)
-   ├─ 正常返回：本地 item.isFavorite 改写 + 图标刷新
-   └─ 抛 RecoverableSecurityException（Android 12+ 需用户授权）
-        → startIntentSenderForResult(e.userAction.actionIntent.intentSender, REQUEST_FAVORITE)
-        → onActivityResult(RESULT_OK) 再写一次，成功后刷新
+   → GalleryProvider.update → FavoriteStore.setFavorite(id, favorite) → notifyChange(根 URI)
+   → 本地 item.isFavorite 改写 + 爱心图标刷新；收藏相册/列表随根 URI 通知刷新
 ```
+
+- 收藏**不再写系统媒体库**、也不再走 `RecoverableSecurityException` 系统授权弹窗（2026-10-19 起）：此前批量收藏需要用户逐次授权、部分设备直接失败。
+- 收藏数据只保存在本应用（`FavoriteStore`）；系统相册/其它应用看不到本应用的收藏，旧版本写进 MediaStore 的收藏标记不导入。
 
 ### 12.5 详情面板（`details_sheet`）
 
@@ -264,4 +265,4 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 视频播放无音频焦点管理；播放结束停在结尾画面，不自动重播。
 - 详情面板的地图地址、EXIF 均为进入面板时单次加载，翻页后自动重取（有 token 防错页）。
 - 外部大图模式不提供收藏/详情，只做浏览、分享与视频播放；`file://` 受 Android 7+ 跨应用限制。
-- 多选「全选」只覆盖已加载的条目；「添加到相机/文件夹相册」是复制（会产生重复文件），自建相册是逻辑集合（不复制）。
+- 收藏保存在应用内自建库：系统相册不显示、旧系统收藏不导入、卸载/清数据后丢失；多选「全选」只覆盖已加载的条目；「添加到相机/文件夹相册」是复制（会产生重复文件），自建相册是逻辑集合（不复制）。

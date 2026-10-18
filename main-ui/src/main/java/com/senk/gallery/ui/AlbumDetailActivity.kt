@@ -72,17 +72,12 @@ class AlbumDetailActivity : AppCompatActivity() {
     /** 上一次回调的选中数量：用于「用户取消最后一项时自动退出多选」。 */
     private var lastSelectionCount = 0
 
-    // ActivityResult（授权弹窗 / 添加到相册）统一在这里注册，再转给 SelectionActions
+    // ActivityResult（删除授权 / 添加到相册）统一在这里注册，再转给 SelectionActions；
+    // 收藏已改为应用内自建库（不写系统媒体库），无需系统授权。
     private val trashConsentLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
         actions?.onTrashConsentResult(result.resultCode == Activity.RESULT_OK)
-    }
-
-    private val favoriteConsentLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult(),
-    ) { result ->
-        actions?.onFavoriteConsentResult(result.resultCode == Activity.RESULT_OK)
     }
 
     private val addToAlbumLauncher = registerForActivityResult(
@@ -185,9 +180,6 @@ class AlbumDetailActivity : AppCompatActivity() {
         ).apply {
             launchTrashConsent = { sender ->
                 trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
-            }
-            launchFavoriteConsent = { sender ->
-                favoriteConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
             launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
         }

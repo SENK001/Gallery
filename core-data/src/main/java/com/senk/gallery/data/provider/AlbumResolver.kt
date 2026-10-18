@@ -7,6 +7,7 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.provider.MediaStore
 import com.senk.gallery.data.album.CustomAlbumStore
+import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.pojo.AllItemAlbum
@@ -120,10 +121,12 @@ object AlbumResolver {
                 "${MediaStore.MediaColumns.XMP} LIKE '%MicroVideo%')",
         ),
         AlbumSpec(
+            // 注意：收藏是**应用内自建库**（FavoriteStore），此 selection 仅为占位——
+            // 列表与内容查询都走 FavoriteStore（见 queryCommonAlbums / queryAlbumItems），
+            // 不会再读/写 MediaStore 的 is_favorite。
             MediaSet.TYPE_FAVORITE,
             "收藏",
-            "(${MediaStoreFetcher.BASE_SELECTION}) AND " +
-                "(${MediaStore.MediaColumns.IS_FAVORITE} = 1)",
+            MediaStoreFetcher.BASE_SELECTION,
         ),
         AlbumSpec(
             MediaSet.TYPE_PANORAMA,
@@ -194,7 +197,20 @@ object AlbumResolver {
 
     private fun queryCommonAlbums(context: Context, resolver: ContentResolver): List<MediaSet> {
         val albums = ArrayList<MediaSet>()
+        val favoriteIds = FavoriteStore.get(context).ids()
         COMMON_SPECS.forEach { spec ->
+            if (spec.type == MediaSet.TYPE_FAVORITE) {
+                // 收藏相册来自应用内收藏库：空收藏不显示（与其它常用相册的隐藏规则一致）
+                if (favoriteIds.isEmpty()) {
+                    return@forEach
+                }
+                val album = albumOf(spec.type)
+                album.name = spec.name
+                album.count = favoriteIds.size
+                album.coverUri = latestItemOfIds(resolver, favoriteIds)?.uri?.toString()
+                albums.add(album)
+                return@forEach
+            }
             val count = MediaStoreFetcher.count(resolver, spec.selection, null)
             if (count <= 0) {
                 return@forEach
@@ -207,6 +223,15 @@ object AlbumResolver {
             albums.add(album)
         }
         return albums
+    }
+
+    /** 一组 id 里拍摄时间最新的一条（收藏相册封面；只查前 900 个 id）。 */
+    private fun latestItemOfIds(resolver: ContentResolver, ids: Set<Long>): MediaItem? {
+        val idList = ids.take(ID_CHUNK_SIZE)
+        if (idList.isEmpty()) {
+            return null
+        }
+        return queryItemsByIds(resolver, idList).values.maxByOrNull { it.dateTaken }
     }
 
     /**
@@ -279,9 +304,20 @@ object AlbumResolver {
         packageName: String?,
         limit: Int,
         offset: Int,
+        favoriteIds: Set<Long>,
     ): Cursor {
         if (albumType == MediaSet.TYPE_CUSTOM) {
-            return queryCustomAlbumItems(context, resolver, bucketId.orEmpty(), limit, offset)
+            return queryCustomAlbumItems(
+                context,
+                resolver,
+                bucketId.orEmpty(),
+                limit,
+                offset,
+                favoriteIds,
+            )
+        }
+        if (albumType == MediaSet.TYPE_FAVORITE) {
+            return queryFavoriteAlbumItems(resolver, favoriteIds, limit, offset)
         }
         val selection: String?
         val selectionArgs: Array<String>?
@@ -314,7 +350,55 @@ object AlbumResolver {
                 selectionArgs = null
             }
         }
-        return MediaStoreFetcher.queryItemsCursor(resolver, selection, selectionArgs, limit, offset)
+        return MediaStoreFetcher.queryItemsCursor(
+            resolver,
+            selection,
+            selectionArgs,
+            limit,
+            offset,
+            favoriteIds,
+        )
+    }
+
+    /**
+     * 收藏相册内容：成员来自应用内收藏库（按拍摄时间倒序），不读 MediaStore 的 is_favorite。
+     *
+     * 收藏数量通常不大，按 id 集合直接交给 MediaStore 排序分页；超过 `IN (...)` 变量上限时
+     * 退化为「全量取回 → 内存排序 → 切片」。
+     */
+    private fun queryFavoriteAlbumItems(
+        resolver: ContentResolver,
+        favoriteIds: Set<Long>,
+        limit: Int,
+        offset: Int,
+    ): Cursor {
+        if (favoriteIds.isEmpty()) {
+            return MediaStoreFetcher.itemsCursor(emptyList())
+        }
+        val safeOffset = offset.coerceAtLeast(0)
+        val idList = favoriteIds.toList()
+        if (idList.size <= ID_CHUNK_SIZE) {
+            val placeholders = idList.joinToString(", ") { "?" }
+            val selection = "(${MediaStoreFetcher.BASE_SELECTION}) AND " +
+                "(${MediaStore.MediaColumns._ID} IN ($placeholders))"
+            return MediaStoreFetcher.queryItemsCursor(
+                resolver,
+                selection,
+                idList.map { it.toString() }.toTypedArray(),
+                limit,
+                safeOffset,
+                favoriteIds,
+            )
+        }
+        val items = queryItemsByIds(resolver, idList, favoriteIds)
+            .values
+            .sortedByDescending { it.dateTaken }
+        val page = if (limit <= 0) {
+            items.drop(safeOffset)
+        } else {
+            items.drop(safeOffset).take(limit)
+        }
+        return MediaStoreFetcher.itemsCursor(page)
     }
 
     /**
@@ -330,6 +414,7 @@ object AlbumResolver {
         albumId: String,
         limit: Int,
         offset: Int,
+        favoriteIds: Set<Long>,
     ): Cursor {
         if (albumId.isEmpty()) {
             return MediaStoreFetcher.itemsCursor(emptyList())
@@ -345,7 +430,7 @@ object AlbumResolver {
         if (pageIds.isEmpty()) {
             return MediaStoreFetcher.itemsCursor(emptyList())
         }
-        val byId = queryItemsByIds(resolver, pageIds)
+        val byId = queryItemsByIds(resolver, pageIds, favoriteIds)
         val ordered = pageIds.mapNotNull { byId[it] }
         return MediaStoreFetcher.itemsCursor(ordered)
     }
@@ -354,6 +439,7 @@ object AlbumResolver {
     private fun queryItemsByIds(
         resolver: ContentResolver,
         ids: List<Long>,
+        favoriteIds: Set<Long>? = null,
     ): Map<Long, MediaItem> {
         val items = HashMap<Long, MediaItem>(ids.size)
         ids.distinct().chunked(ID_CHUNK_SIZE).forEach { chunk ->
@@ -366,6 +452,7 @@ object AlbumResolver {
                 chunk.map { it.toString() }.toTypedArray(),
                 // 顺序由调用方按加入顺序重排，这里仅取一个合法排序列（Provider 要求非空）
                 sortOrder = MediaStore.MediaColumns._ID,
+                favoriteIds = favoriteIds,
             ).forEach { item -> items[item.id] = item }
         }
         return items

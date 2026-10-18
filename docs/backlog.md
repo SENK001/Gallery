@@ -19,7 +19,7 @@
 | **搜索 / 编辑** | 产品功能扩展（多选分享已实现，见 §3） | — |
 | **隐私政策正式文案** | 当前是应用内固定文案；上架前需替换为真实生效的政策文本/链接 | 合规阻塞项 |
 
-Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 未实现，是「只读查询 + 收藏写回」的**有意设计**；自建相册与复制写入走 `CustomAlbumStore` / `MediaWriter`（见 [数据层 §6](data-layer.md)）。
+Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 未实现，是「只读查询 + 收藏（应用内自建库）」的**有意设计**；自建相册/收藏/复制写入分别走 `CustomAlbumStore` / `FavoriteStore` / `MediaWriter`（见 [数据层 §6](data-layer.md)）。
 
 ## 2. 工程与验证盲区（勿当作通过）
 
@@ -29,7 +29,7 @@ Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 
 | 设备覆盖 | 仅 Redmi / Android 16 真机（1280×2772）+ Android 16 x86_64 模拟器；第二台 ROM、平板/折叠屏、`fontScale > 1`、横屏未验证 |
 | 深色模式 | 应用主题整体已适配（含宫格/多选/选图/添加到，2026-10-19 真机截图抽查）；**地图页除外**——百度 `TextureMapView` 底图不跟随 `uiMode`，写死的工具栏/底卡无法单独改深色 |
 | 查看器沉浸态 | 深色底与主题正交，当前只确认了非沉浸态的主题表现 |
-| 收藏写回 | 查看器单张路径（含系统授权弹窗）已验证；多选批量收藏只验证到"系统授权弹窗出现/写入成功"路径，拒绝授权后的回退分支未单独验证 |
+| 收藏（自建库） | 已真机验证：多选批量收藏/取消、查看器爱心联动、收藏相册出现/消失；系统媒体库 `is_favorite` 不再写入（有意，见 §3）；旧版本写入系统媒体库的收藏标记**未迁移/导入** |
 | ABI 变体 | 10 个变体均已离线段构建并核对产物名 / `lib/` 内容 / 体积（2026-10-17），但未做安装验证、Studio Build Variants 图形流程未复验；`universal` 内多 ABI 同时存在时的 16KB page size 对齐未验证 |
 | 构建平台 | 只在 Windows 命令行验证过（`adb install`；ABI 变体改造后各 `install<变体>` 任务未复验）；Android Studio 图形 Run 流程、其它操作系统、屏幕密度拆分下多 output 的命名未实测 |
 | GL 画面 | 查看器/视频不在 `uiautomator` 视图树中，无自动化断言手段，只能截图逐像素判断；**缩略图宫格已改为 View，可以出现在视图树里** |
@@ -44,5 +44,6 @@ Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 
 | 查看器/详情面板展示经纬度 | 产品选择：与系统相册一致，只给地址 |
 | 用 View/RecyclerView 重写**查看器/视频** | 这两处 GL 自绘是既定架构（缩略图宫格已于 2026-10-19 改为 View），见 [GL 自绘渲染](gl-rendering.md) |
 | 地图卡片内嵌大图/街景等 BmSDK 能力 | Maven 版 SDK 缺 `BmBaseView`/`BmImageView` 等类（初始化时 SDK 内部捕获降级），当前功能用不到；如启用需先评估 `NoClassDefFoundError` |
-| 外部大图模式的收藏/详情 | 外部 URI 不属于本应用媒体库（无 MediaStore id），EXIF/地图/收藏写回都依赖媒体库 id；只做浏览/分享/视频播放 |
+| 外部大图模式的收藏/详情 | 外部 URI 不属于本应用媒体库（无 MediaStore id），EXIF/地图/收藏（需本应用媒体库 id）都不可用；只做浏览/分享/视频播放 |
 | 自建相册复制文件 | 产品选择：自建相册是应用内逻辑集合（不产生重复文件）；需要"物理落盘"时用「添加到相机/文件夹相册」 |
+| 收藏同步到系统媒体库 | 收藏是应用内自建库（`FavoriteStore`）：不写 `IS_FAVORITE`、系统相册/其它应用看不到本应用收藏；旧系统收藏标记不导入。原因：写回系统媒体库需要逐次系统授权（Android 12+），批量收藏体验差且曾出现失败（2026-10-19 用户反馈后改为自建库） |

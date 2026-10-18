@@ -91,7 +91,18 @@ object MediaStoreFetcher {
             }
     }
 
-    fun queryMedia(resolver: ContentResolver, limit: Int, offset: Int): Cursor {
+    /**
+     * 分页查询全量媒体。
+     *
+     * @param favoriteIds 非 null 时用**应用内自建收藏库**覆盖 `is_favorite` 列（MediaStore 的
+     *   系统收藏位不再作为数据源）；null 表示按系统媒体库原值读取（内部封面等场景用不到）。
+     */
+    fun queryMedia(
+        resolver: ContentResolver,
+        limit: Int,
+        offset: Int,
+        favoriteIds: Set<Long>? = null,
+    ): Cursor {
         val cursor = resolver.query(
             COLLECTION,
             QUERY_PROJECTION,
@@ -101,13 +112,17 @@ object MediaStoreFetcher {
         val result = MatrixCursor(GalleryContract.Columns.ALL)
         cursor?.use {
             while (it.moveToNext()) {
-                result.addRow(rowOf(readItem(it)))
+                result.addRow(rowOf(readItem(it, favoriteIds)))
             }
         }
         return result
     }
 
-    fun queryMediaById(resolver: ContentResolver, id: Long): Cursor {
+    fun queryMediaById(
+        resolver: ContentResolver,
+        id: Long,
+        favoriteIds: Set<Long>? = null,
+    ): Cursor {
         val cursor = resolver.query(
             COLLECTION,
             QUERY_PROJECTION,
@@ -121,7 +136,7 @@ object MediaStoreFetcher {
         val result = MatrixCursor(GalleryContract.Columns.ALL)
         cursor?.use {
             if (it.moveToNext()) {
-                result.addRow(rowOf(readItem(it)))
+                result.addRow(rowOf(readItem(it, favoriteIds)))
             }
         }
         return result
@@ -134,6 +149,7 @@ object MediaStoreFetcher {
         sortOrder: String = SORT_DATE_DESC,
         limit: Int = 0,
         offset: Int = 0,
+        favoriteIds: Set<Long>? = null,
     ): List<MediaItem> {
         val items = ArrayList<MediaItem>()
         resolver.query(
@@ -143,7 +159,7 @@ object MediaStoreFetcher {
             null,
         )?.use { cursor ->
             while (cursor.moveToNext()) {
-                items.add(readItem(cursor))
+                items.add(readItem(cursor, favoriteIds))
             }
         }
         return items
@@ -155,8 +171,17 @@ object MediaStoreFetcher {
         selectionArgs: Array<String>?,
         limit: Int,
         offset: Int,
+        favoriteIds: Set<Long>? = null,
     ): Cursor {
-        val items = queryItems(resolver, selection, selectionArgs, SORT_DATE_DESC, limit, offset)
+        val items = queryItems(
+            resolver,
+            selection,
+            selectionArgs,
+            SORT_DATE_DESC,
+            limit,
+            offset,
+            favoriteIds,
+        )
         return itemsCursor(items)
     }
 
@@ -246,7 +271,12 @@ object MediaStoreFetcher {
         return result
     }
 
-    fun readItem(cursor: Cursor): MediaItem {
+    /**
+     * 从 MediaStore 游标读出一条媒体。
+     *
+     * @param favoriteIds 非 null 时用应用内收藏库覆盖 `is_favorite`（自建收藏为唯一事实来源）。
+     */
+    fun readItem(cursor: Cursor, favoriteIds: Set<Long>? = null): MediaItem {
         val item = MediaItem()
         val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
         val type = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE))
@@ -264,7 +294,8 @@ object MediaStoreFetcher {
         item.height = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT))
         item.duration = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION))
         item.orientation = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.ORIENTATION))
-        item.isFavorite = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.IS_FAVORITE)) == 1
+        item.isFavorite = favoriteIds?.contains(id)
+            ?: (cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.IS_FAVORITE)) == 1)
         item.isTrashed = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.IS_TRASHED)) == 1
         item.isPending = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.IS_PENDING)) == 1
         item.bucketId = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID))

@@ -3,7 +3,6 @@ package com.senk.gallery.ui
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
-import android.app.RecoverableSecurityException
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -66,8 +65,6 @@ class ViewerActivity : AppCompatActivity() {
     private var endReached = false
     private var immersive = false
     private var currentItem: MediaItem? = null
-    private var pendingFavoriteItem: MediaItem? = null
-    private var pendingFavoriteValue = 0
     private var addressResolver: LocationAddressResolver? = null
     private var sheetMapView: TextureMapView? = null
     private var sheetHeight = 0
@@ -515,16 +512,22 @@ class ViewerActivity : AppCompatActivity() {
             return
         }
         val newValue = if (item.isFavorite) 0 else 1
-        if (updateFavorite(item, newValue)) {
+        if (updateFavorite(item.id, newValue)) {
             item.isFavorite = newValue == 1
             updatePageUi()
         }
     }
 
-    private fun updateFavorite(item: MediaItem, newValue: Int): Boolean {
+    /**
+     * 写回收藏状态。
+     *
+     * 收藏保存在**应用内自建库**（Provider → `FavoriteStore`），不再写系统媒体库，
+     * 因此不会抛 `RecoverableSecurityException`、也不需要系统授权弹窗。
+     */
+    private fun updateFavorite(id: Long, newValue: Int): Boolean {
         return try {
             contentResolver.update(
-                GalleryContract.mediaUri(item.id),
+                GalleryContract.mediaUri(id),
                 ContentValues().apply {
                     put(GalleryContract.Columns.FAVORITE, newValue)
                 },
@@ -532,32 +535,9 @@ class ViewerActivity : AppCompatActivity() {
                 null,
             )
             true
-        } catch (e: RecoverableSecurityException) {
-            val sender = e.userAction?.actionIntent?.intentSender
-            if (sender == null) {
-                Log.e(TAG, "no consent intent for favorite", e)
-                return false
-            }
-            pendingFavoriteItem = item
-            pendingFavoriteValue = newValue
-            startIntentSenderForResult(sender, REQUEST_FAVORITE, null, 0, 0, 0)
-            false
         } catch (e: Exception) {
             Log.e(TAG, "update favorite failed", e)
             false
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_FAVORITE) {
-            return
-        }
-        val item = pendingFavoriteItem ?: return
-        pendingFavoriteItem = null
-        if (resultCode == RESULT_OK && updateFavorite(item, pendingFavoriteValue)) {
-            item.isFavorite = pendingFavoriteValue == 1
-            updatePageUi()
         }
     }
 
@@ -711,7 +691,6 @@ class ViewerActivity : AppCompatActivity() {
         private const val EXTRA_POSITION = "position"
         private const val PAGE_SIZE = 200
         private const val LOAD_MORE_THRESHOLD = 20
-        private const val REQUEST_FAVORITE = 1001
         private const val SHEET_HEIGHT_RATIO = 0.52f
         private const val SHEET_SETTLE_THRESHOLD = 0.4f
         private const val SHEET_ANIMATION_DURATION = 200L

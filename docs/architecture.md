@@ -30,7 +30,7 @@ main (:main, 应用壳)                        namespace com.senk.gallery
 |---|---|---|
 | `main` | 应用壳、打包入口、**唯一外部入口** | `PrivacyActivity`（LAUNCHER）、`MainActivity`（exported=false）、`ExternalEntryActivity`（exported=true，外部选图/大图路由）、`MainPagerAdapter`、`GalleryApp`、权限流程、底部胶囊导航、AK/签名的 `build.gradle` 注入；`src/debug` 有外部调用测试壳 `ExternalClientDebugActivity`（release 不含） |
 | `main-ui` | 全部业务界面与 GL 组件 | `PhotosFragment` / `AlbumsFragment` / `AlbumDetailActivity` / `ViewerActivity` / `VideoPlayerActivity` / `PhotoMapActivity`；`ui/grid/*`（View 宫格、分页、缩略图缓存）、`ui/selection/*`（多选状态与动作）、`ui/picker/ImagePickerActivity`（选图页）、`ui/addto/AddToAlbumActivity`（添加到目标选择）；`ui/gl/*`（查看器/视频自绘）；主题（`ThemeUtils`、`values*/styles.xml`）、`BaiduMapSdk` 等地图支撑 |
-| `core-data` | 数据层（见 [数据层](data-layer.md)） | `GalleryProvider`（Manifest 注册，exported=false）、`GalleryContract`、`MediaStoreFetcher`、`AlbumResolver`、`ExifFetcher`、`XmpParser`、`GalleryCursorReader`、`CustomAlbumStore`（自建相册持久化）、`MediaWriter`（复制写入）、`ExternalMediaProvider`（选图结果代理）；entity/pojo |
+| `core-data` | 数据层（见 [数据层](data-layer.md)） | `GalleryProvider`（Manifest 注册，exported=false）、`GalleryContract`、`MediaStoreFetcher`、`AlbumResolver`、`ExifFetcher`、`XmpParser`、`GalleryCursorReader`、`CustomAlbumStore`（自建相册持久化）、`FavoriteStore`（自建收藏库）、`MediaWriter`（复制写入）、`ExternalMediaProvider`（选图结果代理）；entity/pojo |
 | `common-util` | 无业务依赖的小工具 | `BitmapUtils`、`DisplayUtils`、`DateFormats`、`FileSizeUtils`、`CoordConverter`、`SystemBarUtils` |
 | `external-api` | 外部调用**契约**（无实现、无依赖） | `GalleryExternal`：`PICK_IMAGE` / `VIEW_IMAGE` 两个 action、入参/结果 extra、`pickImageIntent()` / `viewImageIntent()` 构造；供 `main`、`main-ui` 与第三方集成方共同引用 |
 
@@ -57,6 +57,7 @@ main (:main, 应用壳)                        namespace com.senk.gallery
 │ 监听了 MediaStore 变化 → notifyChange(根URI) │
 │                                           │
 │ CustomAlbumStore（自建相册逻辑集合）        │
+│ FavoriteStore（自建收藏库）                 │
 │ MediaWriter（复制到目录，MediaStore 写入）  │
 │ ExternalMediaProvider（对外代理，只读）     │
 └─────────┬─────────────────────────────────┘
@@ -65,7 +66,7 @@ main (:main, 应用壳)                        namespace com.senk.gallery
 ```
 
 - UI **只经 ContentResolver** 读媒体数据；查询封装在 `MediaQuery` / `GridPageController`（挂 `Dispatchers.IO`，异常时返回空列表并记日志）。**没有 ViewModel / Repository 层**，状态直接存在 View/Activity/Fragment 里。
-- **例外（有意设计）**：自建相册是应用私有的"逻辑集合"，成员与名称存在 `CustomAlbumStore`（SharedPreferences + 版本化 JSON），UI 通过该 store API 读写；**它不经过 ContentResolver，也不复制媒体文件**。相册内容查询仍由 Provider 读取 MediaStore（见 [数据层](data-layer.md)）。
+- **例外（有意设计）**：自建相册是应用私有的"逻辑集合"，成员与名称存在 `CustomAlbumStore`（SharedPreferences + 版本化 JSON），UI 通过该 store API 读写；**它不经过 ContentResolver，也不复制媒体文件**。收藏同理：`FavoriteStore` 是应用私有收藏库，Provider 查询时用其覆盖 `is_favorite`、写入时写它（**不修改系统媒体库**），见 [数据层 §6.2](data-layer.md)。相册内容查询仍由 Provider 读取 MediaStore。
 - 媒体文件本身（解码、`loadThumbnail`、播放）由 UI 直接用 `MediaItem.uri` 访问 MediaStore URI，不经过 Provider。
 - 对外选图结果通过 `ExternalMediaProvider` 暴露：调用方拿到的是本应用 authority 下的代理 URI，由 `ExternalEntryActivity` 对调用方做临时授权（见 [外部调用 API](external-api.md)）。
 - 数据刷新靠 CONTENT_URI 的变更通知驱动（Provider 把 MediaStore 的变更转成根 URI 通知 + 自建相册/复制写入后显式 notifyChange），见 [数据层 §4](data-layer.md)。
@@ -127,7 +128,7 @@ PhotosFragment / AlbumDetailActivity 多选动作栏
 ## 7. 关键约束清单（跨模块，改动前对照）
 
 1. **数据接口**：UI 不直查 MediaStore；Provider 的 URI/列是 UI 的真实契约；`UriMatcher` 注册必须「具体模式在前、通配在后」（`albums/folder/*`、`albums/app/*`、`albums/custom/*` 都要在 `albums/*` 之前）。[数据层](data-layer.md)
-2. **自建相册语义**：自建相册 = 应用内逻辑集合（`CustomAlbumStore`，不复制文件）；「添加到」对相机/文件夹相册 = 物理复制（`MediaWriter`），对自建相册 = 逻辑加入。改这块前先读 [数据层 §5.4](data-layer.md)。
+2. **自建相册与收藏语义**：自建相册 = 应用内逻辑集合（`CustomAlbumStore`，不复制文件）；收藏 = 应用内自建库（`FavoriteStore`，不写系统媒体库）；「添加到」对相机/文件夹相册 = 物理复制（`MediaWriter`），对自建相册 = 逻辑加入。改这块前先读 [数据层 §6](data-layer.md)。
 3. **颜色与主题**：颜色只在 `colors.xml` 定义且浅/深成对；XML 不直接写颜色（走 style）；代码取色只走 `ThemeUtils`。[主题与颜色规范](theme.md)
 4. **透明标题栏**：它"透出"的是 页面背景 → 宫格底色 的叠层；渐变遮罩必须**声明在 toolbar 之前**；照片页标题栏透明，**相册页标题栏必须不透明**（内容不能从标题栏下透出）。[界面与交互](ui-guide.md)
 5. **View 宫格（替代原 GL 宫格）**：铺满式布局用 `RecyclerView` 的 `padding + clipToPadding=false`；top padding = 状态栏 + 标题栏，bottom padding = 胶囊导航占位/导航栏（多选时换成动作栏高度 + 导航栏）；滚动回调用 `MediaGridView.onScrollChanged` 驱动 40px 死区的标题栏渐变。[界面与交互](ui-guide.md)

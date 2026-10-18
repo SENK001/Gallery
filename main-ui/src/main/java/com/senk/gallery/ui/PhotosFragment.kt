@@ -62,17 +62,12 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
     private var lastSelectionCount = 0
 
     // ActivityResult 统一在这里注册（生命周期安全），再转给 SelectionActions：
-    // 收藏/删除走系统授权 IntentSender，添加到相册走普通 ActivityResult。
+    // 删除走系统授权 IntentSender；添加到相册走普通 ActivityResult。
+    // 收藏已改为应用内自建库（不写系统媒体库），无需系统授权。
     private val trashConsentLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
         actions?.onTrashConsentResult(result.resultCode == Activity.RESULT_OK)
-    }
-
-    private val favoriteConsentLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult(),
-    ) { result ->
-        actions?.onFavoriteConsentResult(result.resultCode == Activity.RESULT_OK)
     }
 
     private val addToAlbumLauncher = registerForActivityResult(
@@ -96,9 +91,6 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         ).apply {
             launchTrashConsent = { sender ->
                 trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
-            }
-            launchFavoriteConsent = { sender ->
-                favoriteConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
             launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
         }

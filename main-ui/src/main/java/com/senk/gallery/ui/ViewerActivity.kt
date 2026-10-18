@@ -31,6 +31,8 @@ import com.baidu.mapapi.map.MarkerOptions
 import com.baidu.mapapi.map.TextureMapView
 import com.google.android.material.appbar.MaterialToolbar
 import com.senk.gallery.data.entity.MediaItem
+import com.senk.gallery.data.entity.MediaObject
+import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.gl.GlImageViewer
@@ -76,6 +78,14 @@ class ViewerActivity : AppCompatActivity() {
     private var currentLocation: Pair<Double, Double>? = null
     private var currentAddress: String? = null
 
+    /**
+     * 外部大图模式：调用方经 [GalleryExternal.EXTRA_VIEW_URIS] 传入自己的 content/file URI。
+     * 这些 URI 不属于本应用媒体库（没有 MediaStore id），因此**不查 Provider**、
+     * 不使用收藏/详情（EXIF、地图都依赖本应用媒体库 id），只做浏览与分享。
+     */
+    private var externalMode = false
+    private var externalTitle: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -109,9 +119,15 @@ class ViewerActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.action_share).setOnClickListener { share(currentItem) }
         favoriteButton.setOnClickListener { toggleFavorite() }
         findViewById<ImageButton>(R.id.action_info).setOnClickListener { openSheet() }
-        baseUri = intent.getStringExtra(EXTRA_BASE_URI)?.let(Uri::parse) ?: Uri.EMPTY
-        initialPosition = intent.getIntExtra(EXTRA_POSITION, 0)
-        loadInitial()
+        val externalUris = intent.getStringArrayListExtra(GalleryExternal.EXTRA_VIEW_URIS)
+        if (externalUris != null) {
+            // 外部模式：URI 列表来自调用方，不读本应用媒体库。
+            setupExternalMode(externalUris)
+        } else {
+            baseUri = intent.getStringExtra(EXTRA_BASE_URI)?.let(Uri::parse) ?: Uri.EMPTY
+            initialPosition = intent.getIntExtra(EXTRA_POSITION, 0)
+            loadInitial()
+        }
     }
 
     override fun onResume() {
@@ -202,6 +218,65 @@ class ViewerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 外部大图模式初始化：把调用方给的 URI 列表包装成「合成 [MediaItem]」直接交给查看器。
+     *
+     * 注意：
+     * - 合成 item 的 id 用**负数**（`-1 - index`），与媒体库真实 id（正数）区分；
+     *   [GlImageViewer] 的纹理缓存按 id 索引，负数同样唯一，不会与内部条目冲突。
+     * - 不查本应用 Provider（这些 URI 不属于本应用媒体库，id 也不是 MediaStore id）。
+     * - 收藏 / 详情依赖本应用媒体库 id（EXIF、地图），外部模式直接隐藏这两个入口；
+     *   分享仍可用（单张 ACTION_SEND + 调用方给本应用的读权限再转授给分享目标）。
+     */
+    private fun setupExternalMode(rawUris: List<String>) {
+        val uris = rawUris.asSequence()
+            .mapNotNull { raw -> runCatching { Uri.parse(raw) }.getOrNull() }
+            .filter { it.scheme == "content" || it.scheme == "file" }
+            .toList()
+        if (uris.isEmpty()) {
+            // 理论上 ExternalEntryActivity 已过滤并提示；这里兜底防御，避免空查看器。
+            Log.w(TAG, "external mode without supported uri, finish")
+            finish()
+            return
+        }
+        externalMode = true
+        externalTitle = intent.getStringExtra(GalleryExternal.EXTRA_TITLE)
+        val externalItems = uris.mapIndexed { index, uri ->
+            MediaItem().apply {
+                this.id = -1L - index
+                this.uri = uri
+                mimeType = contentResolver.getType(uri)
+                name = uri.lastPathSegment ?: uri.toString()
+                mediaType = if (mimeType?.startsWith("video/") == true) {
+                    MediaObject.TYPE_VIDEO
+                } else {
+                    MediaObject.TYPE_IMAGE
+                }
+                // 外部 URI 没有本应用媒体库的拍摄时间/尺寸信息，留 0，不参与排序展示。
+                dateTaken = 0L
+                dateModified = 0L
+            }
+        }
+        // items 字段同时驱动副标题「位置 / 总数」；外部模式下数据固定，不再分页加载。
+        items.clear()
+        items.addAll(externalItems)
+        endReached = true
+        // 收藏、详情不支持外部 URI：隐藏入口（底栏剩余分享按钮仍可用）。
+        favoriteButton.isVisible = false
+        findViewById<View>(R.id.action_info).isVisible = false
+        // 禁用上划详情手势，避免进入依赖媒体库 id 的详情查询。
+        viewer.onSheetDragStart = null
+        viewer.onSheetDrag = null
+        viewer.onSheetDragEnd = null
+        val position = intent.getIntExtra(GalleryExternal.EXTRA_VIEW_POSITION, 0)
+            .coerceIn(externalItems.indices)
+        Log.i(
+            TAG,
+            "external mode: uris=${externalItems.size} position=$position title=$externalTitle",
+        )
+        viewer.setItems(externalItems, position)
+    }
+
     private fun maybeLoadMore(index: Int) {
         if (index >= items.size - LOAD_MORE_THRESHOLD) {
             loadMore()
@@ -234,14 +309,19 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun bindPage(index: Int, item: MediaItem) {
         currentItem = item
-        toolbar.title = DateFormats.formatDateTime(item.dateTaken)
+        if (externalMode) {
+            // 外部模式没有本应用媒体库的拍摄时间：标题用调用方 title 或文件名，副标题为位置/总数。
+            toolbar.title = externalTitle ?: item.name.orEmpty()
+        } else {
+            toolbar.title = DateFormats.formatDateTime(item.dateTaken)
+        }
         toolbar.subtitle = getString(
             R.string.gallery_position_format,
             index + 1,
             items.size,
         )
         updatePageUi()
-        if (sheetProgress > 0.01f) {
+        if (!externalMode && sheetProgress > 0.01f) {
             ensureSheetContent(item)
         }
     }
@@ -274,6 +354,10 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun openSheet() {
+        // 外部模式不提供详情面板（EXIF / 地图依赖本应用媒体库 id）。
+        if (externalMode) {
+            return
+        }
         val item = currentItem ?: return
         detailsSheet.visibility = View.VISIBLE
         if (sheetProgress < 0.99f) {
@@ -323,6 +407,10 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun ensureSheetContent(item: MediaItem) {
+        // 外部 URI（合成 id 为负）不属于本应用媒体库：不查 Provider，避免错数据/崩溃。
+        if (externalMode || item.id < 0L) {
+            return
+        }
         if (item.id == infoItemId && sheetBasicInfo.text.isNotEmpty()) {
             return
         }
@@ -422,6 +510,10 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun toggleFavorite() {
         val item = currentItem ?: return
+        // 外部 URI 没有本应用媒体库 id，收藏写回无从谈起（入口已隐藏，这里再兜底）。
+        if (externalMode || item.id < 0L) {
+            return
+        }
         val newValue = if (item.isFavorite) 0 else 1
         if (updateFavorite(item, newValue)) {
             item.isFavorite = newValue == 1
@@ -470,13 +562,19 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun share(item: MediaItem?) {
-        item?.uri ?: return
+        val uri = item?.uri ?: return
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = item.mimeType ?: "*/*"
-            putExtra(Intent.EXTRA_STREAM, item.uri)
+            putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(sendIntent, getString(R.string.gallery_share_title)))
+        try {
+            startActivity(Intent.createChooser(sendIntent, getString(R.string.gallery_share_title)))
+        } catch (e: Exception) {
+            // file:// 外部 URI 在 Android 7+ 会被 FileUriExposedException 拦截；外部模式给出的
+            // content:// URI 不受影响。分享失败只记日志，不崩溃。
+            Log.e(TAG, "share failed for uri=$uri", e)
+        }
     }
 
     private fun openVideo() {
@@ -623,5 +721,30 @@ class ViewerActivity : AppCompatActivity() {
             Intent(context, ViewerActivity::class.java)
                 .putExtra(EXTRA_BASE_URI, baseUri.toString())
                 .putExtra(EXTRA_POSITION, position)
+
+        /**
+         * 构造**外部大图模式** Intent（仅供 main 的 ExternalEntryActivity 使用）：
+         * 直接携带调用方的 URI 列表，不经过本应用媒体库。
+         *
+         * @param uris content/file URI 列表（至少 1 个）。
+         * @param position 初始位置（越界收敛到合法范围）。
+         * @param title 顶部标题（可选，缺省用文件名）。
+         */
+        fun externalIntent(
+            context: Context,
+            uris: List<Uri>,
+            position: Int = 0,
+            title: String? = null,
+        ): Intent {
+            require(uris.isNotEmpty()) { "uris must not be empty" }
+            val safePosition = position.coerceIn(uris.indices)
+            return Intent(context, ViewerActivity::class.java)
+                .putStringArrayListExtra(
+                    GalleryExternal.EXTRA_VIEW_URIS,
+                    ArrayList(uris.map(Uri::toString)),
+                )
+                .putExtra(GalleryExternal.EXTRA_VIEW_POSITION, safePosition)
+                .apply { title?.let { putExtra(GalleryExternal.EXTRA_TITLE, it) } }
+        }
     }
 }

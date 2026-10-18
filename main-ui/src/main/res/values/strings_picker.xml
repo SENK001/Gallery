@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  选图页（ImagePickerActivity）专用文案。
+
+  约定（与其他模块一致）：
+  - 不改公共 strings.xml，本页新增文案统一放这里，前缀 picker_；
+  - 可复用的文案优先引用公共资源（如 @string/gallery_tab_photos、gallery_empty、
+    gallery_section_common/custom/more）。
+-->
+<resources>
+    <!-- 标题栏 -->
+    <string name="picker_title_default">选择照片</string>
+    <string name="picker_close">关闭</string>
+    <string name="picker_back">返回</string>
+
+    <!-- 底部确认栏 -->
+    <string name="picker_selected_count">已选择 %1$d 项</string>
+    <string name="picker_done">完成</string>
+
+    <!-- 提示 / 空态 -->
+    <string name="picker_max_count_reached">最多只能选择 %1$d 项</string>
+    <string name="picker_photos_empty">暂无照片</string>
+    <string name="picker_albums_empty">暂无相册</string>
+    <string name="picker_album_items_empty">该相册暂无内容</string>
+
+    <!-- 无障碍描述 -->
+    <string name="picker_tab_photos_desc">照片分类</string>
+    <string name="picker_tab_albums_desc">相册分类</string>
+    <string name="picker_album_desc">相册：%1$s，共 %2$d 项</string>
+</resources>

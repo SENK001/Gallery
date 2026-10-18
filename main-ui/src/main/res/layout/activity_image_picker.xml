@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  选图页布局（ImagePickerActivity）。
+
+  结构（自上而下）：
+    · toolbar      —— 关闭/返回 + 标题（相册 tab 进入某相册后变为返回 + 相册名）
+    · tabs         —— 「照片 / 相册」两个分类（照片 tab 与相册 tab 共享同一份选择集合）
+    · pane         —— 内容区：照片宫格 / 相册列表 / 相册内容宫格，同一时刻只显示一个
+    · confirm_bar  —— 多选确认栏（仅多选模式显示）：已选择 N 项 +「完成」
+
+  宫格控件（MediaGridView）由代码创建后加进 picker_media_pane，
+  这样本布局不直接依赖 grid 组件，两者可以并行开发。
+  颜色一律走 styles_picker.xml / 公共样式，布局里不写颜色值。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/picker_root"
+    style="@style/Widget.Gallery.RootSurface"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/picker_toolbar"
+            style="@style/Widget.Gallery.Toolbar.Surface"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:navigationIcon="@drawable/ic_close"
+            app:title="@string/picker_title_default" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/picker_tabs"
+            style="@style/Widget.Gallery.PickerTabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:tabGravity="fill"
+            app:tabMode="fixed" />
+
+        <FrameLayout
+            android:id="@+id/picker_pane"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <!-- 照片宫格 / 相册内容宫格共用的容器（MediaGridView 由代码加入） -->
+            <FrameLayout
+                android:id="@+id/picker_media_pane"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <!-- 相册 tab：常用 / 我的相册 / 更多 分组列表（复用 AlbumListAdapter） -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/picker_album_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingTop="4dp"
+                android:paddingBottom="16dp"
+                app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                app:spanCount="3" />
+
+            <!-- 空态（当前内容源没有数据时显示） -->
+            <TextView
+                android:id="@+id/picker_empty_view"
+                style="@style/TextAppearance.Gallery.Caption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- 多选确认栏：仅多选模式可见；未选择时「完成」禁用 -->
+        <LinearLayout
+            android:id="@+id/picker_confirm_bar"
+            style="@style/Widget.Gallery.PickerConfirmBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/picker_selected_count"
+                style="@style/TextAppearance.Gallery.Body"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/picker_done"
+                style="@style/Widget.Gallery.PickerDoneButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/picker_done" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

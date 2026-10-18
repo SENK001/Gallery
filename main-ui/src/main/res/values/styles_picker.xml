@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  选图页（ImagePickerActivity）专用样式。
+
+  遵循 docs/theme.md：布局里不直接写颜色，颜色只在 colors.xml（含 values-night）定义，
+  本文件负责把语义色板挂到选图页的新控件（分类 tab、多选确认栏）上。
+-->
+<resources>
+
+    <!-- 分类切换 tab：chrome 底色 + 品牌色指示器，文字跟随主题。
+         显式继承 Material3 的 TabLayout 基础样式，避免只写局部属性时丢掉基础外观。 -->
+    <style name="Widget.Gallery.PickerTabs" parent="Widget.Material3.TabLayout">
+        <item name="android:background">@color/gallery_surface_chrome</item>
+        <item name="tabIndicatorColor">@color/gallery_brand_primary</item>
+        <item name="tabSelectedTextColor">@color/gallery_text_primary</item>
+        <item name="tabTextColor">@color/gallery_text_secondary</item>
+        <item name="tabRippleColor">@color/gallery_nav_item_selected_bg</item>
+        <item name="tabIndicatorFullWidth">false</item>
+    </style>
+
+    <!-- 多选确认栏：chrome 底 + 顶部分隔线（分隔线画在 drawable 里，仍引用色板） -->
+    <style name="Widget.Gallery.PickerConfirmBar" parent="">
+        <item name="android:background">@drawable/picker_confirm_bar_bg</item>
+    </style>
+
+    <!-- 「完成」主按钮：品牌主色底 + on-primary 文字 -->
+    <style name="Widget.Gallery.PickerDoneButton" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/gallery_brand_primary</item>
+        <item name="android:textColor">@color/gallery_brand_on_primary</item>
+        <item name="android:minWidth">96dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+</resources>

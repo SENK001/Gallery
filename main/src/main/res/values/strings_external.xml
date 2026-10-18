@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  外部调用路由（ExternalEntryActivity）的提示文案。
+
+  单独放在 values/strings_external.xml，避免与公共 strings.xml 冲突（多人并行开发）；
+  文案均为用户可直接看到的中文提示。
+-->
+<resources>
+    <!-- 隐私政策未同意：外部应用不能绕过首启同意页直接使用选图/查看能力 -->
+    <string name="external_privacy_required">请先打开相册并同意隐私政策</string>
+
+    <!-- 选图需要媒体权限（查看外部图片则依赖调用方给的 URI 临时授权，不强制本应用媒体权限） -->
+    <string name="external_permission_required">需要照片和视频访问权限才能选择图片</string>
+
+    <!-- PICK_IMAGE / VIEW_IMAGE 参数不合法时的提示 -->
+    <string name="external_no_supported_uri">不支持的图片地址，无法查看</string>
+    <string name="external_unknown_action">不支持的外部调用</string>
+
+    <!-- 页面启动失败（系统限制/组件缺失等） -->
+    <string name="external_picker_failed">无法打开选图页</string>
+    <string name="external_viewer_failed">无法打开查看器</string>
+
+    <!-- 结果 ClipData 的 label（仅描述用途，系统选择器/调用方日志可见） -->
+    <string name="external_selected_uri_label">selected-media</string>
+</resources>

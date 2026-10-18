@@ -57,11 +57,37 @@
             android:exported="true"
             android:noHistory="false"
             android:theme="@style/Theme.Gallery.ExternalEntry">
+            <!--
+              选图：intent 不带 data，因此单独一个「无 data」的 filter。
+            -->
             <intent-filter>
                 <action android:name="com.senk.gallery.action.PICK_IMAGE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!--
+              看大图：intent 带 content:// / file:// data。
+              注意：**intent-filter 里声明了 action 但没有 <data> 时无法匹配带 data 的隐式 Intent**
+              （真机实测：调用方 startActivity 直接 ActivityNotFoundException），
+              因此这里必须显式声明 scheme。PICK_IMAGE 与 VIEW_IMAGE 不能共用一个 filter。
+            -->
+            <intent-filter tools:ignore="IntentFilterUniqueDataAttributes">
                 <action android:name="com.senk.gallery.action.VIEW_IMAGE" />
 
                 <category android:name="android.intent.category.DEFAULT" />
+
+                <!--
+                  content:// 的 URI 一定带 authority（host），且系统在匹配时可能把 content URI
+                  解析成 MIME 类型（image/jpeg 等）；因此显式给 host 与 mimeType，
+                  否则真机实测 startActivity 仍然 ActivityNotFoundException。
+                  content 与 file 两个 scheme 必须分别声明（不能合并属性），故抑制 lint 提醒。
+                -->
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:scheme="content" />
+                <data android:scheme="file" />
             </intent-filter>
         </activity>
     </application>

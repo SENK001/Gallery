@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  多选确认栏背景：chrome 底色 + 顶部 1dp 分隔线。
+  颜色全部引用公共色板（含 values-night 成对定义），深色模式自动适配。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 底色 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/gallery_surface_chrome" />
+        </shape>
+    </item>
+
+    <!-- 顶部 1dp 分隔线 -->
+    <item
+        android:height="1dp"
+        android:gravity="top">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/gallery_divider_on_surface" />
+        </shape>
+    </item>
+
+</layer-list>

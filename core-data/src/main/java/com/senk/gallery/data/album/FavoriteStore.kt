@@ -1,13 +1,13 @@
 package com.senk.gallery.data.album
 
+import android.content.ContentValues
 import android.content.Context
-import android.content.SharedPreferences
-import android.util.Log
-import org.json.JSONArray
-import org.json.JSONObject
+import android.database.DatabaseUtils
+import android.database.sqlite.SQLiteDatabase
+import com.senk.gallery.data.db.FavoriteDb
 
 /**
- * 收藏（**应用内自建库**）的持久化存储。
+ * 收藏（**应用内自建库**）的读写入口，底层使用 **SQLite**（见 [FavoriteDb]）。
  *
  * 设计背景：
  * - 系统媒体库的 `is_favorite` 对第三方应用写回需要用户逐次授权（Android 12+ 抛
@@ -17,129 +17,127 @@ import org.json.JSONObject
  *   `is_favorite` 列，「收藏」相册的成员/数量/封面也由本库计算（见 `AlbumResolver`），
  *   从而查看器爱心、多选收藏、收藏相册三处状态一致。
  *
- * 存储：SharedPreferences `gallery_favorites`，版本化 JSON：`{"version":1,"ids":[1,2,3]}`。
- * 线程安全：所有读写在同一把锁内；内存缓存避免每次查询都解析 JSON；坏数据回退空集合不崩溃。
+ * 存储：SQLite 数据库 `gallery_favorites.db` 的 `favorites` 表
+ * （`media_id INTEGER PRIMARY KEY`、`created_at INTEGER`）；旧版 SharedPreferences 数据
+ * 在首次建库时由 [FavoriteDb] 自动导入。SQLite 自身保证并发安全，类内不再额外加锁。
  */
 class FavoriteStore private constructor(context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val db: FavoriteDb = FavoriteDb.get(context)
 
-    private val lock = Any()
+    /** 全部收藏 id（只读副本，顺序为收藏时间升序；调用方不要依赖顺序）。 */
+    fun ids(): Set<Long> {
+        val ids = LinkedHashSet<Long>()
+        db.readableDatabase.rawQuery(
+            "SELECT ${FavoriteDb.COLUMN_MEDIA_ID} FROM ${FavoriteDb.TABLE} " +
+                "ORDER BY ${FavoriteDb.COLUMN_CREATED_AT} ASC, ${FavoriteDb.COLUMN_MEDIA_ID} ASC",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                ids.add(cursor.getLong(0))
+            }
+        }
+        return ids
+    }
 
-    /** 内存缓存（进程内唯一写入口，写入时同步更新；避免每次查询都解析 JSON）。 */
-    private var cache: LinkedHashSet<Long>? = null
+    fun isFavorite(id: Long): Boolean {
+        if (id <= 0L) {
+            return false
+        }
+        return DatabaseUtils.longForQuery(
+            db.readableDatabase,
+            "SELECT COUNT(*) FROM ${FavoriteDb.TABLE} WHERE ${FavoriteDb.COLUMN_MEDIA_ID} = ?",
+            arrayOf(id.toString()),
+        ) > 0L
+    }
 
-    /** 全部收藏 id（只读副本，调用方不要依赖顺序）。 */
-    fun ids(): Set<Long> = synchronized(lock) { LinkedHashSet(current()) }
-
-    fun isFavorite(id: Long): Boolean = synchronized(lock) { current().contains(id) }
-
-    fun count(): Int = synchronized(lock) { current().size }
+    fun count(): Int = DatabaseUtils.longForQuery(
+        db.readableDatabase,
+        "SELECT COUNT(*) FROM ${FavoriteDb.TABLE}",
+        null,
+    ).toInt()
 
     /**
      * 设置单条收藏状态。
      *
-     * @return 是否发生变化（已是目标状态时返回 false，不写盘、不触发刷新）。
+     * @return 是否发生变化（已是目标状态时返回 false，不触发刷新）。
      */
     fun setFavorite(id: Long, favorite: Boolean): Boolean {
         if (id <= 0L) {
             return false
         }
-        return synchronized(lock) {
-            val current = current()
-            val changed = if (favorite) current.add(id) else current.remove(id)
-            if (changed) {
-                write(current)
+        val database = db.writableDatabase
+        return if (favorite) {
+            val values = ContentValues().apply {
+                put(FavoriteDb.COLUMN_MEDIA_ID, id)
+                put(FavoriteDb.COLUMN_CREATED_AT, System.currentTimeMillis())
             }
-            changed
+            database.insertWithOnConflict(
+                FavoriteDb.TABLE,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_IGNORE,
+            ) != -1L
+        } else {
+            database.delete(
+                FavoriteDb.TABLE,
+                "${FavoriteDb.COLUMN_MEDIA_ID} = ?",
+                arrayOf(id.toString()),
+            ) > 0
         }
     }
 
     /**
-     * 批量设置收藏状态。
+     * 批量设置收藏状态（单事务，避免逐条提交）。
      *
      * @return 实际发生变化的条数（0 表示全部已是目标状态）。
      */
     fun setFavorite(mediaIds: Collection<Long>, favorite: Boolean): Int {
-        val validIds = mediaIds.filter { it > 0L }
+        val validIds = mediaIds.filter { it > 0L }.distinct()
         if (validIds.isEmpty()) {
             return 0
         }
-        return synchronized(lock) {
-            val current = current()
+        val database = db.writableDatabase
+        database.beginTransaction()
+        return try {
             var changed = 0
-            validIds.forEach { id ->
-                val itemChanged = if (favorite) current.add(id) else current.remove(id)
+            val now = System.currentTimeMillis()
+            validIds.forEachIndexed { index, id ->
+                val itemChanged = if (favorite) {
+                    val values = ContentValues().apply {
+                        put(FavoriteDb.COLUMN_MEDIA_ID, id)
+                        put(FavoriteDb.COLUMN_CREATED_AT, now + index)
+                    }
+                    database.insertWithOnConflict(
+                        FavoriteDb.TABLE,
+                        null,
+                        values,
+                        SQLiteDatabase.CONFLICT_IGNORE,
+                    ) != -1L
+                } else {
+                    database.delete(
+                        FavoriteDb.TABLE,
+                        "${FavoriteDb.COLUMN_MEDIA_ID} = ?",
+                        arrayOf(id.toString()),
+                    ) > 0
+                }
                 if (itemChanged) {
                     changed++
                 }
             }
-            if (changed > 0) {
-                write(current)
-            }
+            database.setTransactionSuccessful()
             changed
+        } finally {
+            database.endTransaction()
         }
-    }
-
-    /** 当前缓存（懒加载：首次访问从 SharedPreferences 读一次）。调用方必须持有 [lock]。 */
-    private fun current(): LinkedHashSet<Long> {
-        cache?.let { return it }
-        val loaded = read()
-        cache = loaded
-        return loaded
-    }
-
-    private fun read(): LinkedHashSet<Long> {
-        val raw = prefs.getString(KEY_DATA, null) ?: return LinkedHashSet()
-        return try {
-            val root = JSONObject(raw)
-            val array = root.optJSONArray(KEY_IDS)
-            val ids = LinkedHashSet<Long>(array?.length() ?: 0)
-            if (array != null) {
-                for (i in 0 until array.length()) {
-                    val id = array.optLong(i, 0L)
-                    if (id > 0L) {
-                        ids.add(id)
-                    }
-                }
-            }
-            ids
-        } catch (e: Exception) {
-            // 坏数据（手改 SharedPreferences / 旧格式）回退空集合，不崩溃
-            Log.e(TAG, "favorite data is corrupted, fallback to empty set", e)
-            LinkedHashSet()
-        }
-    }
-
-    private fun write(ids: Set<Long>): Boolean = try {
-        val array = JSONArray()
-        ids.forEach { array.put(it) }
-        val json = JSONObject()
-            .put(KEY_VERSION, VERSION)
-            .put(KEY_IDS, array)
-        prefs.edit().putString(KEY_DATA, json.toString()).commit()
-    } catch (e: Exception) {
-        Log.e(TAG, "failed to persist favorites", e)
-        false
     }
 
     companion object {
 
-        private const val TAG = "FavoriteStore"
-
-        private const val PREFS_NAME = "gallery_favorites"
-        private const val KEY_DATA = "favorites_json"
-        private const val KEY_VERSION = "version"
-        private const val KEY_IDS = "ids"
-
-        /** 当前数据结构版本；升级格式时递增并在 [read] 里做迁移。 */
-        private const val VERSION = 1
-
         @Volatile
         private var instance: FavoriteStore? = null
 
-        /** 进程内单例（与 CustomAlbumStore 同理：同一 SharedPreferences 只保留一个写入口）。 */
+        /** 进程内单例（数据库本身也是单例，见 [FavoriteDb.get]）。 */
         fun get(context: Context): FavoriteStore =
             instance ?: synchronized(this) {
                 instance ?: FavoriteStore(context.applicationContext).also { instance = it }

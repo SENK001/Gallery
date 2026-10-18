@@ -34,7 +34,8 @@ ExternalMediaProvider（core-data，exported=false + 临时授权）     ← 对
 | `provider/MediaWriter.kt` | 物理复制写入：把媒体复制到目标 `RELATIVE_PATH` 目录（`IS_PENDING` 流程、流式复制、重名去重） |
 | `provider/ExternalMediaProvider.kt` | 对外代理 Provider：`content://com.senk.gallery.external/media/{id}` 只读代理到 MediaStore |
 | `album/CustomAlbumStore.kt` | 自建相册持久化（SharedPreferences + 版本化 JSON；线程安全、坏数据回退） |
-| `album/FavoriteStore.kt` | **自建收藏库**持久化（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列） |
+| `album/FavoriteStore.kt` | **自建收藏库**读写入口（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列） |
+| `db/FavoriteDb.kt` | 收藏的 SQLite 存储（`databases/gallery_favorites.db`；旧 SharedPreferences 收藏一次性迁移） |
 | `entity/MediaObject.java`、`MediaItem.java`、`MediaSet.java` | 领域对象基类 / 媒体条目 / 相册集合 |
 | `pojo/*.java` | 具体型号（相册子类与数据包，见 §2） |
 
@@ -215,14 +216,25 @@ MediaStore.Files(外置卷) 变化
 - 名称规则：trim 后 1–40 字符、拒绝 ISO 控制字符、忽略大小写重名；非法/重名 `create` 返回 `null`。
 - 已知限制：成员是逻辑 id，系统删除照片后 store 不主动清除（相册内容查询会跳过已删除 id，但 `item_count` 可能偏大）；重命名/封面/相册内移除的 UI 暂未提供（store API 已具备）。
 
-### 6.2 FavoriteStore（自建收藏库）
+### 6.2 FavoriteStore（自建收藏库，SQLite）
 
-- 位置：`core-data/.../album/FavoriteStore.kt`；SharedPreferences 文件 `gallery_favorites`，版本化 JSON：`{"version":1,"ids":[…媒体 id…]}`。
+- 位置：`core-data/.../album/FavoriteStore.kt`（对外 API）+ `core-data/.../db/FavoriteDb.kt`（SQLite 存储）。
 - 语义：收藏是**应用私有数据**，不复制文件、**不修改系统媒体库的 `is_favorite`**。
   - 背景：写回系统媒体库需要用户逐次系统授权（Android 12+ `RecoverableSecurityException`），批量收藏体验差且部分场景直接失败（2026-10-19 用户反馈「多选收藏提示失败」）。
   - 读取：Provider 每次媒体查询取一次 `ids()` 快照，用其覆盖 `is_favorite` 列；「收藏」相册的列表/内容/封面都由本库计算（见 §5.1、§5.4）。
   - 写入：`Provider.update(media/{id}, is_favorite)` → `FavoriteStore.setFavorite(id, favorite)` → `notifyChange`；多选收藏 = 逐条 update。
-- 线程安全：单锁 + 内存缓存（进程内唯一写入口），坏 JSON 回退空集合不崩溃。
+- 存储：**SQLite** 数据库 `databases/gallery_favorites.db`，表结构：
+
+  ```sql
+  CREATE TABLE favorites (
+    media_id   INTEGER PRIMARY KEY NOT NULL,  -- MediaStore 媒体 id
+    created_at INTEGER NOT NULL               -- 收藏时间（毫秒），用于稳定排序
+  );
+  ```
+
+  SQLite 自身保证并发串行化；单次批量写入使用事务；`id` 只增不重（主键约束）。
+- 迁移：旧版本用 SharedPreferences（`gallery_favorites` / `favorites_json` JSON）保存收藏；首次创建 SQLite 库时**一次性导入**（`INSERT OR IGNORE`），成功后删除旧键；解析失败只记日志、保留旧键，不阻塞启动。自建相册（`CustomAlbumStore`）仍使用 SharedPreferences，**不在此次 SQLite 化范围**。
+- 线程安全：SQLite + 单例 helper；坏数据/损坏库由 SQLite 自身抛错，调用方按空收藏兜底（`FavoriteDb` 迁移路径捕获异常）。
 - 已知限制：收藏只在本应用内生效（系统相册/其它应用看不到）；旧版本写入 MediaStore 的收藏标记**不做迁移/导入**，也不再作为数据源；成员不主动 prune（媒体被删除后仍计入 `item_count`，内容查询会跳过）。
 
 ### 6.3 MediaWriter（物理复制）

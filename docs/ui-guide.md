@@ -213,7 +213,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 ```
 
 - 收藏**不再写系统媒体库**、也不再走 `RecoverableSecurityException` 系统授权弹窗（2026-10-19 起）：此前批量收藏需要用户逐次授权、部分设备直接失败。
-- 收藏数据只保存在本应用（`FavoriteStore`）；系统相册/其它应用看不到本应用的收藏，旧版本写进 MediaStore 的收藏标记不导入。
+- 收藏数据保存在本应用（`FavoriteStore`，SQLite `gallery_favorites.db`）；系统相册/其它应用看不到本应用的收藏，旧版本写进 MediaStore 的收藏标记不导入；旧版 SharedPreferences 收藏会在首次启动时自动迁移到 SQLite。
 
 ### 12.5 详情面板（`details_sheet`）
 

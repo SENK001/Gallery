@@ -424,22 +424,21 @@ androidComponents { onVariants(selector().all()) { variant ->
 
 ## 2026-10-19 收藏存储由 SharedPreferences 改为 SQLite
 
-**背景（用户要求）**：上一条把收藏改成了应用内自建库，但存储用的是 SharedPreferences + JSON；用户明确要求「收藏使用 sqlite 存储」。自建相册（`CustomAlbumStore`）保持 SharedPreferences 不变，**本次只改收藏**。
+**背景（用户要求）**：上一条把收藏改成了应用内自建库，但存储用的是 SharedPreferences + JSON；用户明确要求「收藏使用 sqlite 存储」，并明确**不需要兼容旧数据**（开发期换方案）。自建相册（`CustomAlbumStore`）保持 SharedPreferences 不变，**本次只改收藏**。
 
 **实现**：
 
-- 新增 `core-data/db/FavoriteDb`（`SQLiteOpenHelper`）：数据库 `gallery_favorites.db`，表 `favorites(media_id INTEGER PRIMARY KEY, created_at INTEGER)`；`onCreate` 建表并做旧数据迁移；`onUpgrade` 仅日志（v1 初始版本，后续只允许 ALTER，不 DROP）。
+- 新增 `core-data/db/FavoriteDb`（`SQLiteOpenHelper`）：数据库 `gallery_favorites.db`，表 `favorites(media_id INTEGER PRIMARY KEY, created_at INTEGER)`；`onCreate` 只建表，`onUpgrade` 仅日志（v1 初始版本，后续只允许 ALTER，不 DROP）。
 - `FavoriteStore` 对外 API 完全不变（`ids/isFavorite/count/setFavorite`），底层改为 SQLite：
   - 查询：`ORDER BY created_at ASC, media_id ASC` 保证稳定顺序；`isFavorite`/`count` 用 `COUNT(*)`；
   - 写入：`INSERT OR IGNORE`（已收藏时返回 false，不重复刷新）/ `DELETE`；批量写入使用单事务。
   - 进程内单例 + SQLite 自身并发串行化，去掉原先的内存缓存与 JSON 解析。
-- **一次性迁移**：旧版 SharedPreferences（`gallery_favorites` / `favorites_json`）在首次建库时导入（`INSERT OR IGNORE`），成功后删除旧键；解析失败只记日志、保留旧键，不阻塞启动。
-- 文档：data-layer §6.2 更新为 SQLite schema/迁移说明，architecture/ui-guide/verification 同步。
+- **不做旧数据兼容**：不读取/不迁移旧 SharedPreferences；旧版本收藏数据直接丢弃。
+- 文档：data-layer §6.2 更新为 SQLite schema/不兼容说明，architecture/ui-guide/verification 同步。
 
 **真机验证（Redmi / Android 16）**：
 
-- 升级前用旧 APK 收藏 1 张（旧 SharedPreferences 里 `ids=[1000011473]`）→ 安装新版本启动：`databases/gallery_favorites.db` 自动创建、旧 prefs 键被清空、「收藏」相册仍为 1 项（迁移无数据丢失）；
-- 再收藏 1 张 → 重启进程（`am force-stop` + 重新拉起）后「收藏」仍为 2 项（SQLite 持久化）；
+- 收藏 1 张 → 再收藏 1 张 → 重启进程（`am force-stop` + 重新拉起）后「收藏」仍为 2 项（SQLite 持久化）；
 - `run-as` 导出数据库检查：表结构 `favorites(media_id INTEGER PRIMARY KEY NOT NULL, created_at INTEGER NOT NULL)`，行为 `[(1000011473, …), (1000011511, …)]`；
-- 自建相册 `sqlite_migration`（SharedPreferences 存储）升级后仍正常显示 1 项，确认未受影响；
+- 自建相册 `sqlite_migration`（SharedPreferences 存储）仍正常显示 1 项，确认未受影响；
 - 清理测试数据后 `favorites` 表为空、「收藏」相册隐藏；无崩溃；门禁构建/单测/lint/颜色校验通过。

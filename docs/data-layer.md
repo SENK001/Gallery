@@ -35,7 +35,7 @@ ExternalMediaProvider（core-data，exported=false + 临时授权）     ← 对
 | `provider/ExternalMediaProvider.kt` | 对外代理 Provider：`content://com.senk.gallery.external/media/{id}` 只读代理到 MediaStore |
 | `album/CustomAlbumStore.kt` | 自建相册持久化（SharedPreferences + 版本化 JSON；线程安全、坏数据回退） |
 | `album/FavoriteStore.kt` | **自建收藏库**读写入口（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列） |
-| `db/FavoriteDb.kt` | 收藏的 SQLite 存储（`databases/gallery_favorites.db`；旧 SharedPreferences 收藏一次性迁移） |
+| `db/FavoriteDb.kt` | 收藏的 SQLite 存储（`databases/gallery_favorites.db`；开发期换方案，不兼容旧 SharedPreferences 数据） |
 | `entity/MediaObject.java`、`MediaItem.java`、`MediaSet.java` | 领域对象基类 / 媒体条目 / 相册集合 |
 | `pojo/*.java` | 具体型号（相册子类与数据包，见 §2） |
 
@@ -233,7 +233,9 @@ MediaStore.Files(外置卷) 变化
   ```
 
   SQLite 自身保证并发串行化；单次批量写入使用事务；`id` 只增不重（主键约束）。
-- 迁移：旧版本用 SharedPreferences（`gallery_favorites` / `favorites_json` JSON）保存收藏；首次创建 SQLite 库时**一次性导入**（`INSERT OR IGNORE`），成功后删除旧键；解析失败只记日志、保留旧键，不阻塞启动。自建相册（`CustomAlbumStore`）仍使用 SharedPreferences，**不在此次 SQLite 化范围**。
+- **不做旧数据兼容**：收藏从 SharedPreferences 切到 SQLite 属开发期换方案，旧版
+  `gallery_favorites` SharedPreferences 数据直接丢弃（不迁移、不读取）；自建相册
+  （`CustomAlbumStore`）仍使用 SharedPreferences，**不在此次 SQLite 化范围**。
 - 线程安全：SQLite + 单例 helper；坏数据/损坏库由 SQLite 自身抛错，调用方按空收藏兜底（`FavoriteDb` 迁移路径捕获异常）。
 - 已知限制：收藏只在本应用内生效（系统相册/其它应用看不到）；旧版本写入 MediaStore 的收藏标记**不做迁移/导入**，也不再作为数据源；成员不主动 prune（媒体被删除后仍计入 `item_count`，内容查询会跳过）。
 

@@ -106,7 +106,7 @@ $ADB shell am start -a com.senk.gallery.action.VIEW_IMAGE \
 - 相册 Tab：常用 / 我的相册（新建、长按删除）/ 更多；相册详情页宫格 + 上划 chrome
 - 多选：标题栏「多选」/长按进入、选择框、标题计数、全选、返回退出、胶囊导航隐藏、四个动作（分享/收藏/添加到/删除）；删除走系统"最近删除"确认，**收藏不弹系统授权**（写入应用内自建库）
 - 收藏（自建库）：多选收藏后相册页出现「收藏」相册且计数正确 → 查看器爱心为实心 → 查看器取消收藏后「收藏」相册消失；全程无系统「允许修改」弹窗、无崩溃；系统相册的收藏状态不应变化（有意）
-- 收藏存储（SQLite）：用旧版 APK 先收藏 1 张 → 安装新版本启动 → 收藏仍在（SharedPreferences→SQLite 一次性迁移）；再收藏 1 张后 `am force-stop` 重启 → 计数保持；`run-as` 拉取 `databases/gallery_favorites.db` 可看到 `favorites` 表与记录；自建相册（SharedPreferences 存储）不受影响
+- 收藏存储（SQLite）：收藏 1 张 → `am force-stop` 重启 → 计数保持；`run-as` 拉取 `databases/gallery_favorites.db` 可看到 `favorites` 表与记录；自建相册（SharedPreferences 存储）不受影响；旧 SharedPreferences 收藏数据不兼容（开发期换方案，直接丢弃）
 - 添加到：自建相册逻辑加入、相机/文件夹相册物理复制（进度、结果、相册计数变化）
 - 选图页：外部 PICK_IMAGE 进入、单选/多选/上限、照片/相册双 tab、相册内分类进出、完成回传
 - 外部大图：VIEW_IMAGE 打开、退出无崩溃；外部调用测试壳的代理 URI 可读

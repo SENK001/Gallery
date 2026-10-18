@@ -361,3 +361,36 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 配置缓存复用正常（`Reusing configuration cache`，91 tasks up-to-date）；
 - 门禁：`:main:lintArm64Debug` 0 error / 5 warning（与基线一致）；`:core-data:testDebugUnitTest :common-util:testDebugUnitTest` 全绿；
 - **未做**：安装验证（改动时无设备/模拟器连接）、Studio Build Variants 图形流程复验；见 [backlog](backlog.md)。
+
+---
+
+## 2026-10-19 宫格改 View + 多选/选图/自建相册/外部调用
+
+**背景**：产品需求要求「宫格每格用 View 以适配无障碍」、新增多选模式、选图页（单选/多选/分类选）、自建相册与「添加到」、外部调用（选图/大图）。原架构中宫格是 `GLSurfaceView` 自绘：`uiautomator` 看不到格子、TalkBack 无法逐格聚焦；查看器/视频两处 GL 保持不变。模块上新增 `external-api`（纯契约 Android library），其余在原有 `main → main-ui → core-data` 内按包拆分（`ui/grid`、`ui/selection`、`ui/picker`、`ui/addto`）。
+
+**做了什么**：
+
+- **宫格 View 化**：`MediaGridView`（RecyclerView 子类）+ `MediaGridAdapter` + `item_media_cell.xml` + `GridCellLayout`（`onMeasure` 强制正方形）；缩略图 `ImageViewThumbLoader` 加 LRU Bitmap 缓存与 tag 防复用；视频时长/动态照片角标/选择框都是普通 View；删除 `GlThumbnailGridView` / `GlGridRenderer` / `GridGeometry` / grid 用 `ThumbnailLoader`。铺满式布局改为 `RecyclerView padding + clipToPadding=false`。照片页/相册详情页/选图页共用 `GridPageController`（分页 + ContentObserver 回顶 + 提交列表）与缩略图链路。
+- **多选**：`SelectionState`（只存 id、保留点选顺序、maxCount、监听器）为与 View 无关的状态机；`SelectionActionBar`/`SelectionActions` 提供分享/收藏/添加到/删除；照片页与相册详情页共用。标题栏「多选」/全选、关闭、返回键先退多选、隐藏胶囊导航。
+- **选图页** `ImagePickerActivity`：Toolbar + TabLayout（照片/相册）+ 共享宫格；相册 tab 复用 `AlbumListAdapter`，点相册进入内容二级视图；单选/多选/分类选；结果回传原始 URI + id。
+- **自建相册**：设计为**应用内逻辑集合**（`CustomAlbumStore`，SharedPreferences + 版本化 JSON，线程安全），不复制媒体文件；相册页新增「我的相册」分区（新建/删除）；`AddToAlbumActivity` 支持逻辑加入自建相册、物理复制到相机/文件夹相册（`MediaWriter`，`IS_PENDING` + 64KB 流复制 + 重名去重 + 取消清理）。
+- **外部调用**：`external-api` 定义 action/extras；`main.ExternalEntryActivity`（唯一 exported 入口，透明窗口）校验隐私/权限后路由选图页/查看器；选图结果转成 `ExternalMediaProvider` 的代理 URI 并对调用方逐个临时授权；`ViewerActivity` 增加外部大图模式（合成负 id `MediaItem`，不查本库）。`src/debug` 增加 `ExternalClientDebugActivity` 测试壳（release 不含）。
+- **相册页标题栏**：给「相册」页 toolbar 铺一层不透明 `gallery_surface_chrome`（照片页仍透明以透出渐变/宫格），修复上划时列表内容从透明标题栏下透出的问题。
+
+**真机验证中发现并修复的坑（后续排查先读）**：
+
+1. **外部 VIEW_IMAGE 的 intent-filter 只写 scheme 不匹配**：带 `content://` data 的隐式 Intent 在真机上 `ActivityNotFoundException`（`ActivityStarterImpl: aInfo is null`），但 `pm resolve-activity` 却能解析。根因是 data 匹配还要求 `host` 与（content URI 可推断出的）MIME 类型匹配；`scheme`-only 的 filter 对带 authority 的 content URI 不成立。修法：`VIEW_IMAGE` 用独立 filter 并声明 `scheme=content + host="*" + mimeType="*/*"`（外加 file scheme）；`PICK_IMAGE` 没有 data，必须留在**不带 data** 的另一个 filter 里。**不要合并这两个 filter。**
+2. **`MediaStore.createTrashRequest` / `createFavoriteRequest` 只接受 MediaStore 真实 URI**：传本应用 Provider URI（`content://com.senk.gallery.data.provider/media/{id}`）抛 `IllegalArgumentException: All requested items must be referenced by specific ID`。修法：批量删除/收藏授权请求改用 `MediaItem.uri`（`content://media/external/images|video/media/{id}`）；收藏的普通写回仍走 Provider。
+3. **ViewPager2 切页后照片页回调丢失**：从相册页切回照片页，`onPageSelected` 触发时 Fragment 视图可能尚未重建，`supportFragmentManager.fragments` 里拿不到目标实例，导致上划宫格标题栏不再切换到渐变遮罩（真机复现）。修法：`registerFragmentLifecycleCallbacks` 在 `onFragmentViewCreated`/`onFragmentResumed` 时绑定 `onGridScroll` / `onSelectionStateChanged`，再保留 `onPageSelected` 与首帧 `post` 兜底。
+4. **新增页面必须处理 system bars insets**：targetSdk 36 强制 edge-to-edge，「添加到」页最初没加 `setOnApplyWindowInsetsListener`，标题栏直接画在状态栏下面。修法：根布局 padding = `Type.systemBars()`。
+5. **外部选图代理 URI 读取自测**：app 内测试壳验证 `query` 元数据 + `openInputStream` 读 64KB 成功（name/mime/size 正确），多选 2 张均通过；VIEW_IMAGE 隐式启动查看器成功。
+
+**验证（真机 / Android 16 / 1280×2772）**：
+
+- 构建：`:main:assembleArm64Debug` / `:main:assembleArm64Release` BUILD SUCCESSFUL；`:main-ui:testDebugUnitTest`（新增 `SelectionStateTest` 7 例）+ core-data/common-util 单测全绿（共 23）；lint 0 error / 3 warning（均为历史遗留）；`check-color-pairs.py` 29 色成对；release APK 已确认不含 debug 测试壳（`ExternalClientDebugActivity` 0 处），外部入口正常打包；
+- 照片页/相册详情页：View 宫格渲染、滚动、标题栏渐变、点击进查看器；多选进入/勾选/全选/退出、动作栏、分享/收藏/添加到/删除；
+- 选图页：外部 PICK_IMAGE 进入，单选取图回传 1 张、多选 2 张回传并读出代理 URI；相册 tab 分类进出正常；
+- 自建相册：新建后立即加入 1 张，相册页「我的相册」显示；长按删除相册（照片保留）；复制 1 张到 `Pictures/douyin/comment/` 成功，删除该复制文件后恢复；
+- 深色模式抽查：照片页/多选/相册页/选图页/添加到底色与文字正常（截图见本机 `verification-reports/`）；
+- 无障碍：`uiautomator dump` 中每格含 `content-desc`（照片/视频+时间+选中态），多选态 `checkable=true`、选中格 `checked=true`；
+- 崩溃：`adb logcat -d -b crash` 无 `com.senk.gallery`。

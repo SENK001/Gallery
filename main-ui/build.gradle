@@ -20,6 +20,12 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
 
+    testOptions {
+        // 纯 JVM 单元测试（SelectionStateTest 等）：android.jar 的静态方法默认抛
+        // "not mocked"，这里返回默认值，使被测逻辑里防御性的 Log.e 分支也能在 JVM 上跑到。
+        unitTests.returnDefaultValues = true
+    }
+
 }
 
 dependencies {

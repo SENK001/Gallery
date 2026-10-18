@@ -1,12 +1,13 @@
 # 验证方法与判据
 
-本文件规定「改完怎么验」：门禁组合、静态检查、真机流程、GL 相关专项判据，以及本机基线数据。长期结论与根因记录在 [开发史](history.md)；证据文件放在本机 `verification-reports/`（已在 `.gitignore` 中排除，不进版本库）。
+本文件规定「改完怎么验」：门禁组合、静态检查、真机流程、GL/宫格专项判据，以及本机基线数据。长期结论与根因记录在 [开发史](history.md)；证据文件放在本机 `verification-reports/`（已在 `.gitignore` 中排除，不进版本库）。
 
 ## 1. 最小门禁（每次改动）
 
 ```bash
 ./gradlew :main:assembleArm64Debug --offline       # 编译通过（真机默认目标；全变体用 :main:assembleDebug）
-./gradlew :core-data:testDebugUnitTest \
+./gradlew :main-ui:testDebugUnitTest \
+          :core-data:testDebugUnitTest \
           :common-util:testDebugUnitTest --offline # 单元测试
 ./gradlew :main:lintArm64Debug --offline           # lint
 python scripts/check-color-pairs.py                # 颜色成对 + 悬空引用
@@ -14,27 +15,28 @@ python scripts/check-color-pairs.py                # 颜色成对 + 悬空引用
 
 发布前再加 `:main:assembleRelease`（含签名）与冷编译（`--stop` + `clean` + `--no-build-cache`）。
 
-**通过线**（2026-10 基线；数值可随环境漂移，判断时看「规则 + 位置」而非总数）：
+**通过线**（2026-10-19 基线；数值可随环境漂移，判断时看「规则 + 位置」而非总数）：
 
 | 项 | 通过线 |
 |---|---|
 | 构建 | BUILD SUCCESSFUL，冷编译任务真实执行 |
-| 单元测试 | **16/16** 全绿（见 §2） |
-| lint | **0 error** / ≤5 warning；无「与本次改动相关」的新条目 |
-| 颜色校验 | `OK —— 29 个颜色全部成对定义，且无悬空引用。` |
+| 单元测试 | **23/23** 全绿（见 §2） |
+| lint | **0 error** / 3 warning（2026-10-19 基线：`UnusedResources` ×1、`UselessParent` ×2，均为历史遗留）；无「与本次改动相关」的新条目 |
+| 颜色校验 | `OK —— 29 个颜色全部成对定义，且无悬空引用。`（新增颜色时总数会变，以脚本输出为准） |
 | 崩溃 | `adb logcat -d -b crash` 中无 `com.senk.gallery` |
 
 lint 的版本检查类告警（`GradleDependency` / `NewerVersionAvailable`）会随联网查 Maven 新版而漂移，凡出现在 `libs.versions.toml` 的此类条目与代码改动无因果关系，按「文件位置」排除。
 
 ## 2. 单元测试清单
 
-| 测试 | 数量 | 覆盖 |
-|---|---|---|
-| `XmpParserTest`（core-data） | 8 | 动态照片标记（`GCamera:MotionPhoto` / `MicroVideo`）、非动态照片反例、`Container:Item` 的 `Item:Length` 提取、旧格式 `MicroVideoOffset`、缺标记返回 0、`GPano` 全景、尺寸兜底 `isPanoramaBySize`（含 8000×2000 真、4000×3000 假、0×0 假） |
-| `CoordConverterTest`（common-util） | 4 | 上海/深圳/北京 WGS-84→GCJ-02 数值（1e-6 容差）、境外坐标保持不变 |
-| `ExampleUnitTest` × 4 模块 | 4 | 模板占位（工程脚手架，无业务断言） |
+| 测试 | 模块 | 数量 | 覆盖 |
+|---|---|---|---|
+| `XmpParserTest` | core-data | 8 | 动态照片标记（`GCamera:MotionPhoto` / `MicroVideo`）、非动态照片反例、`Container:Item` 的 `Item:Length` 提取、旧格式 `MicroVideoOffset`、缺标记返回 0、`GPano` 全景、尺寸兜底 `isPanoramaBySize` |
+| `CoordConverterTest` | common-util | 4 | 上海/深圳/北京 WGS-84→GCJ-02 数值（1e-6 容差）、境外坐标保持不变 |
+| `SelectionStateTest` | main-ui | 7 | 多选状态机：进入/退出、点击切换与点选顺序、`maxCount` 上限、全选、按 id 过滤旧条目、监听器通知与异常隔离 |
+| `ExampleUnitTest` × 4 | 4 模块 | 4 | 模板占位（工程脚手架，无业务断言） |
 
-当前 **没有连接仪器（instrumentation）测试与 UI 自动化测试**；UI 行为靠 §4 真机手测 + §5 像素判据。
+当前 **没有连接仪器（instrumentation）测试与 UI 自动化测试**；UI 行为靠 §4 真机手测 + §5/§6 判据。
 
 ## 3. 静态检查：颜色成对（`scripts/check-color-pairs.py`）
 
@@ -46,11 +48,11 @@ lint 的版本检查类告警（`GradleDependency` / `NewerVersionAvailable`）�
 ## 4. 真机端到端流程
 
 ```bash
-ADB=$ANDROID_HOME/platform-tools/adb
+ADB=/d/Programs/Android/Sdk/platform-tools/adb.exe   # 本机；其它机器按 SDK 位置调整
+cd /d/Documents/Programming/src/Android/Gallery
 
 # 安装（产物名见 build-and-release.md；真机 arm64 / 模拟器 x86_64）
 $ADB install -r main/build/outputs/apk/arm64/debug/SenkGallery-Debug-arm64-v8a.apk
-# $ADB install -r main/build/outputs/apk/x86_64/debug/SenkGallery-Debug-x86_64.apk
 
 # 模拟首启（清空同意状态与权限）
 $ADB shell pm clear com.senk.gallery
@@ -63,7 +65,7 @@ $ADB shell cmd uimode night yes     # / no
 $ADB logcat -d -b crash | grep senk
 ```
 
-**截图铁律：不要用 `/sdcard` 中转。** `adb shell screencap -p /sdcard/xxx.png` 会写入 MediaStore → 触发照片页 `ContentObserver` → `loadPage(reset = true)` → `scrollToTop()`，**每截一张图就把宫格弹回顶部**（曾据此误判「应用自己回弹」）。截图与 `uiautomator dump` 一律走 `/data/local/tmp`（不进媒体库）：
+**截图铁律：不要用 `/sdcard` 中转。** `adb shell screencap -p /sdcard/xxx.png` 会写入 MediaStore → 触发照片页 `ContentObserver` → `loadPage(reset = true)` → `scrollToTop()`，**每截一张图就把宫格弹回顶部**。截图与 `uiautomator dump` 一律走 `/data/local/tmp`（不进媒体库）：
 
 ```bash
 $ADB shell screencap -p /data/local/tmp/_s.png
@@ -73,33 +75,61 @@ $ADB shell rm /data/local/tmp/_s.png
 
 **界面状态检查**：
 
-- `uiautomator dump` 可取 View 的真实 bounds（如标题栏 `[52,207][196,304]`），用于几何量化；
-- 两点限制：① 渐变遮罩（纯 `View`、无文本）**不出现在 dump 里**，判定「是否已上划」要用「与静止截图对比亮度」；② **GL 内容不在 View 树中**（宫格/查看器画面 dump 不到），GL 相关一律用截图逐像素判断（见 §5）。
-- `monkey` 拉起应用前先 `am force-stop`：否则会把上次遗留的查看器带到前台，静止态截图会抓成整屏单张照片。
+- `uiautomator dump` 可取 View 的真实 bounds。**宫格已改为 View**：每格 `resource-id=…/media_cell_root`、`content-desc=「照片/视频，时间，已选/未选」`、多选态 `checkable=true`；`photo_grid`/`album_grid` 是 `RecyclerView`。
+- 仍不在 dump 里的：渐变遮罩（纯 `View`、无 contentDescription）、**查看器/视频的 GL 画面**。判定「照片页是否已上划」用「与静止截图对比标题条亮度」；查看器/视频布局用截图逐像素判断（见 §5）。
+- `monkey` 拉起应用前先 `am force-stop`：否则会把上次遗留的查看器带到前台。
 
-**媒体库复核**（这台设备上排序表达式是否被接受）：
+**外部调用验证（debug APK 内置测试壳）**：
 
 ```bash
-$ADB shell "content query --uri content://media/external/file \
-  --projection _id:datetaken \
-  --sort 'COALESCE(datetaken, date_modified * 1000) DESC, _id DESC'"
+# 选图（多选）：本应用内模拟“第三方调用方”走真实路由，随后在 UI 里选 2 张并点「完成」
+$ADB shell am start -n com.senk.gallery/.debug.ExternalClientDebugActivity \
+  --es mode pick --ez allow_multiple true
+$ADB logcat -d -s ExternalClientDebug -s GalleryExternal   # 期望：picker result ids=N proxies=N；uri[i] query ok/openInputStream ok
+
+# 外部大图：用本应用媒体库第一张图走 VIEW_IMAGE
+$ADB shell am start -n com.senk.gallery/.debug.ExternalClientDebugActivity --es mode view
+
+# 纯外部入口（不需要测试壳，验证 exported 路由）
+$ADB shell am start -a com.senk.gallery.action.PICK_IMAGE --ez com.senk.gallery.extra.ALLOW_MULTIPLE true
+$ADB shell am start -a com.senk.gallery.action.VIEW_IMAGE \
+  -d content://media/external/images/media/<id> --grant-read-uri-permission
 ```
 
-对照（应报 `Invalid token`）：把 `datetaken` 换成 Kotlin 常量名 `date_taken`。细节见 [数据层 §4](data-layer.md)。
+> 注意：**VIEW_IMAGE 的 intent-filter 必须带 `scheme + host + mimeType`**（`main` Manifest 已配置）。只写 `scheme` 时带 data 的隐式 Intent 无法匹配（真机实测 `ActivityNotFoundException`）；PICK_IMAGE 没有 data，必须留在**不带 data** 的独立 filter 里。
 
-**手测清单**（当前版本应全部正常、无崩溃）：照片 Tab / 相册 Tab / 相册详情 / 查看器翻页 / 沉浸切换 / 上划详情面板 / EXIF / 地图卡片 / 逆地理编码 / 收藏写回授权 / 视频播放（控制栏、自动隐藏、横屏）/ 动态照片长按播放 / 隐私首启页（退出、链接、同意、二次启动不再显示）。
+**手测清单**（当前版本应全部正常、无崩溃）：
 
-## 5. GL 相关验证专项
+- 隐私首启页（退出、链接、同意、二次启动不再显示）
+- 照片 Tab：View 宫格、滚动流畅、标题栏渐变、点击进查看器、空态
+- 相册 Tab：常用 / 我的相册（新建、长按删除）/ 更多；相册详情页宫格 + 上划 chrome
+- 多选：标题栏「多选」/长按进入、选择框、标题计数、全选、返回退出、胶囊导航隐藏、四个动作（分享/收藏/添加到/删除）；删除走系统"最近删除"确认
+- 添加到：自建相册逻辑加入、相机/文件夹相册物理复制（进度、结果、相册计数变化）
+- 选图页：外部 PICK_IMAGE 进入、单选/多选/上限、照片/相册双 tab、相册内分类进出、完成回传
+- 外部大图：VIEW_IMAGE 打开、退出无崩溃；外部调用测试壳的代理 URI 可读
+- 查看器：翻页 / 沉浸 / 上划详情面板 / EXIF / 地图卡片 / 逆地理编码 / 收藏写回授权
+- 视频播放（控制栏、自动隐藏、横屏）/ 动态照片长按播放
+- 深色模式抽查：照片页（静止/上划/多选）、相册页、选图页、添加到页
 
-1. **GL 画面只能通过截图验证**（见 §4）；需要「文字 vs 内容」这类判断时，用**纯白像素计数**这类结构性指标，而不是最大值/均值——亮色缩略图本身也能达到高亮度，会骗过统计（标题栏 z-order 修复的判据：标题框内纯白像素修复前 **0**、修复后 **2894**，同 y 背景区始终 **0**；见 [开发史](history.md)）。
+## 5. GL 专项验证（查看器 / 视频）
+
+1. **GL 画面只能通过截图验证**（不在 View 树）；需要「文字 vs 内容」这类判断时，用**纯白像素计数**这类结构性指标，而不是最大值/均值。
 2. **改渐变/遮罩时，先临时屏蔽渐变再验证布局**（硬性约定）：把 `ToolbarScrimDrawable.START_ALPHA` 临时改 `0x00` 重建——
-   - 屏蔽后顶部仍纯白 → 布局/边距问题（查 `topInset`）；
+   - 屏蔽后顶部仍纯白 → 布局/边距问题（查宫格 `setContentInsets` / 覆盖层 insets）；
    - 屏蔽后能看到缩略图 → 布局正确，剩下只是渐变观感。
    顺序：① 屏蔽验证布局 → ② 恢复渐变调观感 → ③ 移除临时代码并确认无残留。
-3. **不屏蔽时的辅助判据**：同一高度取**多个 x**，取值**互不相同**才说明有图像内容透出；只取单点或完全一致（如清一色 `(116,116,116)`）不足以区分「被压平」与「真的空白」。
-4. **几何量化约定**：`maxScroll` 与 `cellY(rowCount−1) + cellSize − scrolled` 的差值应精确等于 `屏高 − bottomPadding`；打印几何量（`vp/cell/topInset/rows`）比反复调数值猜测有效。
+3. **不屏蔽时的辅助判据**：同一高度取**多个 x**，取值**互不相同**才说明有图像内容透出；只取单点或完全一致不足以区分「被压平」与「真的空白」。
+4. **沉浸/详情面板/播放器控制栏**：这些是窗口层 View 叠在 GL 上，布局用 dump + 截图；GL 画面本身用截图判。
 
-## 6. 本机基线数据（Redmi 25053RT47C / Android 16 / 1280×2772 / density 520 / 手势导航）
+## 6. View 宫格 / 多选专项判据
+
+- 无障碍（结构化）：`uiautomator dump` 中 `media_cell_root` 数量 = 可见格数；每个节点 `content-desc` 非空；多选态 `checkable=true` 且选中格 `checked=true`。
+- 铺满式布局：照片页静止时首行格子 `bounds.top ≈ 状态栏 + actionBarSize`（本机 360px）；滚到底时最后一行底边 ≈ `屏高 − bottomPadding`（胶囊 234 + 导航栏 52 = 286 → 2486；相册详情页 2720）。
+- 标题栏渐变：与静止截图对比标题条亮度；不屏蔽渐变时同高度多 x 取样应互不相同。
+- 多选：进入后标题文本 =「已选择 N 项」、胶囊导航不可见、动作栏可见；选中/取消时标题计数同步；退出后恢复应用标题与胶囊导航。
+- 深色模式：宫格底色、标题栏、选择框、动作栏均使用 `values-night` 色板（肉眼/截图抽查，无白块或黑字压黑底）。
+
+## 7. 本机基线数据（Redmi 25053RT47C / Android 16 / 1280×2772 / density 520 / 手势导航）
 
 用于对照，换设备后数值会变（状态栏 152px、`actionBarSize` 208px、系统导航栏 52px）：
 
@@ -111,16 +141,20 @@ $ADB shell "content query --uri content://media/external/file \
 | 滚到底 | 最后一行底边 | 照片页 `2486`（= 2772 − 286：胶囊占位 234 + 系统导航栏 52）；相册详情页 `2720`（= 2772 − 52） |
 | 相册页 | 顶部 | 始终 `255`（白底标题栏，不受上划影响） |
 | 相册详情页静止 | 顶部取色 | `y=0..355` = `255`，首行缩略图 `y≈400` |
+| 多选动作栏 | 高度 | 64dp ≈ 208px（内容）+ 系统导航栏 inset；照片页多选时宫格 bottomPadding = 208 + 52 |
+| 添加到页 / 选图页 | 顶部 | 标题栏 bounds `top = 状态栏高度`（152），内容不被系统栏压住 |
 
 历史各轮实测数据（构建耗时、APK 体积、像素差值、WCAG 对比度等）记录在 [开发史](history.md) 对应条目。
 
-## 7. 验证产物归档
+## 8. 验证产物归档
 
-- 本机 `verification-reports/`：构建/测试/lint 日志、真机截图、一次性报告与脚本（`capture.sh`、`analyze_title.py` 等）。**不进版本库**，重新生成方法见该目录 `README.md`。
+- 本机 `verification-reports/`：构建/测试/lint 日志、真机截图、一次性报告与脚本。**不进版本库**，重新生成方法见该目录 `README.md`。
 - 进入版本库的是「长期有效」结论：判据写在本文件，根因与数据写进 [开发史](history.md)；未覆盖项汇总在 [暂缓项与已知限制](backlog.md)。
 
-## 8. 当前未覆盖（勿当作通过）
+## 9. 当前未覆盖（勿当作通过）
 
 - 无仪器测试 / UI 自动化；全程手工 + 脚本辅助。
-- 仅在一台 Redmi / Android 16 真机 + Android 16 x86_64 模拟器上验证过；其它 ROM 的状态栏高度、`actionBarSize`、系统导航栏取值都会改变 §6 的数值。
+- 仅在一台 Redmi / Android 16 真机 + Android 16 x86_64 模拟器上验证过；其它 ROM 的状态栏高度、`actionBarSize`、系统导航栏取值都会改变 §7 的数值。
 - 横屏、平板/折叠屏、`fontScale > 1`、地图页深色模式等场景未覆盖，见 [backlog](backlog.md)。
+- 真实第三方 APK 的外部调用未验证（本应用内测试壳只能模拟到同 UID 调用）；跨应用 URI 授权时效未压测。
+- 添加到/复制的异常边界（磁盘满、超大视频、并发写入、系统媒体库去重差异）未压测。

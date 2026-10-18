@@ -36,7 +36,7 @@
 | `gallery_text_secondary` | `#8A000000` | `#99FFFFFF` | 说明、副标题 |
 | `gallery_text_on_scrim` | `#FFFFFF` | `#FFFFFF` | 深色遮罩/媒体层上的文字（上划标题栏、视频控件） |
 | `gallery_surface_chrome` | `#FFFFFF` | `#FF1C1B1F` | chrome 底色：标题栏、状态栏底条、各页根布局 |
-| `gallery_surface_content` | `#FFFFFF` | `#FF1C1B1F` | 内容底色：宫格 GL 清屏色、全屏页面背景 |
+| `gallery_surface_content` | `#FFFFFF` | `#FF1C1B1F` | 内容底色：全屏页面背景、查看器 GL 清屏色 |
 | `gallery_surface_sheet` | `#FFF2F3F5` | `#FF2A2A2E` | 查看器详情面板 / 地图卡片 |
 | `gallery_surface_placeholder` | `#FFEEEEEE` | `#FF2A2A2E` | 缩略图占位 |
 | `gallery_surface_nav_card` | `#F0FFFFFF` | `#F02A2A2E` | 胶囊导航卡片（半透明，透出缩略图） |
@@ -122,7 +122,7 @@
 
 - 媒体观看层：`gallery_media_scrim / control_bg / on_scrim / progress_track`（播放器与查看器沉浸，媒体场景按惯例恒定深色）。
 - 查看器占位：`gallery_media_placeholder_light / _dark` —— 表达的是「当前用亮底还是深底观看」（由 `lightBackground` 驱动），与系统深浅色是**正交**维度；两态都要能在任何系统模式下工作。
-- GL 角标（`BadgeCache`：渐变、时长文字、动态照片角标、播放图标、空态文字）与 `MapMarkers.dot` 的标记色：画在用户图片之上，恒定色有实际理由（代码注释里也有说明）。`MapMarkers` 用固定蓝色而非品牌色是历史选择。
+- 查看器角标（`BadgeCache` 的播放图标）与 `MapMarkers.dot` 的标记色：画在用户图片之上，恒定色有实际理由（代码注释里也有说明）。`MapMarkers` 用固定蓝色而非品牌色是历史选择。
 - `ToolbarScrimDrawable` 的 `0x8C`：见 §5（深度是观感参数，写在与高度同源的代码里）。
 - 功能性字面量（不构成色板条目，与主题无关）：`ViewerActivity` 退出沉浸时根视图被重置为 `Color.WHITE`——该层位于 GL 画面之下、不可见（窗口层背景已按主题恢复为 `surfaceContent`）；`PrivacyActivity` 的 `highlightColor = TRANSPARENT`（关闭点击高亮）；`VideoPlayerActivity` 的窗口透明背景（半透明控件栏透出视频的前提，见 [界面与交互 §9](ui-guide.md)）。「把背景交给下层」的场合用 `ThemeUtils.transparent()` 表达。
 

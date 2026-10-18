@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  仅 debug 构建包含的「外部调用方」测试壳（见 ExternalClientDebugActivity）。
+
+  用途：在真机上走一遍**真实的外部调用链路**（本应用内模拟第三方调用方）：
+  startActivityForResult(PICK_IMAGE) → 拿到代理 URI → openInputStream/query 验证可读；
+  VIEW_IMAGE → 打开外部大图。release 构建不包含本文件与对应 Activity。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name=".debug.ExternalClientDebugActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Gallery" />
+    </application>
+
+</manifest>

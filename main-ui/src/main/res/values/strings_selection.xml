@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  多选动作栏 / 多选相关提示文案。
+  新增字符串统一放这里，不要改公共 strings.xml（多人并行时避免冲突）。
+-->
+<resources>
+    <!-- 动作栏四个动作（分享/收藏复用公共 strings 的 gallery_share、gallery_favorite） -->
+    <string name="selection_add_to_album">添加到</string>
+    <string name="selection_delete">删除</string>
+
+    <!-- 操作结果提示 -->
+    <string name="selection_favorite_done">已收藏 %1$d 项</string>
+    <string name="selection_unfavorite_done">已取消收藏 %1$d 项</string>
+    <string name="selection_added_done">已添加到相册（%1$d 项）</string>
+    <string name="selection_deleted_done">已移到最近删除</string>
+    <string name="selection_action_failed">操作失败，请重试</string>
+    <string name="selection_share_empty">所选内容没有可分享的文件</string>
+</resources>

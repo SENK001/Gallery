@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 视频角标里的小播放三角（Material Icons: play_arrow 简化版） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="10dp"
+    android:height="10dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/gallery_media_on_scrim"
+        android:pathData="M8,5v14l11,-7z" />
+</vector>

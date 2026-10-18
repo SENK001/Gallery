@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  宫格右上角选择框：未选 = 半透明深底 + 白描边（压在任意缩略图上都可见）；
+  已选 = 品牌主色实心圆 + 白色对勾（对勾由布局里的 ImageView 单独显示）。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/gallery_brand_primary" />
+            <stroke
+                android:width="1.5dp"
+                android:color="@color/gallery_brand_on_primary" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/gallery_media_control_bg" />
+            <stroke
+                android:width="1.5dp"
+                android:color="@color/gallery_text_on_scrim" />
+        </shape>
+    </item>
+</selector>

@@ -1,90 +1,242 @@
 package com.senk.gallery.ui
 
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
+import android.app.Activity
+import android.os.Bundle
 import android.view.View
-
+import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
-import com.senk.gallery.ui.gl.GlThumbnailGridView
-import com.senk.gallery.ui.theme.ThemeUtils
+import com.senk.gallery.ui.grid.GridPageController
+import com.senk.gallery.ui.grid.MediaGridView
+import com.senk.gallery.ui.selection.SelectionActionBar
+import com.senk.gallery.ui.selection.SelectionActions
+import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.util.DisplayUtils
-import kotlinx.coroutines.launch
 
+/**
+ * 照片页：RecyclerView 宫格（[MediaGridView]）+ 分页加载 + 多选模式。
+ *
+ * 页面结构（fragment_photos.xml）：
+ * - 宫格铺满整个窗口（含状态栏/系统导航栏区域），首行位置由 `setContentInsets` 的
+ *   top padding 预留（状态栏 + 标题栏）；标题栏本身是 MainActivity 的覆盖层；
+ * - 底部多选动作栏只在多选态显示；此时宫格 bottom padding 从「胶囊导航占位 + 导航栏」
+ *   切换为「动作栏高度 + 导航栏」。
+ *
+ * 与宿主的解耦：
+ * - 标题栏渐变由 [onGridScroll] 交给 MainActivity（40px 死区判定在宿主）；
+ * - 多选状态由 [onSelectionStateChanged] 通知宿主（标题「已选择 N 项」/导航图标/隐藏胶囊导航）；
+ * - 宿主通过 [enterSelectionMode]/[exitSelectionMode]/[selectAll] 反向驱动本页。
+ * - 分页/内容变化刷新等页面无关逻辑在 [GridPageController]（与相册详情页共用）。
+ */
 class PhotosFragment : Fragment(R.layout.fragment_photos) {
 
-    private var grid: GlThumbnailGridView? = null
-    private var observer: ContentObserver? = null
-    private val items = ArrayList<MediaItem>()
-    private var loading = false
-    private var endReached = false
+    private var grid: MediaGridView? = null
+    private var actionBar: SelectionActionBar? = null
+    private var pageController: GridPageController? = null
+    private var actions: SelectionActions? = null
 
-    /** 宫格滚动回调，由宿主（MainActivity）设置，用于驱动标题栏渐变。 */
+    /** 宫格滚动回调（像素，0 = 顶部），由宿主设置，用于驱动标题栏渐变。 */
     var onGridScroll: ((Float) -> Unit)? = null
 
-    /** 已应用的顶部预留，避免 insets 每次回调都重设。 */
-    private var lastTopInset = -1
+    /** 多选状态变化回调（active = 是否多选，count = 已选数量），由宿主设置。 */
+    var onSelectionStateChanged: ((active: Boolean, count: Int) -> Unit)? = null
 
-    /** 已应用的底部预留，避免 insets 每次回调都重设。 */
-    private var lastBottomPadding = -1
+    /** 当前是否处于多选模式。 */
+    val isSelectionActive: Boolean
+        get() = grid?.selection?.isActive == true
 
-    override fun onViewCreated(view: View, savedInstanceState: android.os.Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        grid = view.findViewById(R.id.photo_grid)
-        grid?.apply {
-            setColumns(COLUMNS)
-            // 标题栏是透明的，透出的其实是宫格 surface 的底色——必须跟随主题，
-            // 否则深色模式下标题栏区域会保持白色
-            setSurfaceBackgroundColor(ThemeUtils.surfaceContent(requireContext()))
-            onItemClick = { item -> openViewer(item) }
-            onLoadMore = { loadPage(reset = false) }
-            onScrollChanged = { scrollY -> onGridScroll?.invoke(scrollY) }
-        }
-        applyInsets(view)
-        registerObserver()
-        loadPage(reset = true)
+    /** 已应用的顶部预留（状态栏 + 标题栏）像素。 */
+    private var topInset = 0
+
+    /** 系统导航栏高度（底部 inset 的一部分）。 */
+    private var systemBarsBottom = 0
+
+    /** 上一次回调的选中数量：用于「用户取消最后一项时自动退出多选」。 */
+    private var lastSelectionCount = 0
+
+    // ActivityResult 统一在这里注册（生命周期安全），再转给 SelectionActions：
+    // 收藏/删除走系统授权 IntentSender，添加到相册走普通 ActivityResult。
+    private val trashConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        actions?.onTrashConsentResult(result.resultCode == Activity.RESULT_OK)
     }
 
+    private val favoriteConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        actions?.onFavoriteConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    private val addToAlbumLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        actions?.onAddToAlbumResult(result.resultCode, result.data)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val mediaGrid = view.findViewById<MediaGridView>(R.id.photo_grid)
+        val selectionBar = view.findViewById<SelectionActionBar>(R.id.selection_action_bar)
+        grid = mediaGrid
+        actionBar = selectionBar
+
+        val selectionActions = SelectionActions(
+            context = requireContext(),
+            onExitSelection = { exitSelectionMode() },
+            onReload = { loadPage(reset = true) },
+            onMessage = { message -> toast(message) },
+        ).apply {
+            launchTrashConsent = { sender ->
+                trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+            launchFavoriteConsent = { sender ->
+                favoriteConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+            launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
+        }
+        actions = selectionActions
+
+        selectionBar.onShareClick = { selectionActions.share(selectedItems()) }
+        selectionBar.onFavoriteClick = { selectionActions.favorite(selectedItems()) }
+        selectionBar.onAddToAlbumClick = { selectionActions.addToAlbum(selectedItems()) }
+        selectionBar.onDeleteClick = { selectionActions.delete(selectedItems()) }
+
+        mediaGrid.apply {
+            columns = COLUMNS
+            // 空态文案（宫格内部适配器的一行空态项）
+            setEmptyText(getString(R.string.gallery_empty))
+            onItemClick = { item -> openViewer(item) }
+            onItemLongClick = { item ->
+                // 长按进入多选并选中该格（已在多选态时点击由格子自身切换选中）
+                if (!selection.isActive) {
+                    enterSelectionMode(item)
+                }
+            }
+            onLoadMore = { loadPage(reset = false) }
+            onScrollChanged = { scrollY -> onGridScroll?.invoke(scrollY.toFloat()) }
+            onSelectionChanged = { state -> handleSelectionChanged(state) }
+        }
+
+        val controller = GridPageController(
+            context = requireContext(),
+            grid = mediaGrid,
+            baseUri = GalleryContract.MEDIA_URI,
+            pageSize = PAGE_SIZE,
+        ).apply {
+            // 回顶重载后标题栏恢复静止态（宿主按 scrollY 判断）
+            onResetLoaded = { onGridScroll?.invoke(0f) }
+        }
+        pageController = controller
+
+        applyInsets(view)
+        controller.start(viewLifecycleOwner.lifecycleScope)
+    }
+
+    override fun onDestroyView() {
+        pageController?.stop()
+        pageController = null
+        grid = null
+        actionBar = null
+        actions = null
+        super.onDestroyView()
+    }
+
+    // ==================== 对外接口（MainActivity 用） ====================
+
     /**
-     * 顶部预留 = 状态栏 + 标题栏：标题栏**自身透明**、靠父容器主题底色显示，
-     * 但仍要为它留出位置，让缩略图第一行落在它下方（否则首行会被标题压住）。
+     * 进入多选模式（无初始选中项；长按格子时传该格）。
+     * 由主界面「多选」菜单或长按格子触发。
+     */
+    fun enterSelectionMode(initial: MediaItem? = null) {
+        grid?.selection?.enter(initial)
+    }
+
+    /** 退出多选模式（返回键/关闭按钮触发）。 */
+    fun exitSelectionMode() {
+        grid?.selection?.exit()
+    }
+
+    /** 全选当前已加载的条目（受 selection.maxCount 限制）。 */
+    fun selectAll() {
+        pageController?.selectAll()
+    }
+
+    // ==================== 数据加载 ====================
+
+    /**
+     * 加载数据。reset = true 时从第一页重载并回顶（首次加载 / 内容变化）。
+     * 由内容变化、授权后刷新、分页（onLoadMore）三条路径调用。
+     */
+    fun loadPage(reset: Boolean) {
+        pageController?.load(reset)
+    }
+
+    private fun openViewer(item: MediaItem) {
+        val index = pageController?.indexOf(item.id) ?: -1
+        if (index < 0) {
+            return
+        }
+        startActivity(
+            ViewerActivity.intent(requireContext(), GalleryContract.MEDIA_URI, index),
+        )
+    }
+
+    // ==================== 多选 UI ====================
+
+    private fun handleSelectionChanged(state: SelectionState) {
+        // 用户取消最后一项时自动退出多选（通过菜单刚进入、还没选任何项时不触发）
+        if (state.isActive && state.count == 0 && lastSelectionCount > 0) {
+            lastSelectionCount = 0
+            grid?.selection?.exit()
+            return
+        }
+        lastSelectionCount = state.count
+        actionBar?.isVisible = state.isActive
+        // 多选时底部换成动作栏高度，避免最后一行被动作栏遮挡
+        updateGridInsets()
+        onSelectionStateChanged?.invoke(state.isActive, state.count)
+    }
+
+    /** 动作栏动作的目标集合：按当前列表顺序返回已选条目。 */
+    private fun selectedItems(): List<MediaItem> =
+        pageController?.selectedItems().orEmpty()
+
+    // ==================== insets ====================
+
+    /**
+     * 顶部预留 = 状态栏 + 标题栏：标题栏是宿主的透明覆盖层，但第一行缩略图必须落在它下方；
+     * 底部预留 = 胶囊导航占位（72dp）+ 系统导航栏，多选时换成动作栏高度 + 导航栏。
      *
-     * 为什么是「内容偏移」而不是给宫格加 margin：宫格是 GL 自绘的 SurfaceView，
-     * 缩略图铺满整个 surface（也才能画到系统导航栏区域），位置只能由渲染器算，
-     * 所以用 [GridGeometry.topInset] 做固定下移。
-     *
-     * 底部预留 = **胶囊导航占位 + 系统导航栏高度**，让滚到底时最后一行完整停在两者上方
-     * （本页有悬浮胶囊导航，与相册详情页不同）。用 [GlThumbnailGridView.setBottomPadding]
-     * 而不是 `setBottomInset`：后者只把内容撑长，余量不足一行时最后一行仍会贴着屏幕底边。
-     *
-     * 必须走 insets 监听：onViewCreated 时视图尚未 attach 到窗口，
-     * `getRootWindowInsets()` 返回 null，会得到 0 而完全失效（真机实测）。
+     * 必须走 insets 监听：onViewCreated 时视图还没 attach，直接读 root insets 恒为 0。
      */
     private fun applyInsets(root: View) {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-
-            val topTarget = bars.top + toolbarHeightPx()
-            if (topTarget != lastTopInset) {
-                lastTopInset = topTarget
-                grid?.setTopInset(topTarget)
-            }
-
-            // 胶囊导航占位（含其下边距）由布局决定，系统导航栏高度由 inset 决定，两者相加
-            val capsulePx = DisplayUtils.dp2px(requireContext(), CAPSULE_AREA_DP).toInt()
-            val bottomTarget = capsulePx + bars.bottom
-            if (bottomTarget != lastBottomPadding) {
-                lastBottomPadding = bottomTarget
-                grid?.setBottomPadding(bottomTarget)
-            }
+            systemBarsBottom = bars.bottom
+            topInset = bars.top + toolbarHeightPx()
+            actionBar?.setPadding(0, 0, 0, bars.bottom)
+            updateGridInsets()
             insets
         }
         ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun updateGridInsets() {
+        val active = grid?.selection?.isActive == true
+        val bottom = if (active) {
+            dp2px(ACTION_BAR_HEIGHT_DP) + systemBarsBottom
+        } else {
+            dp2px(CAPSULE_AREA_DP) + systemBarsBottom
+        }
+        grid?.setContentInsets(topInset, bottom)
     }
 
     private fun toolbarHeightPx(): Int {
@@ -101,77 +253,10 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        grid?.onResume()
-    }
+    private fun dp2px(dp: Float): Int = DisplayUtils.dp2px(requireContext(), dp).toInt()
 
-    override fun onPause() {
-        grid?.onPause()
-        super.onPause()
-    }
-
-    override fun onDestroyView() {
-        observer?.let {
-            requireContext().contentResolver.unregisterContentObserver(it)
-        }
-        observer = null
-        grid = null
-        super.onDestroyView()
-    }
-
-    private fun registerObserver() {
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                loadPage(reset = true)
-            }
-        }
-        requireContext().contentResolver.registerContentObserver(
-            GalleryContract.CONTENT_URI,
-            true,
-            observer,
-        )
-        this.observer = observer
-    }
-
-    fun loadPage(reset: Boolean) {
-        if (loading || (endReached && !reset) || view == null || !isAdded) {
-            return
-        }
-        loading = true
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resolver = requireContext().contentResolver
-            val offset = if (reset) 0 else items.size
-            val result = MediaQuery.media(
-                resolver,
-                GalleryContract.withPage(GalleryContract.MEDIA_URI, PAGE_SIZE, offset),
-            )
-            if (view == null) {
-                loading = false
-                return@launch
-            }
-            if (reset) {
-                items.clear()
-                endReached = false
-                grid?.scrollToTop()
-            }
-            items.addAll(result)
-            if (result.size < PAGE_SIZE) {
-                endReached = true
-            }
-            grid?.submitItems(ArrayList(items))
-            loading = false
-        }
-    }
-
-    private fun openViewer(item: MediaItem) {
-        val index = items.indexOfFirst { it.id == item.id }
-        if (index < 0) {
-            return
-        }
-        startActivity(
-            ViewerActivity.intent(requireContext(), GalleryContract.MEDIA_URI, index),
-        )
+    private fun toast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }
 
     companion object {
@@ -184,5 +269,8 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
          * 注意这里只算胶囊本身，**系统导航栏高度由 inset 另加**，不要重复计入。
          */
         private const val CAPSULE_AREA_DP = 72f
+
+        /** 多选动作栏内容高度（dp），与 view_selection_action_bar.xml 的动作项高度一致；导航栏 inset 另加。 */
+        private const val ACTION_BAR_HEIGHT_DP = 64f
     }
 }

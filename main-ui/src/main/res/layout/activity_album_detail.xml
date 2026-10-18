@@ -6,9 +6,10 @@
 
   交互（与照片页一致）：
     · 静止时标题栏为**不透明白底** + 深色标题/返回键，宫格第一行位于标题栏下方
-      （由 Activity 的 setTopInset(状态栏 + 标题栏) 保证）
+      （由 Activity 的 setContentInsets(状态栏 + 标题栏) 保证）
     · 上划到有缩略图来到标题栏下方后，标题栏让位给黑色渐变遮罩（顶部透明）、
       标题/返回键转白色，缩略图滚到状态栏区域
+    · 多选时底部显示动作栏，标题 =「已选择 N 项」，返回键/关闭先退出多选
   渐变遮罩的绘制见 main-ui 的 ToolbarScrimDrawable。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -18,8 +19,8 @@
     android:layout_height="match_parent"
     style="@style/Widget.Gallery.ChromeSurface">
 
-    <!-- 宫格铺满全屏（首行的位置由 topInset 预留，见 Activity） -->
-    <com.senk.gallery.ui.gl.GlThumbnailGridView
+    <!-- 宫格：RecyclerView 实现（首行的位置由 top inset 预留，见 Activity） -->
+    <com.senk.gallery.ui.grid.MediaGridView
         android:id="@+id/album_grid"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
@@ -37,9 +38,7 @@
 
       ⚠️ **必须声明在 toolbar 之前**：toolbar 与遮罩的 View elevation 都是 0
       （Widget.Gallery.Toolbar 里的 elevation 是 Material 属性、不是 android:elevation），
-      FrameLayout 完全按声明顺序绘制 —— 放到 toolbar 之后就会盖住标题与返回键：
-      白字与白底被同一层渐变乘成同一个灰度（真机实测上划后同为 115），
-      表现就是「标题文字和背景一个颜色、分不清」。
+      FrameLayout 完全按声明顺序绘制 —— 放到 toolbar 之后就会盖住标题与返回键。
     -->
     <View
         android:id="@+id/album_toolbar_scrim"
@@ -50,13 +49,7 @@
     <!--
       标题栏：marginTop 让开状态栏（不能用 paddingTop，那会把它撑高）。
       颜色全部来自 Widget.Gallery.Toolbar：**背景透明**，靠父容器
-      （@id/album_detail_root）的 chrome 底色显示：
-        · 静止 → 透出主题底色（浅色为白、深色自动变深）+ 深色标题/返回键
-        · 上划 → 交给 album_toolbar_scrim 渐变遮罩（标题/返回键转白，由代码切换）
-      不写死不透明背景，深色模式才能跟随主题，上划时也不会有白底残留。
-
-      **声明在 album_toolbar_scrim 之后**：标题与返回键才画在渐变之上
-      （顺序颠倒就会变成"文字与背景同色"，见上面遮罩那段注释）。
+      （@id/album_detail_root）的 chrome 底色显示。
     -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
@@ -64,5 +57,14 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         app:navigationIcon="@drawable/ic_arrow_back" />
+
+    <!-- 多选动作栏：仅多选态可见（底部内边距 = 系统导航栏，由 Activity 按 insets 设置） -->
+    <com.senk.gallery.ui.selection.SelectionActionBar
+        android:id="@+id/selection_action_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.SelectionActionBar" />
 
 </FrameLayout>

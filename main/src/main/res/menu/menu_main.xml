@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  主界面标题栏菜单。
+
+  · 「多选」：仅在「照片」页、且未处于多选态时显示；点击进入宫格多选。
+  · 「全选」：仅多选态显示；点击全选当前已加载的媒体条目（受 SelectionState.maxCount 限制）。
+
+  图标来自 main-ui 模块的 drawable（资源合并后本模块可直接引用）；菜单项的可见性、
+  图标着色与标题文案由 MainActivity 按页面状态/选中数量动态维护。
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <item
+        android:id="@+id/action_multi_select"
+        android:icon="@drawable/ic_multi_select"
+        android:title="@string/grid_multi_select"
+        app:showAsAction="always"
+        tools:ignore="AlwaysShowAction" />
+
+    <item
+        android:id="@+id/action_select_all"
+        android:icon="@drawable/ic_select_all"
+        android:title="@string/grid_select_all"
+        app:showAsAction="always"
+        android:visible="false"
+        tools:ignore="AlwaysShowAction" />
+
+</menu>

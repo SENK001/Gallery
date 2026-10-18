@@ -23,7 +23,8 @@ import android.graphics.drawable.Drawable
  * **改动本类（或其它含渐变/遮罩的观感）时的验证约定** —— 先把渐变临时屏蔽再验证：
  * 把 [START_ALPHA] 临时改成 `0x00`（或让调用方先不设 background）重建，截图应能
  * **直接看到未压暗的缩略图**。这样能把「底层布局」与「观感」分开判断：
- * - 屏蔽后顶部仍是纯白 → 是布局/边距问题（查 `GridGeometry.topInset`）
+ * - 屏蔽后顶部仍是纯白 → 是布局/边距问题（查宫格的 `setContentInsets(top, …)` /
+ *   `MediaGridView` 的 padding，或覆盖层 insets 分配）
  * - 屏蔽后能看到缩略图 → 布局正确，剩下的只是渐变观感问题（调 alpha / 渐隐区间）
  *
  * 不屏蔽时的辅助判据：同一高度取**多个 x**、看取值是否**互不相同**——

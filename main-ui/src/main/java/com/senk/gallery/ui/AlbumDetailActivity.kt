@@ -1,15 +1,20 @@
 package com.senk.gallery.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.database.ContentObserver
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.FrameLayout
-
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -22,25 +27,69 @@ import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.data.provider.GalleryCursorReader
-import com.senk.gallery.ui.gl.GlThumbnailGridView
+import com.senk.gallery.ui.grid.GridPageController
+import com.senk.gallery.ui.grid.MediaGridView
+import com.senk.gallery.ui.selection.SelectionActionBar
+import com.senk.gallery.ui.selection.SelectionActions
+import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.ui.theme.ThemeUtils
+import com.senk.gallery.util.DisplayUtils
 import com.senk.gallery.util.SystemBarUtils
-import kotlinx.coroutines.launch
 
+/**
+ * 相册详情页：与首页照片页同一套宫格（[MediaGridView]）+ 分页 + 多选 + 顶部渐变 chrome。
+ *
+ * 与照片页的差异只有两处：
+ * - 本页没有底部胶囊导航，宫格底部预留只需系统导航栏高度（多选时再加动作栏高度）；
+ * - 顶栏在本页（Activity），因此标题/返回键/菜单的状态切换也在本页完成。
+ *
+ * 渐变 chrome 的规则与照片页完全一致（40px 死区，见 [onGridScrolled]）；
+ * 多选时标题 =「已选择 N 项」、导航图标 = 关闭、菜单 = 全选，返回键先退出多选。
+ */
 class AlbumDetailActivity : AppCompatActivity() {
 
-    private lateinit var grid: GlThumbnailGridView
+    private lateinit var grid: MediaGridView
     private lateinit var toolbar: MaterialToolbar
     private lateinit var statusBarBg: View
     private lateinit var scrim: View
-    private var observer: ContentObserver? = null
-    private val items = ArrayList<MediaItem>()
+    private lateinit var actionBar: SelectionActionBar
+    private var pageController: GridPageController? = null
+    private var actions: SelectionActions? = null
     private var baseUri: Uri = Uri.EMPTY
-    private var loading = false
-    private var endReached = false
+    private var albumTitle: String = ""
+    private var multiSelectItem: MenuItem? = null
+    private var selectAllItem: MenuItem? = null
 
     /** 已进入「缩略图位于标题栏下方」的状态。 */
     private var scrolledPast = false
+
+    /** 顶部预留（状态栏 + 标题栏）像素。 */
+    private var topInset = 0
+
+    /** 系统导航栏高度像素。 */
+    private var systemBarsBottom = 0
+
+    /** 上一次回调的选中数量：用于「用户取消最后一项时自动退出多选」。 */
+    private var lastSelectionCount = 0
+
+    // ActivityResult（授权弹窗 / 添加到相册）统一在这里注册，再转给 SelectionActions
+    private val trashConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        actions?.onTrashConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    private val favoriteConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        actions?.onFavoriteConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    private val addToAlbumLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        actions?.onAddToAlbumResult(result.resultCode, result.data)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,50 +100,177 @@ class AlbumDetailActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         statusBarBg = findViewById(R.id.album_status_bar_bg)
         scrim = findViewById(R.id.album_toolbar_scrim)
-        toolbar.setTitle(intent.getStringExtra(EXTRA_TITLE) ?: "")
-        toolbar.setNavigationOnClickListener { finish() }
-        applyInsets()
-        grid.setColumns(COLUMNS)
-        // 标题栏是透明的，透出的其实是宫格 surface 的底色——必须跟随主题，
-        // 否则深色模式下标题栏区域会保持白色
-        grid.setSurfaceBackgroundColor(ThemeUtils.surfaceContent(this))
-        grid.onItemClick = { item -> openViewer(item) }
-        grid.onLoadMore = { loadPage(reset = false) }
-        grid.onScrollChanged = { scrollY -> onGridScrolled(scrollY) }
+        actionBar = findViewById(R.id.selection_action_bar)
+
+        albumTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         baseUri = intent.getStringExtra(EXTRA_BASE_URI)?.let(Uri::parse) ?: Uri.EMPTY
-        registerObserver()
-        loadPage(reset = true)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        grid.onResume()
-    }
-
-    override fun onPause() {
-        grid.onPause()
-        super.onPause()
+        setupToolbar()
+        setupSelectionActions()
+        setupGrid()
+        applyInsets()
+        val controller = GridPageController(this, grid, baseUri, PAGE_SIZE).apply {
+            onResetLoaded = {
+                // 回顶重载后标题栏恢复静止态
+                scrolledPast = false
+                applyChrome(false)
+                updateGridInsets()
+            }
+        }
+        pageController = controller
+        controller.start(lifecycleScope)
     }
 
     override fun onDestroy() {
-        observer?.let { contentResolver.unregisterContentObserver(it) }
-        observer = null
+        pageController?.stop()
+        pageController = null
+        actions = null
         super.onDestroy()
     }
+
+    // ==================== 初始化 ====================
+
+    private fun setupToolbar() {
+        toolbar.title = albumTitle
+        toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        // 菜单用代码建：本页属于 main-ui 模块，不新增 main-ui 的 menu 资源（菜单资源约定放在 main）
+        multiSelectItem = toolbar.menu.add(
+            Menu.NONE,
+            MENU_MULTI_SELECT,
+            0,
+            R.string.grid_multi_select,
+        ).apply {
+            icon = ContextCompat.getDrawable(this@AlbumDetailActivity, R.drawable.ic_multi_select)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                enterSelectionMode()
+                true
+            }
+        }
+        selectAllItem = toolbar.menu.add(
+            Menu.NONE,
+            MENU_SELECT_ALL,
+            0,
+            R.string.grid_select_all,
+        ).apply {
+            icon = ContextCompat.getDrawable(this@AlbumDetailActivity, R.drawable.ic_select_all)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            isVisible = false
+            setOnMenuItemClickListener {
+                pageController?.selectAll()
+                true
+            }
+        }
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (grid.selection.isActive) {
+                        exitSelectionMode()
+                    } else {
+                        finish()
+                    }
+                }
+            },
+        )
+    }
+
+    private fun setupSelectionActions() {
+        val selectionActions = SelectionActions(
+            context = this,
+            onExitSelection = { exitSelectionMode() },
+            onReload = { pageController?.load(reset = true) },
+            onMessage = { message ->
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            },
+        ).apply {
+            launchTrashConsent = { sender ->
+                trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+            launchFavoriteConsent = { sender ->
+                favoriteConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+            launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
+        }
+        actions = selectionActions
+        actionBar.onShareClick = { selectionActions.share(selectedItems()) }
+        actionBar.onFavoriteClick = { selectionActions.favorite(selectedItems()) }
+        actionBar.onAddToAlbumClick = { selectionActions.addToAlbum(selectedItems()) }
+        actionBar.onDeleteClick = { selectionActions.delete(selectedItems()) }
+    }
+
+    private fun setupGrid() {
+        grid.columns = COLUMNS
+        grid.setEmptyText(getString(R.string.gallery_empty))
+        grid.onItemClick = { item -> openViewer(item) }
+        grid.onItemLongClick = { item ->
+            if (!grid.selection.isActive) {
+                enterSelectionMode(item)
+            }
+        }
+        grid.onLoadMore = { pageController?.load(reset = false) }
+        grid.onScrollChanged = { scrollY -> onGridScrolled(scrollY.toFloat()) }
+        grid.onSelectionChanged = { state -> handleSelectionChanged(state) }
+    }
+
+    // ==================== 多选 ====================
+
+    private fun enterSelectionMode(initial: MediaItem? = null) {
+        grid.selection.enter(initial)
+    }
+
+    private fun exitSelectionMode() {
+        grid.selection.exit()
+    }
+
+    private fun handleSelectionChanged(state: SelectionState) {
+        // 用户取消最后一项时自动退出多选（进入多选但还没选任何项时不触发）
+        if (state.isActive && state.count == 0 && lastSelectionCount > 0) {
+            lastSelectionCount = 0
+            grid.selection.exit()
+            return
+        }
+        lastSelectionCount = state.count
+        actionBar.isVisible = state.isActive
+        if (state.isActive) {
+            toolbar.title = getString(R.string.grid_selected_count, state.count)
+            toolbar.setNavigationIcon(R.drawable.ic_close)
+            multiSelectItem?.isVisible = false
+            selectAllItem?.isVisible = true
+        } else {
+            toolbar.title = albumTitle
+            toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
+            multiSelectItem?.isVisible = true
+            selectAllItem?.isVisible = false
+        }
+        // 图标颜色随「是否已上划」重刷（标题/图标颜色只由 applyChrome 决定，避免两处状态打架）
+        applyChrome(scrolledPast)
+        updateGridInsets()
+    }
+
+    private fun selectedItems(): List<MediaItem> =
+        pageController?.selectedItems().orEmpty()
+
+    // ==================== 数据加载 ====================
+
+    private fun openViewer(item: MediaItem) {
+        val index = pageController?.indexOf(item.id) ?: -1
+        if (index < 0) {
+            return
+        }
+        startActivity(ViewerActivity.intent(this, baseUri, index))
+    }
+
+    // ==================== 顶部 chrome / insets ====================
 
     /**
      * 宫格铺满整个窗口，因此根布局不吃 inset，只把 inset 分给覆盖层：
      * 状态栏底条高度、标题栏的 marginTop、渐变遮罩高度；
-     * 另外把宫格的 `topInset` 设为「状态栏 + 标题栏」，
-     * 让**静止时第一行缩略图落在标题栏下方**（与首页「照片」页同一套算法）。
-     *
-     * 注意区分两种状态：
-     * - 静止：白底标题栏 + 首行的位置由 topInset 留出（本方法负责）
-     * - 上划：缩略图滚到状态栏区域，标题栏让位给遮罩（由 [applyChrome] 负责）
+     * 另外把宫格的内容内边距设为「状态栏 + 标题栏」与「导航栏高度（多选时 + 动作栏）」。
      */
     private fun applyInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.album_detail_root)) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            systemBarsBottom = bars.bottom
             // 改 layoutParams 后必须重新赋值才会重新布局
             statusBarBg.layoutParams = statusBarBg.layoutParams.apply { height = bars.top }
             (toolbar.layoutParams as? FrameLayout.LayoutParams)?.let {
@@ -104,19 +280,27 @@ class AlbumDetailActivity : AppCompatActivity() {
                 toolbar.layoutParams = it
             }
             val scrimHeight = bars.top + toolbarHeightPx()
+            topInset = scrimHeight
             (scrim.layoutParams as? FrameLayout.LayoutParams)?.let {
                 it.height = scrimHeight
                 scrim.layoutParams = it
             }
             scrim.background = ToolbarScrimDrawable(scrimHeight)
-            grid.setTopInset(scrimHeight)
-            // 底部预留 = **系统导航栏高度**：本页没有悬浮胶囊导航，只需让最后一行
-            // 完整停在系统导航栏上方。用 setBottomPadding 而不是 setBottomInset ——
-            // 后者只把内容撑长，余量不足一行时最后一行仍会贴到屏幕底边（真机实测踩过）。
-            grid.setBottomPadding(bars.bottom)
+            actionBar.setPadding(0, 0, 0, bars.bottom)
+            updateGridInsets()
             insets
         }
         ViewCompat.requestApplyInsets(findViewById(R.id.album_detail_root))
+    }
+
+    private fun updateGridInsets() {
+        val selectionActive = grid.selection.isActive
+        val bottom = if (selectionActive) {
+            dp2px(ACTION_BAR_HEIGHT_DP) + systemBarsBottom
+        } else {
+            systemBarsBottom
+        }
+        grid.setContentInsets(topInset, bottom)
     }
 
     private fun toolbarHeightPx(): Int {
@@ -133,11 +317,13 @@ class AlbumDetailActivity : AppCompatActivity() {
         }
     }
 
+    private fun dp2px(dp: Float): Int = DisplayUtils.dp2px(this, dp).toInt()
+
     /**
      * 与首页照片页同样的判定：有 40px 死区，避免刚滑动一帧就闪变。
      *
-     * 静止 → **不透明白底标题栏** + 深色标题/返回键（宫格第一行在其下方）；
-     * 上划 → 标题栏让位给渐变遮罩，标题与返回键转白色，缩略图滚到状态栏区域。
+     * 静止 → 主题色标题栏 + 主题色标题/返回键（宫格第一行在其下方）；
+     * 上划 → 标题栏让位给渐变遮罩，标题/返回键/菜单图标转白色，缩略图滚到状态栏区域。
      */
     private fun onGridScrolled(scrollY: Float) {
         val past = scrollY > SCROLL_DEAD_ZONE_PX
@@ -149,79 +335,34 @@ class AlbumDetailActivity : AppCompatActivity() {
     }
 
     /**
-     * 标题栏背景**始终透明**，静止时靠父容器（`@id/album_detail_root`）的 chrome 底色显示
-     * （`gallery_surface_chrome`，深色模式由 values-night 自动覆盖），
-     * 上划时由 `album_toolbar_scrim` 渐变遮罩接管。
-     *
-     * 这里只切换**文字/图标颜色**与遮罩显隐，颜色一律经 [ThemeUtils] 取，
-     * 因此深色模式下「静止」分支会取到近白色文字，不会出现近黑字压近黑底。
+     * 标题栏背景**始终透明**：静止时透出父容器的 chrome 底色，
+     * 上划时由渐变遮罩接管；这里只切换文字/图标颜色与遮罩显隐，
+     * 颜色一律经 [ThemeUtils] 取，深色模式自动适配。
      */
     private fun applyChrome(overGrid: Boolean) {
-        if (overGrid) {
-            // 遮罩是深色：标题与返回键转白、状态栏图标转浅色
-            toolbar.setTitleTextColor(ThemeUtils.textOnScrim(this))
-            toolbar.navigationIcon?.setTint(ThemeUtils.iconOnScrim(this))
-            scrim.isVisible = true
-            statusBarBg.isVisible = false
+        val titleColor = if (overGrid) {
+            ThemeUtils.textOnScrim(this)
         } else {
-            // 静止：跟随主题的前景色（浅色下为深色、深色下为浅色），透出 chrome 底色
-            toolbar.setTitleTextColor(ThemeUtils.textPrimary(this))
-            toolbar.navigationIcon?.setTint(ThemeUtils.iconOnSurface(this))
-            scrim.isVisible = false
-            statusBarBg.isVisible = true
+            ThemeUtils.textPrimary(this)
         }
+        val iconColor = if (overGrid) {
+            ThemeUtils.iconOnScrim(this)
+        } else {
+            ThemeUtils.iconOnSurface(this)
+        }
+        toolbar.setTitleTextColor(titleColor)
+        toolbar.navigationIcon?.setTint(iconColor)
+        // 菜单图标（多选/全选）同样跟随标题栏明暗；menu item 的 iconTintList 对已创建/未创建的 action view 都生效
+        val tint = ColorStateList.valueOf(iconColor)
+        multiSelectItem?.iconTintList = tint
+        selectAllItem?.iconTintList = tint
+        scrim.isVisible = overGrid
+        statusBarBg.isVisible = !overGrid
         // 系统栏图标明暗与底色一致：静止为 chrome 底色，上划为深色遮罩
         ThemeUtils.applySystemBarAppearance(
             this,
             if (overGrid) ThemeUtils.mediaScrim(this) else ThemeUtils.surfaceChrome(this),
         )
-    }
-
-    private fun registerObserver() {
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                loadPage(reset = true)
-            }
-        }
-        contentResolver.registerContentObserver(GalleryContract.CONTENT_URI, true, observer)
-        this.observer = observer
-    }
-
-    private fun loadPage(reset: Boolean) {
-        if (loading || baseUri == Uri.EMPTY || (endReached && !reset) || isFinishing) {
-            return
-        }
-        loading = true
-        lifecycleScope.launch {
-            val offset = if (reset) 0 else items.size
-            val result = MediaQuery.media(
-                contentResolver,
-                GalleryContract.withPage(baseUri, PAGE_SIZE, offset),
-            )
-            if (isFinishing || isDestroyed) {
-                loading = false
-                return@launch
-            }
-            if (reset) {
-                items.clear()
-                endReached = false
-                grid.scrollToTop()
-            }
-            items.addAll(result)
-            if (result.size < PAGE_SIZE) {
-                endReached = true
-            }
-            grid.submitItems(ArrayList(items))
-            loading = false
-        }
-    }
-
-    private fun openViewer(item: MediaItem) {
-        val index = items.indexOfFirst { it.id == item.id }
-        if (index < 0) {
-            return
-        }
-        startActivity(ViewerActivity.intent(this, baseUri, index))
     }
 
     companion object {
@@ -234,12 +375,21 @@ class AlbumDetailActivity : AppCompatActivity() {
         /** 滚动死区：小于它视为「还在顶部」，标题栏保持透明、不显示遮罩。 */
         private const val SCROLL_DEAD_ZONE_PX = 40f
 
+        /** 多选动作栏高度（dp），与 activity_album_detail.xml 中动作栏的 layout_height 保持一致。 */
+        private const val ACTION_BAR_HEIGHT_DP = 64f
+
+        /** 代码创建的菜单项 id（menu 资源在 main 模块，本页不新增 main-ui menu 资源）。 */
+        private const val MENU_MULTI_SELECT = 0x1001
+        private const val MENU_SELECT_ALL = 0x1002
+
         fun start(context: Context, album: GalleryCursorReader.AlbumInfo) {
             val baseUri = when (album.albumType) {
                 MediaSet.TYPE_FOLDER ->
                     GalleryContract.folderAlbumItemsUri(album.bucketId.orEmpty())
                 MediaSet.TYPE_THIRD_PARTY ->
                     GalleryContract.appAlbumItemsUri(album.ownerPackage.orEmpty())
+                MediaSet.TYPE_CUSTOM ->
+                    GalleryContract.customAlbumItemsUri(album.bucketId ?: album.id)
                 else -> GalleryContract.albumItemsUri(album.albumType)
             }
             context.startActivity(

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  宫格（照片页 / 相册详情页 / 选图页）专用文案。
+  新增字符串统一放这里，不要改公共 strings.xml（多人并行时避免冲突）。
+-->
+<resources>
+    <!-- 格子类型（无障碍描述用） -->
+    <string name="grid_cell_photo">照片</string>
+    <string name="grid_cell_video">视频</string>
+    <!-- 格子无障碍描述：类型，拍摄时间，选中状态 -->
+    <string name="grid_cell_description">%1$s，%2$s，%3$s</string>
+    <string name="grid_cell_time_unknown">拍摄时间未知</string>
+    <string name="grid_cell_selected">已选择</string>
+    <string name="grid_cell_unselected">未选择</string>
+
+    <!-- 多选入口 / 状态 -->
+    <string name="grid_multi_select">多选</string>
+    <string name="grid_select_all">全选</string>
+    <string name="grid_exit_selection">退出多选</string>
+    <string name="grid_selected_count">已选择 %1$d 项</string>
+    <string name="grid_selection_limit_reached">最多只能选择 %1$d 项</string>
+    <string name="grid_tab_switch_while_selecting">请先退出多选再切换页面</string>
+
+    <!-- 选中框 / 角标的无障碍描述（角标本身对读屏隐藏，此处仅作兜底） -->
+    <string name="grid_badge_video">视频</string>
+    <string name="grid_badge_motion_photo">动态照片</string>
+    <string name="grid_check_box">选择框</string>
+</resources>

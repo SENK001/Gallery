@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 格子点击水波纹（作为前景盖在缩略图上），颜色走现有半透明选中底 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/gallery_nav_item_selected_bg">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/gallery_text_on_scrim" />
+        </shape>
+    </item>
+</ripple>

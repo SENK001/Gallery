@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  宫格 / 多选相关样式（本任务新增，统一放这里，避免改动公共 styles.xml）。
+
+  约定同项目整体规范：布局里不直接写颜色，颜色一律引用本文件的 style 或
+  `@color/...` 语义色（色板只在 main-ui/values/colors.xml + values-night 定义）。
+-->
+<resources>
+
+    <!-- ==================== 宫格 ==================== -->
+
+    <!-- 缩略图：居中裁切、未解码前铺主题占位色（与查看器/相册封面一致的占位观感） -->
+    <style name="Widget.Gallery.MediaGridThumb">
+        <item name="android:scaleType">centerCrop</item>
+        <item name="android:background">@color/gallery_surface_placeholder</item>
+    </style>
+
+    <!-- 视频时长 / 动态照片角标：半透明深底 + 恒定白字（压在任意画面上都清晰） -->
+    <style name="Widget.Gallery.MediaGridBadge" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:background">@drawable/grid_badge_bg</item>
+        <item name="android:textColor">@color/gallery_media_on_scrim</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">5dp</item>
+        <item name="android:paddingTop">2dp</item>
+        <item name="android:paddingBottom">2dp</item>
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:drawableTint">@color/gallery_media_on_scrim</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- 右上角选择框：底色/描边由 selector 决定，选中/未选中只切 state -->
+    <style name="Widget.Gallery.MediaGridCheck">
+        <item name="android:background">@drawable/sel_media_check_circle</item>
+    </style>
+
+    <!-- 选中描边：盖在缩略图上的一圈品牌色细边（selector 区分选中态） -->
+    <style name="Widget.Gallery.MediaGridBorder">
+        <item name="android:background">@drawable/sel_media_cell_border</item>
+    </style>
+
+    <!-- 角标图标（动态照片）：白色图标 + 半透明深色小底 -->
+    <style name="Widget.Gallery.MediaGridBadgeIcon">
+        <item name="android:background">@drawable/grid_badge_bg</item>
+        <item name="android:padding">2dp</item>
+    </style>
+
+    <!-- 空态文案 -->
+    <style name="Widget.Gallery.GridEmptyText" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <!-- ==================== 多选底部动作栏 ==================== -->
+
+    <!-- 动作栏：与标题栏同色（chrome 底色），深色模式自动跟随；阴影与内容分层。
+         高度 = 内容 64dp（由布局里的动作项决定）+ 系统导航栏 padding（由代码按 insets 设置）。 -->
+    <style name="Widget.Gallery.SelectionActionBar">
+        <item name="android:background">@color/gallery_surface_chrome</item>
+        <item name="android:elevation">8dp</item>
+    </style>
+
+    <!-- 动作栏图标：跟随主题前景色（与标题栏图标一致） -->
+    <style name="Widget.Gallery.SelectionActionIcon">
+        <item name="android:tint">@color/gallery_icon_on_surface</item>
+    </style>
+
+    <!-- 动作栏文字 -->
+    <style name="Widget.Gallery.SelectionActionLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+</resources>

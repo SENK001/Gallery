@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  宫格单元格：正方形（高度 = 宽度，由 GridCellLayout 在测量阶段保证，见代码）。
+
+  结构（自下而上）：
+    1. 缩略图 ImageView（centerCrop；占位底色由 style 给）
+    2. 视频时长角标（左下；同一行还有动态照片角标）
+    3. 动态照片角标（左下）
+    4. 选中描边（覆盖整格，仅选中态可见）
+    5. 右上角选择框（仅多选态可见；选中后填品牌主色 + 白色对勾）
+  foreground 是点击水波纹，盖在缩略图上（水波纹颜色走语义色，不在布局里写死）。
+-->
+<com.senk.gallery.ui.grid.GridCellLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/media_cell_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:foreground="@drawable/grid_cell_ripple">
+
+    <ImageView
+        android:id="@+id/media_cell_thumb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        style="@style/Widget.Gallery.MediaGridThumb" />
+
+    <!-- 视频时长：左下角，内容为「▶ 01:23」 -->
+    <TextView
+        android:id="@+id/media_cell_duration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="4dp"
+        android:drawableStart="@drawable/grid_ic_play"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.MediaGridBadge" />
+
+    <!-- 动态照片角标：左下角（动态照片没有视频时长，两者不会重叠） -->
+    <ImageView
+        android:id="@+id/media_cell_motion"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="4dp"
+        android:contentDescription="@string/grid_badge_motion_photo"
+        android:importantForAccessibility="no"
+        android:src="@drawable/grid_ic_motion_photo"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.MediaGridBadgeIcon" />
+
+    <!-- 选中描边：覆盖整格，state_selected 由适配器设置 -->
+    <View
+        android:id="@+id/media_cell_border"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.MediaGridBorder" />
+
+    <!-- 右上角选择框：仅多选态显示 -->
+    <FrameLayout
+        android:id="@+id/media_cell_check"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="4dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.MediaGridCheck">
+
+        <ImageView
+            android:id="@+id/media_cell_check_icon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/grid_ic_check"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+</com.senk.gallery.ui.grid.GridCellLayout>

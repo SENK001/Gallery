@@ -1,12 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  照片页：宫格铺满整个页面（含状态栏/系统导航栏区域），
+  首行的位置由 PhotosFragment 通过 setContentInsets(top, bottom) 预留：
+    top = 状态栏 + 标题栏；bottom = 胶囊导航占位 + 系统导航栏（多选时改为动作栏高度 + 导航栏）。
+  标题栏是 MainActivity 的覆盖层，不在本布局内；上划渐变同样由宿主驱动。
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     style="@style/Widget.Gallery.ChromeSurface">
 
-    <com.senk.gallery.ui.gl.GlThumbnailGridView
+    <!-- 宫格：RecyclerView 实现，一格一个 View（无障碍可读） -->
+    <com.senk.gallery.ui.grid.MediaGridView
         android:id="@+id/photo_grid"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- 多选动作栏：仅多选态可见（底部内边距 = 系统导航栏，由 Fragment 按 insets 设置） -->
+    <com.senk.gallery.ui.selection.SelectionActionBar
+        android:id="@+id/selection_action_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone"
+        style="@style/Widget.Gallery.SelectionActionBar" />
 
 </FrameLayout>

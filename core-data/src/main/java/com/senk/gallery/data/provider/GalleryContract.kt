@@ -15,6 +15,7 @@ object GalleryContract {
     const val PATH_EXIF = "exif"
     const val PATH_FOLDER = "folder"
     const val PATH_APP = "app"
+    const val PATH_CUSTOM = "custom"
 
     const val QUERY_CATEGORY = "category"
     const val QUERY_LIMIT = "limit"
@@ -24,6 +25,7 @@ object GalleryContract {
 
     const val CATEGORY_COMMON = "common"
     const val CATEGORY_MORE = "more"
+    const val CATEGORY_CUSTOM = "custom"
 
     const val CURSOR_DIR = "vnd.android.cursor.dir"
     const val CURSOR_ITEM = "vnd.android.cursor.item"
@@ -76,6 +78,22 @@ object GalleryContract {
 
     fun appAlbumItemsPageUri(packageName: String, limit: Int, offset: Int): Uri =
         appAlbumItemsUri(packageName).buildUpon()
+            .appendQueryParameter(QUERY_LIMIT, limit.toString())
+            .appendQueryParameter(QUERY_OFFSET, offset.toString())
+            .build()
+
+    /**
+     * 自建相册内容 URI。
+     *
+     * 自建相册是**应用内逻辑集合**（成员记录在 `CustomAlbumStore`），不复制媒体文件；
+     * `albumId` 是创建时生成的 UUID，查询时按成员 ID 从 MediaStore 取回媒体条目。
+     * 相册列表行里该 UUID 放在 `bucket_id` 列（与目录相册的 bucket id 同列复用）。
+     */
+    fun customAlbumItemsUri(albumId: String): Uri =
+        ALBUMS_URI.buildUpon().appendPath(PATH_CUSTOM).appendPath(albumId).build()
+
+    fun customAlbumItemsPageUri(albumId: String, limit: Int, offset: Int): Uri =
+        customAlbumItemsUri(albumId).buildUpon()
             .appendQueryParameter(QUERY_LIMIT, limit.toString())
             .appendQueryParameter(QUERY_OFFSET, offset.toString())
             .build()

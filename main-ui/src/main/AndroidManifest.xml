@@ -31,6 +31,23 @@
             android:exported="false"
             android:theme="@style/Theme.Gallery" />
 
+        <!--
+          选图页：外部调用路由（main 的 ExternalEntryActivity）与内部复用共用；
+          旋转时保留已选集合与数据，不重建（本页是临时任务页，重建收益低）。
+        -->
+        <activity
+            android:name="com.senk.gallery.ui.picker.ImagePickerActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
+        <!-- 「添加到」目标相册选择页：与选图页是两个不同页面（选目标而非选照片）。 -->
+        <activity
+            android:name="com.senk.gallery.ui.addto.AddToAlbumActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
     </application>
 
 </manifest>

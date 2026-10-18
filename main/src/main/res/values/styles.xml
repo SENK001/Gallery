@@ -64,4 +64,16 @@
         <item name="android:background">@color/gallery_surface_content</item>
     </style>
 
+    <!--
+      外部调用入口 Activity 的窗口样式：无可见界面（透明窗 + 无动画 + 不参与最近任务）。
+      它只做「隐私/权限校验 + 路由 + 结果转发」，随即 finish；用户能感知到的只有选图页/查看器。
+    -->
+    <style name="Theme.Gallery.ExternalEntry" parent="Theme.Gallery">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
 </resources>

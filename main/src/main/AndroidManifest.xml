@@ -42,6 +42,28 @@
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <!--
+          外部调用唯一入口（选图 / 看大图）。
+
+          设计：本 Activity 无可见界面（透明窗口），只负责
+            ① 校验隐私同意与媒体权限 → ② 路由到 main-ui 的选图页 / 查看器 → ③ 把结果与 URI 授权转发给调用方。
+          内部页面（选图页、查看器）全部 exported=false，第三方只能经这里进入，避免绕过隐私页/权限流程。
+          契约见 external-api 模块与 docs/external-api.md。
+        -->
+        <activity
+            android:name=".ExternalEntryActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="false"
+            android:theme="@style/Theme.Gallery.ExternalEntry">
+            <intent-filter>
+                <action android:name="com.senk.gallery.action.PICK_IMAGE" />
+                <action android:name="com.senk.gallery.action.VIEW_IMAGE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

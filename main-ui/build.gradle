@@ -30,6 +30,8 @@ dependencies {
     api libs.baidu.lbs.util
     api project(':core-data')
     api project(':common-util')
+    // 外部调用契约（action / extra / result 常量）：选图页与外部大图模式都要读同一套约定。
+    api project(':external-api')
     implementation libs.androidx.appcompat
     implementation libs.androidx.core.ktx
     implementation libs.material

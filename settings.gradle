@@ -27,3 +27,5 @@ include ':main'
 include ':common-util'
 include ':core-data'
 include ':main-ui'
+// 外部调用契约模块：只含 action/extra/result 常量与 Intent 构造，不依赖其它模块。
+include ':external-api'

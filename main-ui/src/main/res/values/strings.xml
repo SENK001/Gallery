@@ -4,6 +4,7 @@
     <string name="gallery_tab_albums">相册</string>
     <string name="gallery_section_common">常用</string>
     <string name="gallery_section_more">更多</string>
+    <string name="gallery_section_custom">我的相册</string>
     <string name="gallery_section_recently_deleted">最近删除</string>
     <string name="gallery_empty">暂无内容</string>
     <string name="gallery_play">播放</string>

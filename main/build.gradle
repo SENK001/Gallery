@@ -153,6 +153,8 @@ androidComponents {
 
 dependencies {
     api project(':main-ui')
+    // 外部调用路由（ExternalEntryActivity）直接使用契约常量。
+    implementation project(':external-api')
     implementation libs.androidx.activity.ktx
     implementation libs.androidx.appcompat
     implementation libs.androidx.constraintlayout

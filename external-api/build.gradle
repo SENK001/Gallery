@@ -1,0 +1,30 @@
+plugins {
+    alias(libs.plugins.android.library)
+}
+
+// 外部调用契约模块（见 docs/external-api.md）：
+// 只放「第三方应用调用本应用时使用的 action / extra / result 常量与 Intent 构造」，
+// 不依赖任何其它模块、不包含界面或数据实现，供宿主应用（main）与外部集成方共同引用。
+android {
+    namespace 'com.senk.gallery.external'
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
+
+    defaultConfig {
+        minSdk 36
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+}
+
+dependencies {
+    testImplementation libs.junit
+}

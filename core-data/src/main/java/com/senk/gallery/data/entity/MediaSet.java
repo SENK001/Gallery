@@ -15,6 +15,7 @@ public class MediaSet extends MediaObject {
     public static final String TYPE_PANORAMA = "panorama";
     public static final String TYPE_FOLDER = "folder";
     public static final String TYPE_THIRD_PARTY = "third_party";
+    public static final String TYPE_CUSTOM = "custom";
     public static final String TYPE_RECENTLY_DELETED = "recently_deleted";
 
     private String albumType = TYPE_ALL;

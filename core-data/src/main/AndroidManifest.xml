@@ -6,6 +6,19 @@
             android:name="com.senk.gallery.data.provider.GalleryProvider"
             android:authorities="com.senk.gallery.data.provider"
             android:exported="false" />
+
+        <!--
+          对外选图结果的代理 Provider。
+          `exported=false` + `grantUriPermissions=true`：只有拿到外部调用路由临时授权的调用方
+          （显式 grantUriPermission / result Intent 的 ClipData + FLAG_GRANT_READ_URI_PERMISSION）
+          才能读取；第三方不能凭空枚举相册里的媒体。
+          路径：`content://com.senk.gallery.external/media/{mediaId}`；实现见 ExternalMediaProvider。
+        -->
+        <provider
+            android:name="com.senk.gallery.data.provider.ExternalMediaProvider"
+            android:authorities="com.senk.gallery.external"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 
 </manifest>

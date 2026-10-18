@@ -26,6 +26,17 @@ object MediaStoreFetcher {
     val BASE_SELECTION: String = "$MEDIA_TYPE_SELECTION AND $VISIBLE_SELECTION"
 
     /**
+     * 「最近删除」：仅系统回收站里的媒体（`is_trashed = 1`）。
+     *
+     * 注意不能复用 [BASE_SELECTION]（后者要求 `is_trashed = 0`）；恢复/彻底删除
+     * 都由调用方通过 `MediaStore.createTrashRequest / createDeleteRequest` 走系统授权。
+     */
+    val TRASH_SELECTION: String =
+        "$MEDIA_TYPE_SELECTION AND " +
+            "(${MediaStore.MediaColumns.IS_TRASHED} = 1) AND " +
+            "(${MediaStore.MediaColumns.IS_PENDING} = 0)"
+
+    /**
      * 拍摄时间倒序。`datetaken` 在 MediaProvider 中可能为 NULL（实测本机 87% 的条目为 NULL），
      * 此时回退到 `date_modified * 1000`（秒转毫秒）以保持与 `datetaken` 同一量纲。
      *
@@ -150,12 +161,13 @@ object MediaStoreFetcher {
         limit: Int = 0,
         offset: Int = 0,
         favoriteIds: Set<Long>? = null,
+        trashedOnly: Boolean = false,
     ): List<MediaItem> {
         val items = ArrayList<MediaItem>()
         resolver.query(
             COLLECTION,
             QUERY_PROJECTION,
-            queryArgs(selection, selectionArgs, sortOrder, limit, offset),
+            queryArgs(selection, selectionArgs, sortOrder, limit, offset, trashedOnly),
             null,
         )?.use { cursor ->
             while (cursor.moveToNext()) {
@@ -172,6 +184,7 @@ object MediaStoreFetcher {
         limit: Int,
         offset: Int,
         favoriteIds: Set<Long>? = null,
+        trashedOnly: Boolean = false,
     ): Cursor {
         val items = queryItems(
             resolver,
@@ -181,16 +194,22 @@ object MediaStoreFetcher {
             limit,
             offset,
             favoriteIds,
+            trashedOnly,
         )
         return itemsCursor(items)
     }
 
-    fun count(resolver: ContentResolver, selection: String?, selectionArgs: Array<String>?): Int {
+    fun count(
+        resolver: ContentResolver,
+        selection: String?,
+        selectionArgs: Array<String>?,
+        trashedOnly: Boolean = false,
+    ): Int {
         try {
             resolver.query(
                 COLLECTION,
                 arrayOf("count(*)"),
-                queryArgs(selection, selectionArgs, null),
+                queryArgs(selection, selectionArgs, null, trashedOnly = trashedOnly),
                 null,
             )?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -203,7 +222,7 @@ object MediaStoreFetcher {
             resolver.query(
                 COLLECTION,
                 arrayOf(MediaStore.MediaColumns._ID),
-                queryArgs(selection, selectionArgs, null),
+                queryArgs(selection, selectionArgs, null, trashedOnly = trashedOnly),
                 null,
             )?.use { cursor ->
                 return cursor.count
@@ -216,8 +235,15 @@ object MediaStoreFetcher {
         resolver: ContentResolver,
         selection: String?,
         selectionArgs: Array<String>?,
-    ): MediaItem? =
-        queryItems(resolver, selection, selectionArgs, SORT_DATE_DESC, limit = 1).firstOrNull()
+        trashedOnly: Boolean = false,
+    ): MediaItem? = queryItems(
+        resolver,
+        selection,
+        selectionArgs,
+        SORT_DATE_DESC,
+        limit = 1,
+        trashedOnly = trashedOnly,
+    ).firstOrNull()
 
     fun scanBuckets(resolver: ContentResolver): List<BucketInfo> {
         val buckets = LinkedHashMap<String, BucketInfo>()
@@ -361,12 +387,20 @@ object MediaStoreFetcher {
         item.ownerPackage,
     )
 
+    /**
+     * 查询条件 Bundle。
+     *
+     * @param trashedOnly true 时附加 `QUERY_ARG_MATCH_TRASHED = MATCH_ONLY`：
+     *   MediaProvider 默认会过滤掉回收站条目，仅靠 SQL 里的 `is_trashed = 1` 取不到，
+     *   必须用这个查询参数（「最近删除」页专用）。
+     */
     private fun queryArgs(
         selection: String?,
         selectionArgs: Array<String>?,
         sortOrder: String?,
         limit: Int = 0,
         offset: Int = 0,
+        trashedOnly: Boolean = false,
     ): Bundle {
         val args = Bundle()
         if (!selection.isNullOrEmpty()) {
@@ -377,6 +411,9 @@ object MediaStoreFetcher {
         }
         if (!sortOrder.isNullOrEmpty()) {
             args.putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+        }
+        if (trashedOnly) {
+            args.putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
         }
         if (limit > 0) {
             args.putInt(ContentResolver.QUERY_ARG_LIMIT, limit)

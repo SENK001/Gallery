@@ -136,6 +136,13 @@ object AlbumResolver {
                 "(${MediaStore.MediaColumns.WIDTH} >= 6000 AND " +
                 "${MediaStore.MediaColumns.WIDTH} >= ${MediaStore.MediaColumns.HEIGHT} * 3))",
         ),
+        // 最近删除：系统回收站里的媒体（30 天后由系统自动清理）。
+        // 空回收站自动隐藏（与其它常用相册一致），点击由 UI 路由到专用的最近删除页。
+        AlbumSpec(
+            MediaSet.TYPE_RECENTLY_DELETED,
+            "最近删除",
+            MediaStoreFetcher.TRASH_SELECTION,
+        ),
     )
 
     fun commonSpec(type: String): AlbumSpec? = COMMON_SPECS.firstOrNull { it.type == type }
@@ -211,14 +218,20 @@ object AlbumResolver {
                 albums.add(album)
                 return@forEach
             }
-            val count = MediaStoreFetcher.count(resolver, spec.selection, null)
+            val trashedOnly = spec.type == MediaSet.TYPE_RECENTLY_DELETED
+            val count = MediaStoreFetcher.count(resolver, spec.selection, null, trashedOnly)
             if (count <= 0) {
                 return@forEach
             }
             val album = albumOf(spec.type)
             album.name = spec.name
             album.count = count
-            album.coverUri = MediaStoreFetcher.latestItem(resolver, spec.selection, null)?.uri?.toString()
+            album.coverUri = MediaStoreFetcher.latestItem(
+                resolver,
+                spec.selection,
+                null,
+                trashedOnly,
+            )?.uri?.toString()
             // Keep sure covers exist even when COUNT is unavailable.
             albums.add(album)
         }
@@ -357,6 +370,7 @@ object AlbumResolver {
             limit,
             offset,
             favoriteIds,
+            trashedOnly = albumType == MediaSet.TYPE_RECENTLY_DELETED,
         )
     }
 
@@ -466,7 +480,9 @@ object AlbumResolver {
         MediaSet.TYPE_LIVE_PHOTO -> LivePhotoAlbum()
         MediaSet.TYPE_FAVORITE -> FavoriteAlbum()
         MediaSet.TYPE_PANORAMA -> PanoramaAlbum()
-        else -> AllItemAlbum()
+        // TYPE_ALL 与 TYPE_RECENTLY_DELETED 共用 AllItemAlbum，但 albumType 必须保持入参值：
+        // 「最近删除」的 album_type 要能被 UI 识别并路由到专用页面，不能退化成 all。
+        else -> AllItemAlbum().apply { albumType = type }
     }
 
     private fun addAlbumRow(cursor: MatrixCursor, album: MediaSet) {

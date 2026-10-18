@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「最近删除」页专用文案。
+  约定：新增字符串不修改公共 strings.xml；多选相关的标题/全选/退出仍复用 strings_grid。
+-->
+<resources>
+
+    <string name="trash_title">最近删除</string>
+    <string name="trash_back">返回</string>
+    <string name="trash_empty">最近删除是空的</string>
+
+    <!-- 多选底部动作 -->
+    <string name="trash_action_restore">恢复</string>
+    <string name="trash_action_delete">彻底删除</string>
+
+    <!-- 结果反馈 -->
+    <string name="trash_restore_done">已恢复 %1$d 项</string>
+    <string name="trash_delete_done">已彻底删除 %1$d 项</string>
+    <string name="trash_action_failed">操作失败，请重试</string>
+
+    <!-- 清空 -->
+    <string name="trash_clear">清空</string>
+    <string name="trash_clear_title">清空最近删除</string>
+    <string name="trash_clear_message">确定彻底删除「最近删除」中的 %1$d 项吗？此操作不可恢复。</string>
+    <string name="trash_clear_done">已彻底删除 %1$d 项</string>
+    <string name="trash_clear_failed">清空失败，请重试</string>
+    <string name="trash_clear_confirm">删除</string>
+    <string name="trash_clear_cancel">取消</string>
+
+</resources>

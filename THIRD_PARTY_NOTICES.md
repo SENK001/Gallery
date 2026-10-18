@@ -8,7 +8,7 @@
 
 ## 1. 代码素材：Material Design Icons（图形资源，随源码分发）
 
-**重要**：项目中有 27 个矢量图标的路径数据是从 Google Material Design Icons **逐字节复制**而来（并非仅"参考样式"），因此必须保留以下声明。
+**重要**：项目中有 29 个矢量图标的路径数据是从 Google Material Design Icons **逐字节复制**而来（并非仅"参考样式"），因此必须保留以下声明。
 | 项目 | 内容 |
 |---|---|
 | 素材 | Material Design Icons（Material Symbols 前身） |
@@ -47,8 +47,10 @@
 | `main-ui/src/main/res/drawable/grid_ic_check.xml` | `check`（宫格选中框内对勾） |
 | `main-ui/src/main/res/drawable/grid_ic_play.xml` | `play_arrow`（视频角标小三角） |
 | `main-ui/src/main/res/drawable/album_ic_camera.xml` | `photo_camera`（「添加到」相机目标行） |
+| `main-ui/src/main/res/drawable/ic_restore.xml` | `restore`（最近删除-恢复） |
+| `main-ui/src/main/res/drawable/ic_delete_forever.xml` | `delete_forever`（最近删除-彻底删除） |
 
-合计 **27** 个文件复制自上游（其中 `image` 有 3 处、`favorite` 有 2 处、`check` 有 2 处、`play_arrow` 有 2 处，为同一图标的不同尺寸/色调复用）。
+合计 **29** 个文件复制自上游（其中 `image` 有 3 处、`favorite` 有 2 处、`check` 有 2 处、`play_arrow` 有 2 处，为同一图标的不同尺寸/色调复用）。
 
 **非上游素材（本项目原创，随代码以 Apache-2.0 授权）**：
 - `main/src/main/res/drawable/ic_launcher_foreground.xml`（应用图标前景，机器人与网格为自绘路径）

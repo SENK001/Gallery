@@ -31,6 +31,12 @@
             android:exported="false"
             android:theme="@style/Theme.Gallery" />
 
+        <!-- 最近删除：系统回收站内容，恢复/彻底删除需系统确认，页面随入口隐藏。 -->
+        <activity
+            android:name="com.senk.gallery.ui.RecentlyDeletedActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Gallery" />
+
         <!--
           选图页：外部调用路由（main 的 ExternalEntryActivity）与内部复用共用；
           旋转时保留已选集合与数据，不重建（本页是临时任务页，重建收益低）。

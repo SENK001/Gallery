@@ -25,6 +25,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayout
 import com.senk.gallery.data.entity.MediaItem
+import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.AlbumResolver
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.data.provider.GalleryCursorReader
@@ -314,7 +315,9 @@ class ImagePickerActivity : AppCompatActivity() {
     private fun refreshAlbums() {
         lifecycleScope.launch {
             val resolver = contentResolver
+            // 「最近删除」是回收站入口，不是可选图来源：选图页的相册 tab 中过滤掉。
             val common = MediaQuery.albums(resolver, GalleryContract.CATEGORY_COMMON)
+                .filter { it.albumType != MediaSet.TYPE_RECENTLY_DELETED }
             val custom = MediaQuery.albums(resolver, GalleryContract.CATEGORY_CUSTOM)
             val more = MediaQuery.albums(resolver, GalleryContract.CATEGORY_MORE)
             if (isFinishing || isDestroyed) {

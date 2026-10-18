@@ -114,7 +114,7 @@
 - 单段线性渐变：顶部约 55% 黑（alpha `0x8C`）→ 底部全透明；覆盖高度 = 状态栏 + 标题栏。
 - 用代码画而不是 `shape` 资源：高度依赖设备状态栏高度，写死会错位。
 - 55% 是实测结论：更深的起点（如 80%）会被看成一条生硬的黑带。
-- 遮罩类「观感 vs 布局」的排查约定写在类注释里，验证方法见 [界面与交互 §11](ui-guide.md) 与 [验证方法与判据](verification.md)。
+- 遮罩类「观感 vs 布局」的排查约定写在类注释里，验证方法见 [界面与交互 §16](ui-guide.md) 与 [验证方法与判据](verification.md)。
 
 ## 6. 有意恒定的颜色（不跟随主题）
 
@@ -124,7 +124,7 @@
 - 查看器占位：`gallery_media_placeholder_light / _dark` —— 表达的是「当前用亮底还是深底观看」（由 `lightBackground` 驱动），与系统深浅色是**正交**维度；两态都要能在任何系统模式下工作。
 - 查看器角标（`BadgeCache` 的播放图标）与 `MapMarkers.dot` 的标记色：画在用户图片之上，恒定色有实际理由（代码注释里也有说明）。`MapMarkers` 用固定蓝色而非品牌色是历史选择。
 - `ToolbarScrimDrawable` 的 `0x8C`：见 §5（深度是观感参数，写在与高度同源的代码里）。
-- 功能性字面量（不构成色板条目，与主题无关）：`ViewerActivity` 退出沉浸时根视图被重置为 `Color.WHITE`——该层位于 GL 画面之下、不可见（窗口层背景已按主题恢复为 `surfaceContent`）；`PrivacyActivity` 的 `highlightColor = TRANSPARENT`（关闭点击高亮）；`VideoPlayerActivity` 的窗口透明背景（半透明控件栏透出视频的前提，见 [界面与交互 §9](ui-guide.md)）。「把背景交给下层」的场合用 `ThemeUtils.transparent()` 表达。
+- 功能性字面量（不构成色板条目，与主题无关）：`ViewerActivity` 退出沉浸时根视图被重置为 `Color.WHITE`——该层位于 GL 画面之下、不可见（窗口层背景已按主题恢复为 `surfaceContent`）；`PrivacyActivity` 的 `highlightColor = TRANSPARENT`（关闭点击高亮）；`VideoPlayerActivity` 的窗口透明背景（半透明控件栏透出视频的前提，见 [界面与交互 §14](ui-guide.md)）。「把背景交给下层」的场合用 `ThemeUtils.transparent()` 表达。
 
 判断「该不该接主题」的方法：问一句「这个颜色下面会不会出现用户照片/视频，或它是否在表达观看模式」。是 → 恒定；否 → 必须进色板。
 

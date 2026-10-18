@@ -136,6 +136,7 @@ MediaStore.Files(外置卷) 变化
 
 - **集合**：`MediaStore.Files.getContentUri(VOLUME_EXTERNAL)`（外置卷，含图片与视频）。
 - **基础筛选** `BASE_SELECTION` = `media_type IN (image, video)` AND `is_trashed = 0` AND `is_pending = 0`。
+- **最近删除筛选** `TRASH_SELECTION` = `media_type IN (image, video)` AND `is_trashed = 1` AND `is_pending = 0`。**仅 SQL 条件不够**：MediaProvider 默认把 trashed 条目过滤掉，查询 Bundle 还必须带 `MediaStore.QUERY_ARG_MATCH_TRASHED = MediaStore.MATCH_ONLY`（`MediaStoreFetcher.queryArgs(trashedOnly = true)` 已处理）；`count` / `latestItem` / 相册内容查询都按此传参。
 - **排序** `SORT_DATE_DESC`：
 
   ```sql
@@ -172,6 +173,7 @@ MediaStore.Files(外置卷) 变化
 | `live` | 动态照片 | XMP `LIKE '%MotionPhoto%'` 或 `'%MicroVideo%'` |
 | `favorite` | 收藏 | **应用内自建收藏库**（`FavoriteStore` 的成员；不再读 MediaStore `is_favorite`） |
 | `panorama` | 全景 | XMP `LIKE '%GPano:%'`，或尺寸兜底 `width >= 6000 AND width >= height * 3` |
+| `recently_deleted` | 最近删除 | `TRASH_SELECTION`（`is_trashed = 1` 且非 pending）；查询时必须附加 `QUERY_ARG_MATCH_TRASHED = MATCH_ONLY`（MediaProvider 默认过滤 trashed）。空回收站自动隐藏 |
 
 ### 5.2 我的相册（`category=custom`）
 

@@ -463,3 +463,30 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 经「相册 tab → 视频」选 1 个视频、切「照片 tab」选 1 张图片（跨 tab 选择保留）→ 完成：进入 `AlbumDetailActivity`（标题 pick_test_album，2 格），相册页计数 2；`gallery_custom_albums` 记录 `item_ids=[videoId, imageId]`；
 - 再新建 `pick_cancel_album` → 选图页直接返回（取消）：回到相册页，该相册显示「0 项」；
 - 清理测试相册后列表恢复、无崩溃；门禁构建/单测/lint/颜色校验通过。
+
+---
+
+## 2026-10-19 新增「最近删除」页（回收站）
+
+**背景**：`MediaSet.TYPE_RECENTLY_DELETED` 早已预留但 UI 入口隐藏（见 backlog）。本次补齐：相册页入口、回收站宫格、恢复 / 彻底删除 / 清空。
+
+**实现**：
+
+- 数据层：
+  - `MediaStoreFetcher` 新增 `TRASH_SELECTION`（`media_type IN (image,video)` AND `is_trashed=1` AND `is_pending=0`）与 `queryArgs(trashedOnly)` —— **仅 SQL 条件不够**：MediaProvider 默认过滤 trashed，查询 Bundle 必须带 `MediaStore.QUERY_ARG_MATCH_TRASHED = MediaStore.MATCH_ONLY`；`count/latestItem/queryItems/queryItemsCursor` 增加 `trashedOnly` 参数。
+  - `AlbumResolver.COMMON_SPECS` 追加 `recently_deleted`（名称「最近删除」，空回收站自动隐藏）；相册内容查询的 else 分支按 type 传 `trashedOnly`。
+  - **坑**：`albumOf(TYPE_RECENTLY_DELETED)` 原先落到 `AllItemAlbum`（albumType 默认 `all`），导致相册页点击「最近删除」被路由进普通相册详情并显示全部媒体；修法 `else -> AllItemAlbum().apply { albumType = type }`。
+- UI：新增 `RecentlyDeletedActivity` + `activity_recently_deleted.xml`：不透明标题栏 + `MediaGridView` + `GridPageController` + 多选动作栏（恢复 / 彻底删除）；标题栏代码建菜单（多选/全选/清空）；恢复 = `createTrashRequest(uris, false)`、彻底删除 = `createDeleteRequest(uris)`、清空 = 二次确认后 `createDeleteRequest(全部)`；三者都由系统弹确认框。
+- 相册页：`AlbumListAdapter.onAlbumClick` 对 `TYPE_RECENTLY_DELETED` 路由到新页（不走 `AlbumDetailActivity`）。
+- 选图页：相册 tab 过滤「最近删除」（回收站不是选图来源）。
+- 新增图标 `ic_restore` / `ic_delete_forever`（THIRD_PARTY_NOTICES 27→29）。
+
+**真机验证（Redmi / Android 16）**：
+
+- 复制 1 张照片到文件夹相册 → 从照片页「删除」→ 系统「移到最近删除」允许：相册页「常用」出现「最近删除 3 项」（含历史遗留项）；
+- 打开最近删除页：3 格缩略图正常显示；进入多选 → 全选（已选择 3 项）→ 「恢复」→ 系统弹「要允许相册将 3 张照片从回收站中移除吗？」→ 允许：页面清空（显示「最近删除是空的」）、返回相册页入口消失、媒体计数恢复；
+- 再复制 1 张并删除：最近删除 1 项 → 彻底删除 → 系统「要允许相册删除这 1 张照片吗？」允许 → 页面空、入口隐藏；
+- 再复制 1 张并删除：溢出菜单「清空」→ 二次确认（「确定彻底删除「最近删除」中的 1 项吗？此操作不可恢复。」）→ 系统删除确认允许 → 页面空、入口隐藏；
+- 全程无崩溃；门禁：构建通过、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对。
+
+**已知限制**：系统 30 天自动清理由 MediaStore 负责、未等待验证；大量条目分页性能未压测；查看器里对回收站条目仍显示收藏/详情入口（可正常浏览，收藏写应用内库，不修改媒体库）。

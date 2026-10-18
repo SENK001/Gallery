@@ -80,6 +80,7 @@ PrivacyActivity（LAUNCHER，首启同意页，全屏页）
                 │   ├─ PhotosFragment   照片页：View 宫格（铺满式）+ 多选动作栏
                 │   └─ AlbumsFragment   相册页：常用 / 我的相册 / 更多
                 ├─ 底部悬浮胶囊导航（MaterialCardView，覆盖层）
+                ├─ RecentlyDeletedActivity  最近删除（回收站：恢复 / 彻底删除 / 清空）
                 ├─ AlbumDetailActivity  相册内容（同一套 View 宫格 + 多选）
                 │     └→ ViewerActivity（GL 查看器）
                 └─ PhotosFragment ──点击缩略图──→ ViewerActivity

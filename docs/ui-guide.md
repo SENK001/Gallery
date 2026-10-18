@@ -25,6 +25,11 @@ PhotosFragment / AlbumsFragment
     ├─底部动作栏：分享 / 收藏 / 添加到 / 删除
     └─「添加到」→ AddToAlbumActivity（自建相册 / 相机 / 文件夹相册）
 
+最近删除：
+AlbumsFragment「常用 · 最近删除」→ RecentlyDeletedActivity
+    ├─点击缩略图 → ViewerActivity（翻页范围即回收站）
+    └─多选 → 恢复（createTrashRequest false）/ 彻底删除（createDeleteRequest）；溢出菜单「清空」
+
 外部调用（唯一 exported 入口）：
 ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
                       → ViewerActivity（外部大图模式，不读本应用媒体库）
@@ -121,7 +126,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 底部动作栏 `view_selection_action_bar.xml`（分享/收藏/添加到/删除，图标+中文，深色模式跟随主题）：
   - **分享**：单张 `ACTION_SEND`、多张 `ACTION_SEND_MULTIPLE` + `ClipData` + `FLAG_GRANT_READ_URI_PERMISSION`。
   - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
-  - **添加到**：启动 `AddToAlbumActivity`（见 §11），返回 `RESULT_OK` 后退出多选。
+  - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
 - 「全选」只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。
 - 多选时宫格底部预留切换为动作栏高度，避免最后一行被动作栏遮挡。
@@ -143,6 +148,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 分组顺序：`常用` → `我的相册`（自建，含「新建相册」动作行）→ `更多`；全空时显示 `empty_view`。
 - 自建相册：可以**空相册**形式显示（系统/目录空相册仍然隐藏）；点击进入详情（`AlbumDetailActivity.start` 用 custom URI）；长按弹「删除相册（不会删除其中照片）」确认后仅删逻辑集合。
 - **新建相册流程**：点「新建相册」→ 名称对话框 → 创建成功后**立即进入选图页**（`ImagePickerActivity`，多选、不限数量、标题「选择照片和视频」，照片/视频都可以选）→ 选中项加入新相册并直接进入该相册详情页（Toast「已添加 N 项到相册」）；用户在选图页取消时保留刚创建的空相册并刷新列表（之后可再添加或删除）。
+- **最近删除**：`AlbumResolver` 的「常用」分组最后一项；仅回收站非空时显示（空时自动隐藏）。点击**不进入相册详情**，而是路由到专用的最近删除页（见 §9）。
 - 顶部内边距 = `paddingTop` 基础值 + 状态栏 + `actionBarSize`（用 padding 而不是 margin，保留滚动手感；布局 `clipToPadding=false`）；标题栏不透明（见 4.3）。
 - 点击相册 → `AlbumDetailActivity.start(context, album)`，由 `AlbumInfo.albumType` 决定内容 URI（`AlbumResolver.albumItemsUri`）：`folder → folderAlbumItemsUri(bucketId)`、`third_party → appAlbumItemsUri(ownerPackage)`、`custom → customAlbumItemsUri(albumId)`、其余 → `albumItemsUri(type)`；标题 = 相册名。
 
@@ -156,20 +162,33 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 数据：`EXTRA_BASE_URI`（相册内容 URI）+ `EXTRA_TITLE`；`PAGE_SIZE = 200` 分页；`ContentObserver` 变化时重载回顶。
 - 点击缩略图 → `ViewerActivity(baseUri, position)`（翻页范围就是本相册）。
 
-## 9. 选图页（`ImagePickerActivity`）
+## 9. 最近删除页（`RecentlyDeletedActivity`）
+
+- **入口**：相册页「常用」分组里的「最近删除」。只有系统回收站非空时才显示（空回收站自动隐藏，与其它常用相册的隐藏规则一致）；点击进入本页。
+- **数据**：Provider 的 `content://…/albums/recently_deleted`（`AlbumResolver` 的 `TRASH_SELECTION`）。查询必须带 `MediaStore.QUERY_ARG_MATCH_TRASHED = MATCH_ONLY` —— MediaProvider 默认会过滤掉 trashed 条目，仅靠 SQL 的 `is_trashed = 1` 取不到。
+- **页面结构**：不透明标题栏 + View 宫格 + 多选底部动作栏；复用 `MediaGridView` / `GridPageController` / `SelectionState`，与照片页/相册详情页同一套宫格与多选交互。
+- **交互**：
+  - 点击缩略图 → 查看器（baseUri 为最近删除列表，翻页范围即回收站）；
+  - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选；底部动作栏 **恢复 / 彻底删除**；
+  - 标题栏溢出菜单 **清空**：先二次确认（显示条数），再彻底删除回收站全部条目；
+  - **恢复** = `MediaStore.createTrashRequest(uris, false)`、**彻底删除** = `MediaStore.createDeleteRequest(uris)`，两者都会由系统弹出「允许修改/删除」确认框；
+  - 成功后退出多选并重新加载；回收站清空后返回相册页，入口自动消失。
+- 30 天自动清理由系统 MediaStore 负责，应用不做定时任务；选图页的相册 tab 不展示「最近删除」（回收站不是选图来源）。
+
+## 10. 选图页（`ImagePickerActivity`）
 
 可被外部调用（经 `ExternalEntryActivity`）或内部复用；`exported=false`、`configChanges`（旋转不重建、选择保留）。
 
 - 结构：顶部 `MaterialToolbar`（关闭/返回 + 标题）+ `TabLayout`（照片 / 相册）+ 内容容器 + 多选确认栏。
 - 入参（`GalleryExternal` 常量）：`EXTRA_ALLOW_MULTIPLE`、`EXTRA_MAX_COUNT`（默认 9）、`EXTRA_TITLE`；companion `intent(context, allowMultiple, maxCount, title)`。
 - **照片 tab**：复用 `MediaGridView` + `MediaPager`（全量媒体，200/页分页）；点击/多选语义见 §5。
-- **相册 tab**：复用 `AlbumListAdapter` + `MediaQuery`，分组「常用 / 我的相册 / 更多」；点相册在同一 Activity 内进入内容视图（toolbar 变返回、标题 = 相册名、内容源换成该相册），返回回相册列表。**分类选** = 先选相册分类再选图。
+- **相册 tab**：复用 `AlbumListAdapter` + `MediaQuery`，分组「常用 / 我的相册 / 更多」；点相册在同一 Activity 内进入内容视图（toolbar 变返回、标题 = 相册名、内容源换成该相册），返回回相册列表。**分类选** = 先选相册分类再选图。「最近删除」是回收站入口、不是可选图来源，在选图页的相册 tab 中被过滤掉。
 - **选择语义**：单选模式点击一张立即返回；多选模式点击 toggle（跨 tab/相册保留已选），底部「已选择 N 项」+「完成」（空选禁用）；超 `maxCount` 时 Toast 且不选中。
 - **调用方**：外部经 `ExternalEntryActivity` 进入（单选/多选由 extras 指定，默认上限 9）；内部「相册页新建相册」以多选 + 不限数量（`ImagePickerActivity.MAX_COUNT_UNLIMITED`）进入，标题「选择照片和视频」。
-- **结果契约**（内部，供外部路由消费）：`data` = 第一张原始 MediaStore URI；`ClipData` = 全部原始 URI；`EXTRA_SELECTED_URIS`（ArrayList<String>）、`EXTRA_SELECTED_IDS`（LongArray）、`EXTRA_SELECTED_COUNT`（Int）；关闭/返回 = `RESULT_CANCELED`。外部路由再把这些 id 映射成代理 URI 并授权回传调用方（见 §10 与 [外部调用 API](external-api.md)）。
+- **结果契约**（内部，供外部路由消费）：`data` = 第一张原始 MediaStore URI；`ClipData` = 全部原始 URI；`EXTRA_SELECTED_URIS`（ArrayList<String>）、`EXTRA_SELECTED_IDS`（LongArray）、`EXTRA_SELECTED_COUNT`（Int）；关闭/返回 = `RESULT_CANCELED`。外部路由再把这些 id 映射成代理 URI 并授权回传调用方（见 §11 与 [外部调用 API](external-api.md)）。
 - 无障碍：tab、格子、关闭/返回、完成均有 `contentDescription`；空态文案（暂无照片/暂无相册/该相册暂无内容）。
 
-## 10. 外部调用入口（`ExternalEntryActivity`）
+## 11. 外部调用入口（`ExternalEntryActivity`）
 
 - 透明窗口、`exported=true`、不进入最近任务列表；是第三方使用「选图 / 看大图」的**唯一入口**，内部页面全部 `exported=false`。
 - 流程：校验 action → 校验隐私同意（未同意 Toast + `RESULT_CANCELED`，不读媒体/不初始化 SDK）→ PICK_IMAGE 校验/申请媒体权限 → 路由到选图页；选图结果把媒体 id 映射为**代理 URI**（`content://com.senk.gallery.external/media/{id}`），对调用方包名逐个 `grantUriPermission(READ)`，再 `setResult` 回传（单选 `data`、多选 `ClipData` + extras + `FLAG_GRANT_READ_URI_PERMISSION`）。
@@ -177,7 +196,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 关键节点用 `Log.i("GalleryExternal", ...)` 打日志，便于 `adb logcat` 验证。
 - 契约、结果与授权语义的完整说明见 [外部调用 API](external-api.md)。
 
-## 11. 「添加到」与自建相册（`AddToAlbumActivity`）
+## 12. 「添加到」与自建相册（`AddToAlbumActivity`）
 
 - 入口：多选动作栏「添加到」，传入选中媒体 id（`AddToAlbumActivity.intent(context, LongArray)`）；`exported=false`、`configChanges`。
 - 页面：`MaterialToolbar`（返回 + 标题「添加到」）+ 分组列表：
@@ -186,7 +205,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 复制写入：按 mime 选 `Images`/`Video` 集合，`RELATIVE_PATH` + `DISPLAY_NAME` 去重 + `IS_PENDING` 流程，64KB 流式复制（大视频不 OOM/ANR）；失败/取消清理 pending 行并提示。
 - 自建相册是**应用内逻辑集合**（`CustomAlbumStore`）：可新建/删除（相册页），不复制、不移动媒体；删除相册不会删除照片。重命名/封面/相册内移除的 store API 已具备但 UI 暂未提供（见 [backlog](backlog.md)）。
 
-## 12. 查看器（`ViewerActivity` + `GlImageViewer`）
+## 13. 查看器（`ViewerActivity` + `GlImageViewer`）
 
 ### 12.1 数据加载
 
@@ -229,7 +248,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 地图卡片整体盖了 `sheet_map_overlay`：点卡片 → `PhotoMapActivity`。
 - 地图相关卡点：`TextureMapView` 构造**先于授权初始化会 NPE 崩溃**，因此 `ensureSheetMap()` 先调 `BaiduMapSdk.ensureInitialized()`，失败时隐藏地图卡片，不崩溃；坐标系 BD09LL。
 
-## 13. 视频播放器（`VideoPlayerActivity` + `GlVideoView`）
+## 14. 视频播放器（`VideoPlayerActivity` + `GlVideoView`）
 
 - 窗口背景透明（`ColorDrawable(TRANSPARENT)` + `setDecorFitsSystemWindows(false)` + 隐藏系统栏）：半透明控制栏 `#99000000` 才能透出下层视频。
 - 控制：播放/暂停、进度条（拖动时暂停跟随，松手 seek）、横竖屏切换按钮、标题栏返回。
@@ -239,14 +258,14 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 横竖屏切换不重建（Manifest `configChanges`）；`onConfigurationChanged` 只刷新旋转按钮图标。
 - 外部调用传入的视频 URI 也可播放（同一 UID，调用方授予的临时授权在查看链路期间有效）。
 
-## 14. 地图页（`PhotoMapActivity`）
+## 15. 地图页（`PhotoMapActivity`）
 
 - **`BaiduMapSdk.ensureInitialized()` 必须早于 `setContentView`**（布局内含 `TextureMapView`）。
 - 内容：全屏地图（缩放 16、标记点）+ 底部卡片（地址 + 「导航」按钮）。
 - 地址：进入时若未携带地址则现场逆地理编码；导航：`NavigationHelper.navigationApps()` 检测已安装的地图应用（高德 / 百度 / 腾讯 / Google），弹 `MaterialAlertDialog` 选择后 `startActivity`，找不到时 `Toast`。
 - 各导航 App 的 scheme 与坐标系：高德 `androidamap://navi`（GCJ-02）、百度 `baidumap://map/navi`（BD09LL）、腾讯 `qqmap://map/routeplan`（GCJ-02）、Google `google.navigation:`（原始 WGS-84）。
 
-## 15. 通用小部件
+## 16. 通用小部件
 
 | 组件 | 行为 | 备注 |
 |---|---|---|
@@ -260,7 +279,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 **遮罩/渐变的验证约定**（`ToolbarScrimDrawable` 类注释）：怀疑「顶部空白/压黑」类问题时，先把 `START_ALPHA` 临时改为 `0x00` 重建——能直接看到未压暗的缩略图 ⇒ 布局正确、只是观感问题；仍纯白 ⇒ 查宫格 `setContentInsets` / 覆盖层 insets。不屏蔽时的辅助判据：同一高度取**多个 x**，取值互不相同才说明有图像内容透出。
 
-## 16. 已知限制（详见 [backlog](backlog.md)）
+## 17. 已知限制（详见 [backlog](backlog.md)）
 
 - 查看器缩放后滑出工作集再回来，纹理是降分辨率版本（放大超过约 1.2× 属放大）；解码上限是屏幕尺寸。
 - 查看器翻页数据源是「进入时的列表」，期间媒体库变化不会在查看器内刷新。

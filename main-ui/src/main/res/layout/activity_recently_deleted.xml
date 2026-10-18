@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「最近删除」页布局。
+
+  结构（自上而下，非常规铺满式，避免和相册详情页的渐变 chrome 重复）：
+    · trash_toolbar —— 返回 + 标题「最近删除」；多选时标题改为「已选择 N 项」
+    · trash_grid    —— 回收站媒体宫格（复用 MediaGridView，支持多选选择框）
+    · trash_action_bar —— 多选时的底部动作栏：恢复 / 彻底删除
+
+  系统栏避让：根布局由 Activity 按 system bars inset 设置 padding
+  （这里不写死颜色，全部走 style 与公共色板）。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/recently_deleted_root"
+    style="@style/Widget.Gallery.RootSurface"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/trash_toolbar"
+        style="@style/Widget.Gallery.Toolbar.Surface"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationContentDescription="@string/trash_back"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/trash_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <com.senk.gallery.ui.grid.MediaGridView
+            android:id="@+id/trash_grid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/trash_action_bar"
+        style="@style/Widget.Gallery.SelectionActionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/trash_action_restore"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="@string/trash_action_restore"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_restore"
+                style="@style/Widget.Gallery.SelectionActionIcon" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/trash_action_restore"
+                style="@style/Widget.Gallery.SelectionActionLabel" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/trash_action_delete"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="@string/trash_action_delete"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_delete_forever"
+                style="@style/Widget.Gallery.SelectionActionIcon" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/trash_action_delete"
+                style="@style/Widget.Gallery.SelectionActionLabel" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

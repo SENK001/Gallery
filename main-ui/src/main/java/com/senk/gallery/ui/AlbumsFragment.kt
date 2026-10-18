@@ -64,7 +64,13 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
         list = view.findViewById(R.id.album_list)
         emptyView = view.findViewById(R.id.empty_view)
         adapter = AlbumListAdapter(
-            onAlbumClick = { album -> AlbumDetailActivity.start(requireContext(), album) },
+            onAlbumClick = { album ->
+                if (album.albumType == MediaSet.TYPE_RECENTLY_DELETED) {
+                    RecentlyDeletedActivity.start(requireContext())
+                } else {
+                    AlbumDetailActivity.start(requireContext(), album)
+                }
+            },
             onActionClick = { action ->
                 if (action.id == ACTION_NEW_ALBUM) {
                     showCreateAlbumDialog()

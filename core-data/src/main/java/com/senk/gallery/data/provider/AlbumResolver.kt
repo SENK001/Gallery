@@ -136,16 +136,24 @@ object AlbumResolver {
                 "(${MediaStore.MediaColumns.WIDTH} >= 6000 AND " +
                 "${MediaStore.MediaColumns.WIDTH} >= ${MediaStore.MediaColumns.HEIGHT} * 3))",
         ),
-        // 最近删除：系统回收站里的媒体（30 天后由系统自动清理）。
-        // 空回收站自动隐藏（与其它常用相册一致），点击由 UI 路由到专用的最近删除页。
-        AlbumSpec(
-            MediaSet.TYPE_RECENTLY_DELETED,
-            "最近删除",
-            MediaStoreFetcher.TRASH_SELECTION,
-        ),
     )
 
-    fun commonSpec(type: String): AlbumSpec? = COMMON_SPECS.firstOrNull { it.type == type }
+    /**
+     * 「最近删除」相册 spec。
+     *
+     * 不属于 [COMMON_SPECS]：相册页里它固定放在「更多」之后（无封面），由 UI 单独查询
+     * [GalleryContract.CATEGORY_RECENTLY_DELETED] 追加；这里仅用于相册内容查询的筛选串。
+     */
+    private val TRASH_SPEC = AlbumSpec(
+        MediaSet.TYPE_RECENTLY_DELETED,
+        "最近删除",
+        MediaStoreFetcher.TRASH_SELECTION,
+    )
+
+    fun commonSpec(type: String): AlbumSpec? = when (type) {
+        MediaSet.TYPE_RECENTLY_DELETED -> TRASH_SPEC
+        else -> COMMON_SPECS.firstOrNull { it.type == type }
+    }
 
     fun queryAlbums(context: Context, resolver: ContentResolver, category: String): Cursor {
         val cursor = MatrixCursor(GalleryContract.AlbumColumns.ALL)
@@ -154,10 +162,84 @@ object AlbumResolver {
                 queryMoreAlbums(context, resolver).forEach { addAlbumRow(cursor, it) }
             GalleryContract.CATEGORY_CUSTOM ->
                 queryCustomAlbumRows(context, resolver, cursor)
-            else ->
+            GalleryContract.CATEGORY_RECENTLY_DELETED ->
+                queryRecentlyDeletedAlbum(resolver).forEach { addAlbumRow(cursor, it) }
+            else -> {
+                // 相册页刷新时顺带校正收藏库的删除标记（其它应用/系统删掉媒体后，
+                // 收藏相册不应再统计/展示这些条目）。
+                reconcileFavoriteFlags(context, resolver)
                 queryCommonAlbums(context, resolver).forEach { addAlbumRow(cursor, it) }
+            }
         }
         return cursor
+    }
+
+    /**
+     * 「最近删除」相册行：回收站非空时返回 1 行（无封面），否则空列表。
+     *
+     * 该行不参与「常用」分组，UI 把它追加在相册页最底部（更多相册之后）。
+     */
+    private fun queryRecentlyDeletedAlbum(resolver: ContentResolver): List<MediaSet> {
+        val count = MediaStoreFetcher.count(
+            resolver,
+            MediaStoreFetcher.TRASH_SELECTION,
+            null,
+            trashedOnly = true,
+        )
+        if (count <= 0) {
+            return emptyList()
+        }
+        val album = albumOf(MediaSet.TYPE_RECENTLY_DELETED)
+        album.name = TRASH_SPEC.name
+        album.count = count
+        // 按产品要求：最近删除入口不显示封面
+        album.coverUri = null
+        return listOf(album)
+    }
+
+    /**
+     * 校正收藏库的删除标记。
+     *
+     * 收藏是应用内 SQLite 库，媒体被删除（进回收站/彻底删除）后收藏行仍然存在：
+     * - 已收藏但已不可见（非 trashed 查询不到）→ 标记 `is_trashed = 1`，不再计入/展示；
+     * - 已标记但重新可见（从回收站恢复）→ 清除标记，收藏恢复。
+     *
+     * 只在相册页刷新（category=common）与打开收藏相册时执行，收藏数量通常很小。
+     */
+    fun reconcileFavoriteFlags(context: Context, resolver: ContentResolver) {
+        val store = FavoriteStore.get(context)
+        val activeIds = store.ids()
+        val trashedIds = store.trashedIds()
+        val knownIds = activeIds + trashedIds
+        if (knownIds.isEmpty()) {
+            return
+        }
+        val visibleIds = queryVisibleIds(resolver, knownIds)
+        val toTrash = activeIds - visibleIds
+        if (toTrash.isNotEmpty()) {
+            store.markTrashed(toTrash, true)
+        }
+        val toRestore = trashedIds.intersect(visibleIds)
+        if (toRestore.isNotEmpty()) {
+            store.markTrashed(toRestore, false)
+        }
+    }
+
+    /** 已知 id 集合里当前仍可见（未 trashed、非 pending）的媒体 id。 */
+    private fun queryVisibleIds(resolver: ContentResolver, ids: Set<Long>): Set<Long> {
+        val visible = HashSet<Long>(ids.size)
+        ids.toList().chunked(ID_CHUNK_SIZE).forEach { chunk ->
+            val placeholders = chunk.joinToString(", ") { "?" }
+            val selection = "(${MediaStoreFetcher.BASE_SELECTION}) AND " +
+                "(${MediaStore.MediaColumns._ID} IN ($placeholders))"
+            MediaStoreFetcher.queryItems(
+                resolver,
+                selection,
+                chunk.map { it.toString() }.toTypedArray(),
+                sortOrder = MediaStore.MediaColumns._ID,
+            ).forEach { item -> visible.add(item.id) }
+        }
+        return visible
     }
 
     /**

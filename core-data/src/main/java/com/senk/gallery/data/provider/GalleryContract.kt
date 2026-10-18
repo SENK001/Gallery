@@ -27,6 +27,9 @@ object GalleryContract {
     const val CATEGORY_MORE = "more"
     const val CATEGORY_CUSTOM = "custom"
 
+    /** 「最近删除」相册行（单个，无封面；UI 放在相册页最底部）。 */
+    const val CATEGORY_RECENTLY_DELETED = "recently_deleted"
+
     const val CURSOR_DIR = "vnd.android.cursor.dir"
     const val CURSOR_ITEM = "vnd.android.cursor.item"
     const val MIME_ALBUM_DIR = "$CURSOR_DIR/vnd.gallery.album"

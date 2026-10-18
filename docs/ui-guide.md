@@ -148,7 +148,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 分组顺序：`常用` → `我的相册`（自建，含「新建相册」动作行）→ `更多`；全空时显示 `empty_view`。
 - 自建相册：可以**空相册**形式显示（系统/目录空相册仍然隐藏）；点击进入详情（`AlbumDetailActivity.start` 用 custom URI）；长按弹「删除相册（不会删除其中照片）」确认后仅删逻辑集合。
 - **新建相册流程**：点「新建相册」→ 名称对话框 → 创建成功后**立即进入选图页**（`ImagePickerActivity`，多选、不限数量、标题「选择照片和视频」，照片/视频都可以选）→ 选中项加入新相册并直接进入该相册详情页（Toast「已添加 N 项到相册」）；用户在选图页取消时保留刚创建的空相册并刷新列表（之后可再添加或删除）。
-- **最近删除**：`AlbumResolver` 的「常用」分组最后一项；仅回收站非空时显示（空时自动隐藏）。点击**不进入相册详情**，而是路由到专用的最近删除页（见 §9）。
+- **最近删除**：相册页**最底部的独立入口行**（「更多」分组之后），**不显示封面**——只有图标 + 名称 + 条数；仅回收站非空时显示。点击进入专用的最近删除页（见 §9），不进入相册详情。数据来自 `CATEGORY_RECENTLY_DELETED`（`AlbumResolver` 单独返回 0/1 行，不混入「常用」分组）。
 - 顶部内边距 = `paddingTop` 基础值 + 状态栏 + `actionBarSize`（用 padding 而不是 margin，保留滚动手感；布局 `clipToPadding=false`）；标题栏不透明（见 4.3）。
 - 点击相册 → `AlbumDetailActivity.start(context, album)`，由 `AlbumInfo.albumType` 决定内容 URI（`AlbumResolver.albumItemsUri`）：`folder → folderAlbumItemsUri(bucketId)`、`third_party → appAlbumItemsUri(ownerPackage)`、`custom → customAlbumItemsUri(albumId)`、其余 → `albumItemsUri(type)`；标题 = 相册名。
 
@@ -164,7 +164,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 ## 9. 最近删除页（`RecentlyDeletedActivity`）
 
-- **入口**：相册页「常用」分组里的「最近删除」。只有系统回收站非空时才显示（空回收站自动隐藏，与其它常用相册的隐藏规则一致）；点击进入本页。
+- **入口**：相册页**最底部**（「更多」分组之后）的「最近删除」行——无封面，只有图标 + 名称 + 条数；只有系统回收站非空时才显示。
 - **数据**：Provider 的 `content://…/albums/recently_deleted`（`AlbumResolver` 的 `TRASH_SELECTION`）。查询必须带 `MediaStore.QUERY_ARG_MATCH_TRASHED = MATCH_ONLY` —— MediaProvider 默认会过滤掉 trashed 条目，仅靠 SQL 的 `is_trashed = 1` 取不到。
 - **页面结构**：不透明标题栏 + View 宫格 + 多选底部动作栏；复用 `MediaGridView` / `GridPageController` / `SelectionState`，与照片页/相册详情页同一套宫格与多选交互。
 - **交互**：

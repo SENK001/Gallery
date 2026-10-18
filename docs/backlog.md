@@ -28,13 +28,13 @@ Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 
 | 设备覆盖 | 仅 Redmi / Android 16 真机（1280×2772）+ Android 16 x86_64 模拟器；第二台 ROM、平板/折叠屏、`fontScale > 1`、横屏未验证 |
 | 深色模式 | 应用主题整体已适配（含宫格/多选/选图/添加到，2026-10-19 真机截图抽查）；**地图页除外**——百度 `TextureMapView` 底图不跟随 `uiMode`，写死的工具栏/底卡无法单独改深色 |
 | 查看器沉浸态 | 深色底与主题正交，当前只确认了非沉浸态的主题表现 |
-| 收藏（自建库） | 已真机验证：多选批量收藏/取消、查看器爱心联动、收藏相册出现/消失；系统媒体库 `is_favorite` 不再写入（有意，见 §3）；旧版本写入系统媒体库的收藏标记**未迁移/导入** |
+| 收藏（自建库） | 已真机验证：多选批量收藏/取消、查看器爱心联动、收藏相册出现/消失；删除标记（`is_trashed`）流程：收藏 → 删除后「收藏」相册隐藏（无灰封面/不空白）、恢复后重新出现且计数恢复、彻底删除后收藏行移除；其它应用/系统删除由 `reconcileFavoriteFlags` 在相册页刷新时校正。系统媒体库 `is_favorite` 不再写入（有意，见 §3）；旧版本写入系统媒体库的收藏标记**未迁移/导入** |
 | ABI 变体 | 10 个变体均已离线段构建并核对产物名 / `lib/` 内容 / 体积（2026-10-17），但未做安装验证、Studio Build Variants 图形流程未复验；`universal` 内多 ABI 同时存在时的 16KB page size 对齐未验证 |
 | 构建平台 | 只在 Windows 命令行验证过（`adb install`；ABI 变体改造后各 `install<变体>` 任务未复验）；Android Studio 图形 Run 流程、其它操作系统、屏幕密度拆分下多 output 的命名未实测 |
 | GL 画面 | 查看器/视频不在 `uiautomator` 视图树中，无自动化断言手段，只能截图逐像素判断；**缩略图宫格已改为 View，可以出现在视图树里** |
 | 外部调用 | 只在本应用内用 `main/src/debug/ExternalClientDebugActivity` 模拟调用方验证（选图结果转发 + 代理 URI 读取 64KB + 外部大图）；**真实第三方 APK 未验证**；`getCallingPackage()` 在非 `startActivityForResult` 场景为 null（回退 `launchedFromPackage`） |
 | 添加到/复制写入 | 已在真机验证：逻辑加入自建相册、复制到嵌套目录相册（`Pictures/douyin/comment/`）、删除（系统"最近删除"）；大文件复制/磁盘满/取消等边界未压测 |
-| 最近删除 | 已真机验证：相册页入口（非空显示/清空后隐藏）、trashed 条目查询（需 `QUERY_ARG_MATCH_TRASHED=MATCH_ONLY`）、恢复 / 彻底删除 / 清空（均走系统授权）、查看器翻页；**系统 30 天自动清理未等待验证**（由 MediaStore 负责）；未验证大量条目分页性能 |
+| 最近删除 | 已真机验证：相册页**最底部入口**（更多之后、无封面、非空显示/清空后隐藏）、trashed 条目查询（需 `QUERY_ARG_MATCH_TRASHED=MATCH_ONLY`）、恢复 / 彻底删除 / 清空（均走系统授权）、查看器翻页；**系统 30 天自动清理未等待验证**（由 MediaStore 负责）；未验证大量条目分页性能 |
 
 ## 3. 明确不做（避免误当缺陷）
 

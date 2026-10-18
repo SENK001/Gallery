@@ -64,19 +64,14 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
         list = view.findViewById(R.id.album_list)
         emptyView = view.findViewById(R.id.empty_view)
         adapter = AlbumListAdapter(
-            onAlbumClick = { album ->
-                if (album.albumType == MediaSet.TYPE_RECENTLY_DELETED) {
-                    RecentlyDeletedActivity.start(requireContext())
-                } else {
-                    AlbumDetailActivity.start(requireContext(), album)
-                }
-            },
+            onAlbumClick = { album -> AlbumDetailActivity.start(requireContext(), album) },
             onActionClick = { action ->
                 if (action.id == ACTION_NEW_ALBUM) {
                     showCreateAlbumDialog()
                 }
             },
             onAlbumLongClick = { album -> onAlbumLongPressed(album) },
+            onTrashClick = { RecentlyDeletedActivity.start(requireContext()) },
         )
         list?.adapter = adapter
         (list?.layoutManager as? GridLayoutManager)?.spanSizeLookup =
@@ -167,6 +162,11 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
             // 自建相册：逻辑集合，空相册也要显示（数据层不做空相册过滤）
             val custom = MediaQuery.albums(resolver, GalleryContract.CATEGORY_CUSTOM)
             val more = MediaQuery.albums(resolver, GalleryContract.CATEGORY_MORE)
+            // 最近删除：固定在相册页最底部（更多相册之后），无封面；空回收站时数据层返回空
+            val recentlyDeleted = MediaQuery.albums(
+                resolver,
+                GalleryContract.CATEGORY_RECENTLY_DELETED,
+            )
             if (view == null) {
                 loading = false
                 return@launch
@@ -190,7 +190,10 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
                 rows.add(AlbumListAdapter.Row.Header(getString(R.string.gallery_section_more)))
                 more.forEach { rows.add(AlbumListAdapter.Row.Album(it, isCommon = false)) }
             }
-            // 最近删除：暂缓功能，详见 docs/backlog.md
+            // 最近删除入口：相册页最底部、更多相册之后；只显示图标 + 名称 + 条数（无封面）
+            recentlyDeleted.firstOrNull()?.let { album ->
+                rows.add(AlbumListAdapter.Row.Trash(album.count))
+            }
             adapter?.submit(rows)
             emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
             loading = false

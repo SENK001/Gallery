@@ -8,13 +8,20 @@ import android.util.Log
 /**
  * 收藏（应用内自建库）的 SQLite 存储。
  *
- * 表结构（v1）：
+ * 表结构（v2）：
  * ```sql
  * CREATE TABLE favorites (
  *   media_id   INTEGER PRIMARY KEY NOT NULL,  -- MediaStore 媒体 id
- *   created_at INTEGER NOT NULL               -- 收藏时间（毫秒），用于稳定排序
+ *   created_at INTEGER NOT NULL,              -- 收藏时间（毫秒），用于稳定排序
+ *   is_trashed INTEGER NOT NULL DEFAULT 0     -- 删除标记：1 = 媒体已进回收站/删除
  * )
  * ```
+ *
+ * `is_trashed` 的语义（见 `FavoriteStore`）：
+ * - 媒体被删除（进系统回收站）后，收藏行不立即删除，而是打上删除标记；
+ *   收藏相册的数量/封面/内容查询只统计未标记的行，避免「封面变灰、点进去空白」。
+ * - 媒体从回收站恢复后清除标记，收藏状态自动恢复。
+ * - 彻底删除（`createDeleteRequest`）时直接删除收藏行。
  *
  * 设计说明：
  * - 只保存媒体 id，不复制媒体文件、不修改系统媒体库（系统 `is_favorite` 不再作为数据源）。
@@ -37,7 +44,13 @@ internal class FavoriteDb private constructor(context: Context) : SQLiteOpenHelp
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         Log.i(TAG, "onUpgrade $oldVersion -> $newVersion")
-        // v1 为初始版本；后续版本只做 ALTER TABLE / 数据迁移，不要 DROP 用户数据。
+        // v1 -> v2：增加删除标记列（ALTER 保留既有收藏数据；开发期也不做旧 prefs 兼容）。
+        if (oldVersion < 2) {
+            db.execSQL(
+                "ALTER TABLE $TABLE ADD COLUMN $COLUMN_IS_TRASHED " +
+                    "INTEGER NOT NULL DEFAULT 0",
+            )
+        }
     }
 
     companion object {
@@ -48,7 +61,7 @@ internal class FavoriteDb private constructor(context: Context) : SQLiteOpenHelp
         const val DB_NAME = "gallery_favorites.db"
 
         /** 当前 schema 版本；升级时在 [onUpgrade] 做迁移。 */
-        private const val VERSION = 1
+        private const val VERSION = 2
 
         /** 收藏表名。 */
         const val TABLE = "favorites"
@@ -59,10 +72,14 @@ internal class FavoriteDb private constructor(context: Context) : SQLiteOpenHelp
         /** 收藏时间列（毫秒）。 */
         const val COLUMN_CREATED_AT = "created_at"
 
+        /** 删除标记列（1 = 媒体已被删除/进回收站，不再计入收藏）。 */
+        const val COLUMN_IS_TRASHED = "is_trashed"
+
         private const val CREATE_FAVORITES =
             "CREATE TABLE IF NOT EXISTS $TABLE (" +
                 "$COLUMN_MEDIA_ID INTEGER PRIMARY KEY NOT NULL, " +
-                "$COLUMN_CREATED_AT INTEGER NOT NULL)"
+                "$COLUMN_CREATED_AT INTEGER NOT NULL, " +
+                "$COLUMN_IS_TRASHED INTEGER NOT NULL DEFAULT 0)"
 
         @Volatile
         private var instance: FavoriteDb? = null

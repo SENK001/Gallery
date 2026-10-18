@@ -490,3 +490,46 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 全程无崩溃；门禁：构建通过、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对。
 
 **已知限制**：系统 30 天自动清理由 MediaStore 负责、未等待验证；大量条目分页性能未压测；查看器里对回收站条目仍显示收藏/详情入口（可正常浏览，收藏写应用内库，不修改媒体库）。
+
+---
+
+## 2026-10-19 最近删除入口移至相册页底部 + 收藏库增加删除标记
+
+**背景（用户反馈）**：
+
+1. 「最近删除」入口应放在相册页**最底部、更多相册之后**，且**不显示封面**（之前混在「常用」分组里是带封面的宫格卡）。
+2. 收藏一张照片再删除：收藏相册封面变灰仍显示，点进去空白——收藏行没感知媒体已删除，需要给收藏数据库加**删除标记字段**。
+
+**实现**：
+
+- 最近删除入口位置：
+  - `AlbumResolver` 把 `recently_deleted` 从 `COMMON_SPECS` 移出，改为独立 `TRASH_SPEC`；
+    `GalleryContract` 新增 `CATEGORY_RECENTLY_DELETED`，`queryAlbums` 单独返回 0/1 行
+    （`cover_uri = null`，不查封面），`commonSpec(TYPE_RECENTLY_DELETED)` 仍供内容查询使用。
+  - `AlbumListAdapter` 新增 `Row.Trash(count)` + `item_album_trash.xml`：图标 + 名称 + 条数、
+    **无封面**；`AlbumsFragment` 在「更多」行之后追加该入口，点击进 `RecentlyDeletedActivity`。
+- 收藏删除标记：
+  - `FavoriteDb` schema v2：`favorites` 新增 `is_trashed INTEGER NOT NULL DEFAULT 0`，
+    `onUpgrade` 用 `ALTER TABLE ADD COLUMN` 保留既有收藏；v1 设备真机升级验证通过。
+  - `FavoriteStore`：`ids()/count()/isFavorite()` 只统计 `is_trashed = 0`；新增
+    `trashedIds() / markTrashed(ids, trashed) / removeIds(ids)`；重新收藏已标记行时清除标记。
+  - 标记时机：本应用删除授权通过（`SelectionActions.onTrashConsentResult` → `markTrashed(true)`）；
+    最近删除恢复 → `markTrashed(false)`；彻底删除/清空 → `removeIds`；
+    其它应用/系统删除 → `AlbumResolver.reconcileFavoriteFlags`（相册页刷新时对比媒体可见性校正）。
+  - 效果：收藏媒体全部删除后「收藏」相册直接隐藏（不再灰封面）；恢复后收藏相册/计数自动回来。
+- 文档同步：ui-guide §7/§9（入口位置与无封面）、data-layer §5.1 注记/§5.4/§6.2（v2 schema 与标记语义）、
+  verification、backlog、README。
+
+**真机验证（Redmi / Android 16）**：
+
+- v1→v2 升级：安装新 APK 后 `pragma table_info(favorites)` 出现 `is_trashed` 列，旧收藏行保留；
+- 入口：复制照片→删除后，相册页滚动到底部，在「更多」（微信/QQ/comment）之后出现
+  「最近删除 2 项」行（图标 + 名称 + 条数，无封面），位置/形态与要求一致；
+- 收藏删除场景：收藏 2 张 → 从「收藏」相册多选删除（系统移到最近删除）→ 相册页「收藏」消失
+  （无灰封面）；`favorites` 两行 `is_trashed = 1`；删除后相册详情显示空态；
+- 恢复：最近删除页全选恢复（系统允许）→ 返回相册页「收藏 2 项」重新出现、DB 标记回 0；
+- 彻底删除：再次删除其中 1 张后从最近删除「彻底删除」→ DB 该行被移除，收藏相册计数变 1；
+- 外部删除校正：收藏 1 张后 `adb shell content delete` 模拟其它应用删除 → 相册页刷新后
+  「收藏」自动隐藏、DB 行 `is_trashed = 1`；
+- 清理：取消剩余收藏后 DB 为空、回收站为空、媒体计数回到测试前（249/220/7/12/12）；
+  全程无崩溃。

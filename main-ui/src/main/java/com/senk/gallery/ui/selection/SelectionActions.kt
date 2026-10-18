@@ -10,6 +10,7 @@ import android.content.IntentSender
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
+import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.R
@@ -45,6 +46,9 @@ class SelectionActions(
     var launchAddToAlbum: ((Intent) -> Unit)? = null
 
     private var pendingAddCount = 0
+
+    /** 正在等待系统「移到最近删除」确认的收藏 id（确认通过后给收藏库打删除标记）。 */
+    private var pendingTrashIds: List<Long> = emptyList()
 
     /** 分享：单张走 ACTION_SEND，多张走 ACTION_SEND_MULTIPLE；均带读 URI 授权与 ClipData。 */
     fun share(items: List<MediaItem>) {
@@ -150,6 +154,7 @@ class SelectionActions(
             onMessage(context.getString(R.string.selection_action_failed))
             return
         }
+        pendingTrashIds = items.map { it.id }
         try {
             val request = MediaStore.createTrashRequest(context.contentResolver, uris, true)
             launchTrashConsent?.invoke(request.intentSender)
@@ -170,9 +175,14 @@ class SelectionActions(
 
     /** 宿主收到「移到最近删除」授权结果后调用。 */
     fun onTrashConsentResult(granted: Boolean) {
+        val trashedIds = pendingTrashIds
+        pendingTrashIds = emptyList()
         if (!granted) {
             return
         }
+        // 收藏库给已删除媒体打删除标记：收藏相册不再统计/展示这些条目
+        // （封面不会变灰、点进去也不会空白）。恢复时由最近删除页清除标记。
+        FavoriteStore.get(context).markTrashed(trashedIds, true)
         onMessage(context.getString(R.string.selection_deleted_done))
         onExitSelection()
         onReload()

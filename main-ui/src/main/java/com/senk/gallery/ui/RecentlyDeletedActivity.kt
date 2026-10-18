@@ -22,6 +22,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
@@ -65,6 +66,9 @@ class RecentlyDeletedActivity : AppCompatActivity() {
 
     private var pendingAction: PendingAction? = null
     private var pendingCount = 0
+
+    /** 正在等待系统确认的媒体 id：恢复时清收藏删除标记，彻底删除时移除收藏行。 */
+    private var pendingIds: List<Long> = emptyList()
 
     private val trashBaseUri: Uri by lazy {
         GalleryContract.albumItemsUri(MediaSet.TYPE_RECENTLY_DELETED)
@@ -253,7 +257,8 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     // ==================== 恢复 / 彻底删除 ====================
 
     private fun restoreSelected() {
-        val uris = pageController?.selectedItems().orEmpty().mapNotNull { it.uri }
+        val items = pageController?.selectedItems().orEmpty()
+        val uris = items.mapNotNull { it.uri }
         if (uris.isEmpty()) {
             return
         }
@@ -261,6 +266,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             val request = MediaStore.createTrashRequest(contentResolver, uris, false)
             pendingAction = PendingAction.RESTORE
             pendingCount = uris.size
+            pendingIds = items.map { it.id }
             consentLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
         } catch (e: Exception) {
             pendingAction = null
@@ -269,7 +275,8 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     }
 
     private fun deleteSelected() {
-        val uris = pageController?.selectedItems().orEmpty().mapNotNull { it.uri }
+        val items = pageController?.selectedItems().orEmpty()
+        val uris = items.mapNotNull { it.uri }
         if (uris.isEmpty()) {
             return
         }
@@ -277,6 +284,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             val request = MediaStore.createDeleteRequest(contentResolver, uris)
             pendingAction = PendingAction.DELETE
             pendingCount = uris.size
+            pendingIds = items.map { it.id }
             consentLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
         } catch (e: Exception) {
             pendingAction = null
@@ -304,6 +312,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
                         val request = MediaStore.createDeleteRequest(contentResolver, uris)
                         pendingAction = PendingAction.CLEAR_ALL
                         pendingCount = uris.size
+                        pendingIds = all.map { it.id }
                         consentLauncher.launch(
                             IntentSenderRequest.Builder(request.intentSender).build(),
                         )
@@ -319,9 +328,18 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     private fun onConsentResult(granted: Boolean) {
         val action = pendingAction ?: return
         val count = pendingCount
+        val ids = pendingIds
         pendingAction = null
+        pendingIds = emptyList()
         if (!granted) {
             return
+        }
+        // 收藏库联动：恢复 → 清除删除标记（收藏状态回来）；
+        // 彻底删除/清空 → 移除收藏行（不留无效数据）。
+        val store = FavoriteStore.get(this)
+        when (action) {
+            PendingAction.RESTORE -> store.markTrashed(ids, false)
+            PendingAction.DELETE, PendingAction.CLEAR_ALL -> store.removeIds(ids)
         }
         val message = when (action) {
             PendingAction.RESTORE -> getString(R.string.trash_restore_done, count)

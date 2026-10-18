@@ -34,8 +34,8 @@ ExternalMediaProvider（core-data，exported=false + 临时授权）     ← 对
 | `provider/MediaWriter.kt` | 物理复制写入：把媒体复制到目标 `RELATIVE_PATH` 目录（`IS_PENDING` 流程、流式复制、重名去重） |
 | `provider/ExternalMediaProvider.kt` | 对外代理 Provider：`content://com.senk.gallery.external/media/{id}` 只读代理到 MediaStore |
 | `album/CustomAlbumStore.kt` | 自建相册持久化（SharedPreferences + 版本化 JSON；线程安全、坏数据回退） |
-| `album/FavoriteStore.kt` | **自建收藏库**读写入口（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列） |
-| `db/FavoriteDb.kt` | 收藏的 SQLite 存储（`databases/gallery_favorites.db`；开发期换方案，不兼容旧 SharedPreferences 数据） |
+| `album/FavoriteStore.kt` | **自建收藏库**读写入口（应用私有数据，不修改系统媒体库；查询时覆盖 `is_favorite` 列；维护删除标记） |
+| `db/FavoriteDb.kt` | 收藏的 SQLite 存储（`databases/gallery_favorites.db`；v2 含 `is_trashed` 删除标记列；开发期换方案，不兼容旧 SharedPreferences 数据） |
 | `entity/MediaObject.java`、`MediaItem.java`、`MediaSet.java` | 领域对象基类 / 媒体条目 / 相册集合 |
 | `pojo/*.java` | 具体型号（相册子类与数据包，见 §2） |
 
@@ -53,7 +53,7 @@ pojo/* 数据包                LocalImage / LocalVideo / ExifData
 
 - `MediaObject.TYPE_*`：`TYPE_UNKNOWN(0) / TYPE_IMAGE(1) / TYPE_VIDEO(2)`；`MediaItem.isVideo()` 即 `mediaType == TYPE_VIDEO`。
 - `MediaItem` 字段：`mediaType / dateTaken / width / height / duration / orientation / isFavorite / isTrashed / isPending / isMotionPhoto / motionVideoLength / isPanorama / bucketId / bucketName / relativePath / ownerPackage / exif`，并提供 `copyFrom()`。
-- `MediaSet.TYPE_*` 常量：`all / camera / video / screenshot / screen_record / live / favorite / panorama / folder / third_party / custom / recently_deleted`（`recently_deleted` 仅预留；`custom` 为自建相册）。
+- `MediaSet.TYPE_*` 常量：`all / camera / video / screenshot / screen_record / live / favorite / panorama / folder / third_party / custom / recently_deleted`（`recently_deleted` 为回收站专用页；`custom` 为自建相册）。
 - **自建相册行**复用 `AlbumColumns`：`_id = "custom:<uuid>"`、`album_type = custom`、`bucket_id = <uuid>`（该列在 custom 行里承载自建相册 id）、`item_count = 成员数`。
 - 时间字段统一为**毫秒**；`size` 为字节；`duration` 为毫秒（继承自 MediaStore 口径）。
 
@@ -68,7 +68,7 @@ authority：`com.senk.gallery.data.provider`（见 `core-data/src/main/AndroidMa
 | `content://…/media` | `limit`, `offset` | `Columns.ALL` 游标 | 照片页全量列表（图片+视频，拍摄时间倒序） |
 | `content://…/media/{id}` | — | 同上（0 或 1 行） | 单个媒体条目 |
 | `content://…/media/{id}/exif` | — | `ExifColumns.ALL`（恒 1 行） | 详情页 EXIF；非图片或读取失败时各列兜底默认值 |
-| `content://…/albums` | `category=common\|more\|custom` | `AlbumColumns.ALL` | 相册列表；缺省 `common` |
+| `content://…/albums` | `category=common\|more\|custom\|recently_deleted` | `AlbumColumns.ALL` | 相册列表；缺省 `common`；`recently_deleted` 固定返回 0 或 1 行（无封面），供相册页底部入口使用 |
 | `content://…/albums/{type}` | `limit`, `offset` | `Columns.ALL` | 相册内容；`{type}` 为「常用」项 |
 | `content://…/albums/folder/{bucketId}` | `limit`, `offset` | 同上 | 目录相册内容（`bucketId` 经 `Uri.decode`） |
 | `content://…/albums/app/{packageName}` | `limit`, `offset` | 同上 | 三方应用相册内容（`packageName` 经 `Uri.decode`） |
@@ -173,7 +173,8 @@ MediaStore.Files(外置卷) 变化
 | `live` | 动态照片 | XMP `LIKE '%MotionPhoto%'` 或 `'%MicroVideo%'` |
 | `favorite` | 收藏 | **应用内自建收藏库**（`FavoriteStore` 的成员；不再读 MediaStore `is_favorite`） |
 | `panorama` | 全景 | XMP `LIKE '%GPano:%'`，或尺寸兜底 `width >= 6000 AND width >= height * 3` |
-| `recently_deleted` | 最近删除 | `TRASH_SELECTION`（`is_trashed = 1` 且非 pending）；查询时必须附加 `QUERY_ARG_MATCH_TRASHED = MATCH_ONLY`（MediaProvider 默认过滤 trashed）。空回收站自动隐藏 |
+
+> 「最近删除」**不属于**「常用」分组：`category=recently_deleted` 单独返回 0/1 行（`cover_uri = null`，不做封面查询），UI 把它追加在相册页最底部（更多相册之后）；空回收站返回空列表。相册内容查询仍走 `albums/recently_deleted`（`TRASH_SPEC`）。
 
 ### 5.2 我的相册（`category=custom`）
 
@@ -197,6 +198,7 @@ MediaStore.Files(外置卷) 变化
 | `third_party` | 先做同样的桶分组取该包的桶集合，`bucket_id IN (…)`；桶集合为空时回退 `owner_package = ?` |
 | `custom` | 按 store 加入顺序的 id 集合（见 §5.2） |
 | `favorite` | 按 `FavoriteStore` 的 id 集合查 MediaStore，按拍摄时间倒序分页（id 超过 900 时退化为全量取回后内存分页） |
+| `recently_deleted` | `TRASH_SPEC` 的 `TRASH_SELECTION` + `QUERY_ARG_MATCH_TRASHED = MATCH_ONLY`（MediaProvider 默认过滤 trashed，仅 SQL 条件取不到） |
 | 常用类型 | 直接使用 §5.1 表的筛选串；未知类型回退为「全部」 |
 
 分页参数与 `media` 一致；结果行为 `Columns.ALL`。
@@ -225,21 +227,34 @@ MediaStore.Files(外置卷) 变化
   - 背景：写回系统媒体库需要用户逐次系统授权（Android 12+ `RecoverableSecurityException`），批量收藏体验差且部分场景直接失败（2026-10-19 用户反馈「多选收藏提示失败」）。
   - 读取：Provider 每次媒体查询取一次 `ids()` 快照，用其覆盖 `is_favorite` 列；「收藏」相册的列表/内容/封面都由本库计算（见 §5.1、§5.4）。
   - 写入：`Provider.update(media/{id}, is_favorite)` → `FavoriteStore.setFavorite(id, favorite)` → `notifyChange`；多选收藏 = 逐条 update。
-- 存储：**SQLite** 数据库 `databases/gallery_favorites.db`，表结构：
+- 存储：**SQLite** 数据库 `databases/gallery_favorites.db`，表结构（v2）：
 
   ```sql
   CREATE TABLE favorites (
     media_id   INTEGER PRIMARY KEY NOT NULL,  -- MediaStore 媒体 id
-    created_at INTEGER NOT NULL               -- 收藏时间（毫秒），用于稳定排序
+    created_at INTEGER NOT NULL,              -- 收藏时间（毫秒），用于稳定排序
+    is_trashed INTEGER NOT NULL DEFAULT 0     -- 删除标记：1 = 媒体已进回收站/被删除
   );
   ```
 
   SQLite 自身保证并发串行化；单次批量写入使用事务；`id` 只增不重（主键约束）。
+  v1→v2 通过 `ALTER TABLE ADD COLUMN is_trashed INTEGER NOT NULL DEFAULT 0` 升级（保留既有收藏行）。
+- **删除标记 `is_trashed`（2026-10-19 用户反馈）**：
+  - 问题：收藏照片后删除（进回收站），收藏相册封面变灰且点进去空白——因为收藏行仍按 id 计入。
+  - 语义：媒体进回收站时收藏行保留但标记 `is_trashed = 1`；`ids()` / `count()` / `isFavorite()`
+    只统计未标记行，「收藏」相册的数量/封面/内容因此自动收敛。
+  - 标记时机：
+    - 本应用删除（照片页/相册详情页多选删除授权通过）→ `SelectionActions.onTrashConsentResult`
+      调 `markTrashed(ids, true)`；
+    - 从最近删除恢复 → `RecentlyDeletedActivity` 调 `markTrashed(ids, false)`（收藏回来）；
+    - 最近删除彻底删除/清空 → `removeIds(ids)`（不留无效行）；
+    - 其它应用/系统删除 → `AlbumResolver.reconcileFavoriteFlags` 在相册页刷新时校正
+      （已收藏但不可见 → 标记；已标记但重新可见 → 清除）。
 - **不做旧数据兼容**：收藏从 SharedPreferences 切到 SQLite 属开发期换方案，旧版
   `gallery_favorites` SharedPreferences 数据直接丢弃（不迁移、不读取）；自建相册
   （`CustomAlbumStore`）仍使用 SharedPreferences，**不在此次 SQLite 化范围**。
 - 线程安全：SQLite + 单例 helper；坏数据/损坏库由 SQLite 自身抛错，调用方按空收藏兜底（`FavoriteDb` 迁移路径捕获异常）。
-- 已知限制：收藏只在本应用内生效（系统相册/其它应用看不到）；旧版本写入 MediaStore 的收藏标记**不做迁移/导入**，也不再作为数据源；成员不主动 prune（媒体被删除后仍计入 `item_count`，内容查询会跳过）。
+- 已知限制：收藏只在本应用内生效（系统相册/其它应用看不到）；旧版本写入 MediaStore 的收藏标记**不做迁移/导入**，也不再作为数据源。
 
 ### 6.3 MediaWriter（物理复制）
 

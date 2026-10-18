@@ -15,15 +15,17 @@ import com.senk.gallery.data.provider.GalleryCursorReader
  * 行的类型：
  * - [Row.Header]：分组标题，占满整行；
  * - [Row.Album]：相册卡。[Row.Album.isCommon] = true 用宫格卡（1 格），false 用整行卡；
- * - [Row.Action]：动作行（如「新建相册」），占满整行。
+ * - [Row.Action]：动作行（如「新建相册」），占满整行；
+ * - [Row.Trash]：相册页最底部的「最近删除」入口（图标 + 名称 + 条数，**无封面**）。
  *
  * 兼容性约定：构造函数的第一个参数 `onAlbumClick` 与 `Row.Header` / `Row.Album` 的语义保持不变
- * （选图页 `ImagePickerActivity` 仍在用），后两个回调为可选参数，不传时行为与旧版一致。
+ * （选图页 `ImagePickerActivity` 仍在用），其余回调为可选参数，不传时行为与旧版一致。
  */
 class AlbumListAdapter(
     private val onAlbumClick: (GalleryCursorReader.AlbumInfo) -> Unit,
     private val onActionClick: ((Row.Action) -> Unit)? = null,
     private val onAlbumLongClick: ((GalleryCursorReader.AlbumInfo) -> Unit)? = null,
+    private val onTrashClick: (() -> Unit)? = null,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     sealed class Row {
@@ -40,6 +42,9 @@ class AlbumListAdapter(
             val iconRes: Int,
             val id: String = "",
         ) : Row()
+
+        /** 相册页最底部的「最近删除」入口（无封面，只显示条数）。 */
+        data class Trash(val count: Int) : Row()
     }
 
     private val rows = ArrayList<Row>()
@@ -55,6 +60,7 @@ class AlbumListAdapter(
         return when {
             row is Row.Header -> SPAN_FULL
             row is Row.Action -> SPAN_FULL
+            row is Row.Trash -> SPAN_FULL
             row is Row.Album && row.isCommon -> 1
             else -> SPAN_FULL
         }
@@ -63,6 +69,7 @@ class AlbumListAdapter(
     override fun getItemViewType(position: Int): Int = when (rows[position]) {
         is Row.Header -> TYPE_HEADER
         is Row.Action -> TYPE_ACTION
+        is Row.Trash -> TYPE_TRASH
         is Row.Album -> {
             if ((rows[position] as Row.Album).isCommon) TYPE_GRID_ALBUM else TYPE_ROW_ALBUM
         }
@@ -73,6 +80,7 @@ class AlbumListAdapter(
         return when (viewType) {
             TYPE_HEADER -> HeaderHolder(inflater.inflate(R.layout.item_album_header, parent, false))
             TYPE_ACTION -> ActionHolder(inflater.inflate(R.layout.item_add_to_action, parent, false))
+            TYPE_TRASH -> TrashHolder(inflater.inflate(R.layout.item_album_trash, parent, false))
             TYPE_GRID_ALBUM -> AlbumGridHolder(inflater.inflate(R.layout.item_album_grid, parent, false))
             else -> AlbumRowHolder(inflater.inflate(R.layout.item_album_row, parent, false))
         }
@@ -83,6 +91,7 @@ class AlbumListAdapter(
         when (holder) {
             is HeaderHolder -> holder.bind((row as Row.Header).title)
             is ActionHolder -> holder.bind((row as Row.Action), onActionClick)
+            is TrashHolder -> holder.bind((row as Row.Trash).count, onTrashClick)
             is AlbumGridHolder -> holder.bind(
                 (row as Row.Album).info,
                 onAlbumClick,
@@ -115,6 +124,23 @@ class AlbumListAdapter(
             itemView.contentDescription = action.title
             itemView.isClickable = onClick != null
             itemView.setOnClickListener { onClick?.invoke(action) }
+        }
+    }
+
+    /** 「最近删除」入口：图标 + 名称 + 条数，无封面；点击进入最近删除页。 */
+    class TrashHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val name: TextView = itemView.findViewById(R.id.album_trash_name)
+        private val count: TextView = itemView.findViewById(R.id.album_trash_count)
+
+        fun bind(itemCount: Int, onClick: (() -> Unit)?) {
+            val context = itemView.context
+            val label = context.getString(R.string.gallery_section_recently_deleted)
+            name.text = label
+            val countText = context.getString(R.string.gallery_count_format, itemCount)
+            count.text = countText
+            itemView.contentDescription = "$label，$countText"
+            itemView.isClickable = onClick != null
+            itemView.setOnClickListener { onClick?.invoke() }
         }
     }
 
@@ -182,6 +208,7 @@ class AlbumListAdapter(
         const val TYPE_GRID_ALBUM = 1
         const val TYPE_ROW_ALBUM = 2
         const val TYPE_ACTION = 3
+        const val TYPE_TRASH = 4
         const val SPAN_FULL = 3
     }
 }

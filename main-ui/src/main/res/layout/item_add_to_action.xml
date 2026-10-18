@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「添加到」页 / 相册页通用的动作行（如「新建相册」）。
+
+  左侧图标 + 单行标题；整行可点，按下用主题的 selectableItemBackground。
+  颜色全部经 styles_album.xml 引用色板，布局里不写颜色值。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/addto_action_row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="14dp">
+
+    <ImageView
+        android:id="@+id/addto_action_icon"
+        style="@style/Widget.Gallery.AddToIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/addto_action_title"
+        style="@style/Widget.Gallery.AddToName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textSize="15sp" />
+
+</LinearLayout>

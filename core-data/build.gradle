@@ -27,6 +27,8 @@ dependencies {
     implementation libs.androidx.core.ktx
     implementation libs.material
     implementation libs.androidx.exifinterface
+    // MediaWriter 的复制操作是挂起函数（Dispatchers.IO / ensureActive），core-data 需要协程。
+    implementation libs.kotlinx.coroutines.android
     testImplementation libs.junit
     androidTestImplementation libs.androidx.espresso.core
     androidTestImplementation libs.androidx.junit

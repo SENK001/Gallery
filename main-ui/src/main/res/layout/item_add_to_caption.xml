@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「添加到」页分节内的提示行（如「还没有自建相册」）。
+  纯文本、不可点，颜色经 styles_album.xml 引用色板。
+-->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/addto_caption"
+    style="@style/Widget.Gallery.AddToCaption"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="2dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp"
+    android:textSize="13sp" />

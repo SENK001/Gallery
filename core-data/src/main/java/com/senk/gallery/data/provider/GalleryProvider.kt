@@ -77,6 +77,7 @@ class GalleryProvider : ContentProvider() {
                     ?: GalleryContract.CATEGORY_COMMON,
             )
             CODE_ALBUM_ITEMS -> AlbumResolver.queryAlbumItems(
+                context!!,
                 resolver,
                 uri.pathSegments[1],
                 null,
@@ -85,6 +86,7 @@ class GalleryProvider : ContentProvider() {
                 offsetOf(uri),
             )
             CODE_FOLDER_ITEMS -> AlbumResolver.queryAlbumItems(
+                context!!,
                 resolver,
                 com.senk.gallery.data.entity.MediaSet.TYPE_FOLDER,
                 Uri.decode(uri.pathSegments[2]),
@@ -93,10 +95,20 @@ class GalleryProvider : ContentProvider() {
                 offsetOf(uri),
             )
             CODE_APP_ITEMS -> AlbumResolver.queryAlbumItems(
+                context!!,
                 resolver,
                 com.senk.gallery.data.entity.MediaSet.TYPE_THIRD_PARTY,
                 null,
                 Uri.decode(uri.pathSegments[2]),
+                limitOf(uri),
+                offsetOf(uri),
+            )
+            CODE_CUSTOM_ITEMS -> AlbumResolver.queryAlbumItems(
+                context!!,
+                resolver,
+                com.senk.gallery.data.entity.MediaSet.TYPE_CUSTOM,
+                Uri.decode(uri.pathSegments[2]),
+                null,
                 limitOf(uri),
                 offsetOf(uri),
             )
@@ -136,7 +148,8 @@ class GalleryProvider : ContentProvider() {
         CODE_MEDIA_ITEM -> GalleryContract.MIME_MEDIA_ITEM
         CODE_MEDIA_EXIF -> GalleryContract.MIME_EXIF_ITEM
         CODE_ALBUMS -> GalleryContract.MIME_ALBUM_DIR
-        CODE_ALBUM_ITEMS, CODE_FOLDER_ITEMS, CODE_APP_ITEMS -> GalleryContract.MIME_MEDIA_DIR
+        CODE_ALBUM_ITEMS, CODE_FOLDER_ITEMS, CODE_APP_ITEMS, CODE_CUSTOM_ITEMS ->
+            GalleryContract.MIME_MEDIA_DIR
         else -> null
     }
 
@@ -166,6 +179,7 @@ class GalleryProvider : ContentProvider() {
         private const val CODE_ALBUM_ITEMS = 5
         private const val CODE_FOLDER_ITEMS = 6
         private const val CODE_APP_ITEMS = 7
+        private const val CODE_CUSTOM_ITEMS = 8
 
         private val MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(GalleryContract.AUTHORITY, GalleryContract.PATH_MEDIA, CODE_MEDIA_DIR)
@@ -191,6 +205,12 @@ class GalleryProvider : ContentProvider() {
                 GalleryContract.AUTHORITY,
                 "${GalleryContract.PATH_ALBUMS}/${GalleryContract.PATH_APP}/*",
                 CODE_APP_ITEMS,
+            )
+            // 自建相册内容：albums/custom/{albumId}；同样必须注册在通配 albums/* 之前
+            addURI(
+                GalleryContract.AUTHORITY,
+                "${GalleryContract.PATH_ALBUMS}/${GalleryContract.PATH_CUSTOM}/*",
+                CODE_CUSTOM_ITEMS,
             )
             addURI(
                 GalleryContract.AUTHORITY,

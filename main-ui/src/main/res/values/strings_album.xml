@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自建相册 + 「添加到」页专用文案。
+
+  约定（与其它新页面一致）：
+  - 不改公共 strings.xml；本批文案统一放这里，自建相册入口/对话框用 album_ 前缀，
+    「添加到」页用 addto_ 前缀；
+  - 可复用文案优先引用公共资源（如 @string/gallery_section_custom、gallery_empty）。
+-->
+<resources>
+
+    <!-- ========== 相册页「我的相册」分区 ========== -->
+    <string name="album_action_new">新建相册</string>
+    <string name="album_new_title">新建相册</string>
+    <string name="album_name_hint">相册名称</string>
+    <string name="album_name_duplicate_error">已存在同名相册</string>
+    <string name="album_name_invalid_error">请输入 1–40 个字符的名称（不能包含换行等特殊字符）</string>
+    <string name="album_dialog_confirm">确定</string>
+    <string name="album_dialog_cancel">取消</string>
+    <string name="album_delete_title">删除相册</string>
+    <string name="album_delete_message">确定删除「%1$s」吗？相册中的照片不会被删除。</string>
+    <string name="album_delete_confirm">删除</string>
+    <string name="album_delete_done">已删除「%1$s」</string>
+    <string name="album_delete_failed">删除失败</string>
+    <string name="album_create_failed">创建相册失败</string>
+
+    <!-- ========== 「添加到」页 ========== -->
+    <string name="addto_title">添加到</string>
+    <string name="addto_back">返回</string>
+    <string name="addto_section_custom">自建相册</string>
+    <string name="addto_section_folders">文件夹相册</string>
+    <string name="addto_new_album">新建相册</string>
+    <string name="addto_camera">相机</string>
+    <string name="addto_empty_custom">还没有自建相册，可点上方「新建相册」</string>
+    <string name="addto_empty_media">没有可添加的照片</string>
+
+    <!-- 目标行副标题：数量 + 语义（加入逻辑集合 / 物理复制） -->
+    <string name="addto_album_meta_custom">%1$d 项 · 加入应用内相册（不复制文件）</string>
+    <string name="addto_album_meta_copy">%1$d 项 · 复制到该文件夹</string>
+
+    <!-- 无障碍描述：明确「加入 / 复制」语义 -->
+    <string name="addto_cd_add_to_custom">加入应用内相册「%1$s」</string>
+    <string name="addto_cd_copy_to_folder">复制到文件夹「%1$s」</string>
+
+    <!-- 复制进度 -->
+    <string name="addto_copy_title">复制到「%1$s」</string>
+    <string name="addto_copying">正在复制 %1$d/%2$d…</string>
+
+    <!-- 结果反馈 -->
+    <string name="addto_toast_added">已添加到「%1$s」</string>
+    <string name="addto_toast_already">这些照片已在「%1$s」中</string>
+    <string name="addto_toast_copied">已复制 %1$d 项到「%2$s」</string>
+    <string name="addto_toast_copy_partial">已复制 %1$d 项，%2$d 项失败</string>
+    <string name="addto_toast_copy_failed">复制失败（%1$d 项）</string>
+    <string name="addto_toast_create_failed">创建相册失败</string>
+    <string name="addto_toast_add_failed">添加失败</string>
+
+</resources>

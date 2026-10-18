@@ -6,7 +6,9 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
 import android.provider.MediaStore
+import com.senk.gallery.data.album.CustomAlbumStore
 import com.senk.gallery.data.entity.MediaSet
+import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.pojo.AllItemAlbum
 import com.senk.gallery.data.pojo.CameraAlbum
 import com.senk.gallery.data.pojo.FavoriteAlbum
@@ -21,6 +23,9 @@ import com.senk.gallery.data.pojo.VideoAlbum
 object AlbumResolver {
 
     private const val PICTURES_PREFIX = "Pictures/"
+
+    /** 一次 `IN (...)` 的 id 数上限，低于 SQLite 默认变量上限（999）。 */
+    private const val ID_CHUNK_SIZE = 900
 
     private val KNOWN_APPS = linkedMapOf(
         "com.tencent.mm" to "微信",
@@ -133,13 +138,58 @@ object AlbumResolver {
     fun commonSpec(type: String): AlbumSpec? = COMMON_SPECS.firstOrNull { it.type == type }
 
     fun queryAlbums(context: Context, resolver: ContentResolver, category: String): Cursor {
-        val albums = when (category) {
-            GalleryContract.CATEGORY_MORE -> queryMoreAlbums(context, resolver)
-            else -> queryCommonAlbums(context, resolver)
-        }
         val cursor = MatrixCursor(GalleryContract.AlbumColumns.ALL)
-        albums.forEach { addAlbumRow(cursor, it) }
+        when (category) {
+            GalleryContract.CATEGORY_MORE ->
+                queryMoreAlbums(context, resolver).forEach { addAlbumRow(cursor, it) }
+            GalleryContract.CATEGORY_CUSTOM ->
+                queryCustomAlbumRows(context, resolver, cursor)
+            else ->
+                queryCommonAlbums(context, resolver).forEach { addAlbumRow(cursor, it) }
+        }
         return cursor
+    }
+
+    /**
+     * 「我的相册」= 自建相册（应用内逻辑集合）。
+     *
+     * 与系统相册不同：**空的自建相册也要显示**（用户刚建好、还没加照片时需要一个入口），
+     * 因此不做 count 过滤。行契约与目录相册一致，`bucket_id` 位放自建相册 UUID，
+     * 内容查询走 `albums/custom/{uuid}`。
+     */
+    private fun queryCustomAlbumRows(
+        context: Context,
+        resolver: ContentResolver,
+        cursor: MatrixCursor,
+    ) {
+        CustomAlbumStore.get(context).albums().forEach { album ->
+            val coverUri = album.coverUri ?: coverOfCustomAlbum(resolver, album.itemIds)
+            // 与 addAlbumRow 同样的显式 Array<Any?>：列值混合 String / Int / null
+            val row: Array<Any?> = arrayOf(
+                MediaSet.TYPE_CUSTOM + ":" + album.id,
+                MediaSet.TYPE_CUSTOM,
+                album.name,
+                coverUri,
+                album.itemIds.size,
+                album.id,
+                null,
+                null,
+            )
+            cursor.addRow(row)
+        }
+    }
+
+    /** 自建相册没有显式封面时，按现有成员取最新一条的 URI 兜底。 */
+    private fun coverOfCustomAlbum(resolver: ContentResolver, itemIds: List<Long>): String? {
+        // 只取前 900 个 id（SQLite 变量上限内），封面不需要全量成员
+        val ids = itemIds.take(ID_CHUNK_SIZE)
+        if (ids.isEmpty()) {
+            return null
+        }
+        return queryItemsByIds(resolver, ids).values
+            .maxByOrNull { it.dateTaken }
+            ?.uri
+            ?.toString()
     }
 
     private fun queryCommonAlbums(context: Context, resolver: ContentResolver): List<MediaSet> {
@@ -222,6 +272,7 @@ object AlbumResolver {
     }
 
     fun queryAlbumItems(
+        context: Context,
         resolver: ContentResolver,
         albumType: String,
         bucketId: String?,
@@ -229,6 +280,9 @@ object AlbumResolver {
         limit: Int,
         offset: Int,
     ): Cursor {
+        if (albumType == MediaSet.TYPE_CUSTOM) {
+            return queryCustomAlbumItems(context, resolver, bucketId.orEmpty(), limit, offset)
+        }
         val selection: String?
         val selectionArgs: Array<String>?
         when (albumType) {
@@ -261,6 +315,60 @@ object AlbumResolver {
             }
         }
         return MediaStoreFetcher.queryItemsCursor(resolver, selection, selectionArgs, limit, offset)
+    }
+
+    /**
+     * 自建相册内容：**按加入顺序**返回，再按 limit/offset 切片。
+     *
+     * MediaStore 查询不保证 `_id IN (...)` 的返回顺序，因此先切出本页要的 id，
+     * 再按切片顺序重排成 MediaItem 列表。相册不存在 / 成员被删除时返回空游标，
+     * 不抛异常（列表页的 item_count 仍按记录数展示，属已知口径差异）。
+     */
+    private fun queryCustomAlbumItems(
+        context: Context,
+        resolver: ContentResolver,
+        albumId: String,
+        limit: Int,
+        offset: Int,
+    ): Cursor {
+        if (albumId.isEmpty()) {
+            return MediaStoreFetcher.itemsCursor(emptyList())
+        }
+        val album = CustomAlbumStore.get(context).album(albumId)
+            ?: return MediaStoreFetcher.itemsCursor(emptyList())
+        val safeOffset = offset.coerceAtLeast(0)
+        val pageIds = if (limit <= 0) {
+            album.itemIds.drop(safeOffset)
+        } else {
+            album.itemIds.drop(safeOffset).take(limit)
+        }
+        if (pageIds.isEmpty()) {
+            return MediaStoreFetcher.itemsCursor(emptyList())
+        }
+        val byId = queryItemsByIds(resolver, pageIds)
+        val ordered = pageIds.mapNotNull { byId[it] }
+        return MediaStoreFetcher.itemsCursor(ordered)
+    }
+
+    /** `_id IN (...)` 分批查询，返回 id → MediaItem（按分批规避 SQLite 变量上限）。 */
+    private fun queryItemsByIds(
+        resolver: ContentResolver,
+        ids: List<Long>,
+    ): Map<Long, MediaItem> {
+        val items = HashMap<Long, MediaItem>(ids.size)
+        ids.distinct().chunked(ID_CHUNK_SIZE).forEach { chunk ->
+            val placeholders = chunk.joinToString(", ") { "?" }
+            val selection = "(${MediaStoreFetcher.BASE_SELECTION}) AND " +
+                "(${MediaStore.MediaColumns._ID} IN ($placeholders))"
+            MediaStoreFetcher.queryItems(
+                resolver,
+                selection,
+                chunk.map { it.toString() }.toTypedArray(),
+                // 顺序由调用方按加入顺序重排，这里仅取一个合法排序列（Provider 要求非空）
+                sortOrder = MediaStore.MediaColumns._ID,
+            ).forEach { item -> items[item.id] = item }
+        }
+        return items
     }
 
     private fun albumOf(type: String): MediaSet = when (type) {
@@ -319,6 +427,8 @@ object AlbumResolver {
             GalleryContract.folderAlbumItemsUri(bucketId)
         albumType == MediaSet.TYPE_THIRD_PARTY && packageName != null ->
             GalleryContract.appAlbumItemsUri(packageName)
+        albumType == MediaSet.TYPE_CUSTOM && bucketId != null ->
+            GalleryContract.customAlbumItemsUri(bucketId)
         else -> GalleryContract.albumItemsUri(albumType)
     }
 }

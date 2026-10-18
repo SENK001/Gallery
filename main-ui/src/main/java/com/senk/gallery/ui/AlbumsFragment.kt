@@ -6,13 +6,19 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.senk.gallery.data.album.CustomAlbumStore
+import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.data.provider.GalleryCursorReader
+import com.senk.gallery.ui.addto.AlbumNameDialog
 import kotlinx.coroutines.launch
 
 class AlbumsFragment : Fragment(R.layout.fragment_albums) {
@@ -26,13 +32,26 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
     /** 已应用的顶部 padding，避免 insets 每次回调都重设一次。 */
     private var lastPaddingTop = -1
 
+    private lateinit var store: CustomAlbumStore
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        store = CustomAlbumStore.get(requireContext())
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         list = view.findViewById(R.id.album_list)
         emptyView = view.findViewById(R.id.empty_view)
-        adapter = AlbumListAdapter { album ->
-            AlbumDetailActivity.start(requireContext(), album)
-        }
+        adapter = AlbumListAdapter(
+            onAlbumClick = { album -> AlbumDetailActivity.start(requireContext(), album) },
+            onActionClick = { action ->
+                if (action.id == ACTION_NEW_ALBUM) {
+                    showCreateAlbumDialog()
+                }
+            },
+            onAlbumLongClick = { album -> onAlbumLongPressed(album) },
+        )
         list?.adapter = adapter
         (list?.layoutManager as? GridLayoutManager)?.spanSizeLookup =
             object : GridLayoutManager.SpanSizeLookup() {
@@ -119,6 +138,8 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
         viewLifecycleOwner.lifecycleScope.launch {
             val resolver = requireContext().contentResolver
             val common = MediaQuery.albums(resolver, GalleryContract.CATEGORY_COMMON)
+            // 自建相册：逻辑集合，空相册也要显示（数据层不做空相册过滤）
+            val custom = MediaQuery.albums(resolver, GalleryContract.CATEGORY_CUSTOM)
             val more = MediaQuery.albums(resolver, GalleryContract.CATEGORY_MORE)
             if (view == null) {
                 loading = false
@@ -129,6 +150,16 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
                 rows.add(AlbumListAdapter.Row.Header(getString(R.string.gallery_section_common)))
                 common.forEach { rows.add(AlbumListAdapter.Row.Album(it, isCommon = true)) }
             }
+            // 「我的相册」分区：始终显示（首行是「新建相册」入口，没有相册时它就是唯一入口）
+            rows.add(AlbumListAdapter.Row.Header(getString(R.string.gallery_section_custom)))
+            rows.add(
+                AlbumListAdapter.Row.Action(
+                    title = getString(R.string.album_action_new),
+                    iconRes = R.drawable.ic_create_folder,
+                    id = ACTION_NEW_ALBUM,
+                ),
+            )
+            custom.forEach { rows.add(AlbumListAdapter.Row.Album(it, isCommon = false)) }
             if (more.isNotEmpty()) {
                 rows.add(AlbumListAdapter.Row.Header(getString(R.string.gallery_section_more)))
                 more.forEach { rows.add(AlbumListAdapter.Row.Album(it, isCommon = false)) }
@@ -138,5 +169,70 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
             emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
             loading = false
         }
+    }
+
+    // ==================== 自建相册：新建 / 删除 ====================
+
+    private fun showCreateAlbumDialog() {
+        if (!isAdded) {
+            return
+        }
+        AlbumNameDialog.show(
+            context = requireContext(),
+            title = getString(R.string.album_new_title),
+        ) { name ->
+            val trimmed = name.trim()
+            val album = store.create(trimmed)
+            if (album == null) {
+                if (store.containsName(trimmed)) {
+                    getString(R.string.album_name_duplicate_error)
+                } else {
+                    getString(R.string.album_name_invalid_error)
+                }
+            } else {
+                refresh()
+                null
+            }
+        }
+    }
+
+    private fun onAlbumLongPressed(album: GalleryCursorReader.AlbumInfo) {
+        // 只有自建相册可删除（相机/目录/三方相册来自 MediaStore，不能在这里删）
+        if (album.albumType != MediaSet.TYPE_CUSTOM) {
+            return
+        }
+        if (!isAdded) {
+            return
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.album_delete_title)
+            .setMessage(getString(R.string.album_delete_message, album.name))
+            .setNegativeButton(R.string.album_dialog_cancel, null)
+            .setPositiveButton(R.string.album_delete_confirm) { _, _ ->
+                val albumId = album.bucketId.orEmpty()
+                val removed = albumId.isNotEmpty() && store.delete(albumId)
+                val ctx = context
+                if (ctx == null) {
+                    return@setPositiveButton
+                }
+                if (removed) {
+                    Toast.makeText(
+                        ctx,
+                        getString(R.string.album_delete_done, album.name),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    // 自建相册数据不经过 MediaStore，显式通知根 URI，
+                    // 让选图页等其它已打开的页面同步刷新
+                    ctx.contentResolver.notifyChange(GalleryContract.CONTENT_URI, null)
+                    refresh()
+                } else {
+                    Toast.makeText(ctx, R.string.album_delete_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
+    }
+
+    private companion object {
+        const val ACTION_NEW_ALBUM = "new_album"
     }
 }

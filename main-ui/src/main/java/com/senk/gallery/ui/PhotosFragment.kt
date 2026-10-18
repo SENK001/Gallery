@@ -169,6 +169,19 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         pageController?.selectAll()
     }
 
+    /**
+     * 把宫格**当前**滚动位置同步给宿主（MainActivity 的标题栏三态）。
+     *
+     * 使用场景：ViewPager2 切页不会把宫格滚回顶部，RecyclerView 会保留原滚动位置；
+     * 而切页返回时不会产生滚动事件，导致宿主缓存的「是否已上划」状态与实际不符
+     * （真机现象：照片页上划后切到相册再切回，标题变黑、渐变遮罩消失、状态栏不透明）。
+     * 宿主在切回照片页 / Fragment resume 时主动调用一次，用真实位置纠正标题栏外观。
+     */
+    fun syncGridScrollState() {
+        val scrollY = grid?.currentScrollY() ?: 0
+        onGridScroll?.invoke(scrollY.toFloat())
+    }
+
     // ==================== 数据加载 ====================
 
     /**

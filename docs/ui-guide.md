@@ -99,6 +99,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - `PhotosFragment.onGridScroll` 由 MainActivity 设置，驱动 4.3 的标题栏切换（回调在主线程）。
 - `PhotosFragment.onSelectionStateChanged(active, count)` 由 MainActivity 设置，驱动多选标题栏/菜单/胶囊导航。
 - **ViewPager2 的 Fragment 是懒创建的**：`setAdapter` 之后 Fragment 并不立刻存在；切页回来时 Fragment/视图也可能重建。MainActivity 通过 `registerFragmentLifecycleCallbacks` 在 `onFragmentViewCreated`/`onFragmentResumed` 时绑定回调，并在 `refreshFragments()` 与 `onPageSelected` 兜底（真机实测：只靠 onCreate/onPageSelected 会丢回调，切页后上划标题栏不再变遮罩）。
+- **切页/返回后必须同步真实滚动状态**：RecyclerView 会保留宫格滚动位置，而切页本身不会产生滚动事件；MainActivity 在回到照片页（`onPageSelected`）与 Fragment resume 时调用 `PhotosFragment.syncGridScrollState()`，用 `MediaGridView.currentScrollY()` 的真实值纠正标题栏三态。否则会出现「上划后切页返回，标题黑字、遮罩消失、状态栏不透明」而宫格实际仍是滚动态的错位。
 
 ## 5. 宫格（`MediaGridView` + `MediaGridAdapter`，照片页/相册详情页/选图页共用）
 

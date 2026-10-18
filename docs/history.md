@@ -384,6 +384,7 @@ androidComponents { onVariants(selector().all()) { variant ->
 3. **ViewPager2 切页后照片页回调丢失**：从相册页切回照片页，`onPageSelected` 触发时 Fragment 视图可能尚未重建，`supportFragmentManager.fragments` 里拿不到目标实例，导致上划宫格标题栏不再切换到渐变遮罩（真机复现）。修法：`registerFragmentLifecycleCallbacks` 在 `onFragmentViewCreated`/`onFragmentResumed` 时绑定 `onGridScroll` / `onSelectionStateChanged`，再保留 `onPageSelected` 与首帧 `post` 兜底。
 4. **新增页面必须处理 system bars insets**：targetSdk 36 强制 edge-to-edge，「添加到」页最初没加 `setOnApplyWindowInsetsListener`，标题栏直接画在状态栏下面。修法：根布局 padding = `Type.systemBars()`。
 5. **外部选图代理 URI 读取自测**：app 内测试壳验证 `query` 元数据 + `openInputStream` 读 64KB 成功（name/mime/size 正确），多选 2 张均通过；VIEW_IMAGE 隐式启动查看器成功。
+6. **切页返回后标题栏与宫格滚动状态不一致（交付后用户反馈，已修复）**：照片页上划到渐变遮罩态 → 切到相册页 → 再切回照片页，标题变回黑字、渐变遮罩消失、状态栏不再是透明背景；而宫格（RecyclerView）仍保持原来滚动位置。根因：`MainActivity.applyChrome` 在切页时把 `gridScrolledPast` 重置为 false（旧假设是「切页会回顶」），但 ViewPager2 会保留 Fragment 与 RecyclerView 的滚动位置，切回来时也不会产生滚动事件，宿主缓存的「是否已上划」与实际永远不符。修法：`MediaGridView.currentScrollY()` 改为公开 API；`PhotosFragment.syncGridScrollState()` 用真实滚动位置回调宿主；MainActivity 在 `onPageSelected`（回到照片页）与 `onFragmentResumed` 时主动 sync 一次，标题栏三态即与实际位置一致（顶部返回＝静止态，滚动位置返回＝上划态）。真机复测：上划→切页→返回＝白字+遮罩+状态栏透出；顶部→切页→返回＝黑字+无遮罩+不透明状态栏；查看器返回同样正确。
 
 **验证（真机 / Android 16 / 1280×2772）**：
 

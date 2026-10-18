@@ -97,6 +97,12 @@ class MainActivity : AppCompatActivity() {
                 applyChrome(page = position)
                 // 切页后 Fragment 才确保存在，这里兜底补挂回调
                 attachPhotosCallbacks()
+                // 宫格的滚动位置由 RecyclerView 保留（切页不会回顶），而切回来时不会产生
+                // 滚动事件 —— 必须用真实位置纠正标题栏三态，否则「静止态外观」会盖在
+                // 已上划的宫格上（黑字、无遮罩、状态栏不透明）。
+                if (position == PAGE_PHOTOS) {
+                    photosFragment()?.syncGridScrollState()
+                }
             }
         })
         navPhotos.setOnClickListener { selectPage(0) }
@@ -366,6 +372,9 @@ class MainActivity : AppCompatActivity() {
                 override fun onFragmentResumed(fm: FragmentManager, f: Fragment) {
                     if (f is PhotosFragment) {
                         bindPhotosCallbacks(f)
+                        // 从查看器/添加到页返回时 Fragment 会重新 resume：同样用真实滚动位置
+                        // 校正标题栏（窗口期间数据可能已变化，例如刷新回顶）。
+                        f.syncGridScrollState()
                     }
                 }
             },
@@ -489,6 +498,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private companion object {
+        /** ViewPager2 中「照片」页的下标（相册页为 1，见 MainPagerAdapter）。 */
+        const val PAGE_PHOTOS = 0
+
         /**
          * 滚动死区：小于它视为「还在顶部」，标题栏保持完全透明（不遮挡宫格顶部），
          * 超过它、缩略图确实位于标题栏下方时，才换成渐变遮罩。

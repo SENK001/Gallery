@@ -214,8 +214,14 @@ class MediaGridView @JvmOverloads constructor(
 
     private fun currentLimit(): Int = if (selection.maxCount <= 0) Int.MAX_VALUE else selection.maxCount
 
-    /** 当前滚动量（像素）。只有第一项在顶部时才有精确值，滚过首行后给一个大值即可。 */
-    private fun currentScrollY(): Int {
+    /**
+     * 当前滚动量（像素）。
+     *
+     * 语义与 [onScrollChanged] 一致：只有第一项在顶部时才有精确值；已滚过首行（或处于空态）
+     * 时返回一个大值（`Int.MAX_VALUE`）。宿主可在「没有滚动事件但需要恢复标题栏三态」时
+     * 主动调用（如 ViewPager2 切页返回后，宫格保留着滚动位置，但不会触发 onScrolled）。
+     */
+    fun currentScrollY(): Int {
         if (gridAdapter.itemCount == 0) {
             return 0
         }

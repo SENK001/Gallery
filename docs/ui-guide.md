@@ -142,6 +142,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 我的相册/更多相册为整行卡（`item_album_row`，占满 3 格，封面 160px）；`Row.Action` 用于「新建相册」动作行（整行 + 图标）。
 - 分组顺序：`常用` → `我的相册`（自建，含「新建相册」动作行）→ `更多`；全空时显示 `empty_view`。
 - 自建相册：可以**空相册**形式显示（系统/目录空相册仍然隐藏）；点击进入详情（`AlbumDetailActivity.start` 用 custom URI）；长按弹「删除相册（不会删除其中照片）」确认后仅删逻辑集合。
+- **新建相册流程**：点「新建相册」→ 名称对话框 → 创建成功后**立即进入选图页**（`ImagePickerActivity`，多选、不限数量、标题「选择照片和视频」，照片/视频都可以选）→ 选中项加入新相册并直接进入该相册详情页（Toast「已添加 N 项到相册」）；用户在选图页取消时保留刚创建的空相册并刷新列表（之后可再添加或删除）。
 - 顶部内边距 = `paddingTop` 基础值 + 状态栏 + `actionBarSize`（用 padding 而不是 margin，保留滚动手感；布局 `clipToPadding=false`）；标题栏不透明（见 4.3）。
 - 点击相册 → `AlbumDetailActivity.start(context, album)`，由 `AlbumInfo.albumType` 决定内容 URI（`AlbumResolver.albumItemsUri`）：`folder → folderAlbumItemsUri(bucketId)`、`third_party → appAlbumItemsUri(ownerPackage)`、`custom → customAlbumItemsUri(albumId)`、其余 → `albumItemsUri(type)`；标题 = 相册名。
 
@@ -164,6 +165,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - **照片 tab**：复用 `MediaGridView` + `MediaPager`（全量媒体，200/页分页）；点击/多选语义见 §5。
 - **相册 tab**：复用 `AlbumListAdapter` + `MediaQuery`，分组「常用 / 我的相册 / 更多」；点相册在同一 Activity 内进入内容视图（toolbar 变返回、标题 = 相册名、内容源换成该相册），返回回相册列表。**分类选** = 先选相册分类再选图。
 - **选择语义**：单选模式点击一张立即返回；多选模式点击 toggle（跨 tab/相册保留已选），底部「已选择 N 项」+「完成」（空选禁用）；超 `maxCount` 时 Toast 且不选中。
+- **调用方**：外部经 `ExternalEntryActivity` 进入（单选/多选由 extras 指定，默认上限 9）；内部「相册页新建相册」以多选 + 不限数量（`ImagePickerActivity.MAX_COUNT_UNLIMITED`）进入，标题「选择照片和视频」。
 - **结果契约**（内部，供外部路由消费）：`data` = 第一张原始 MediaStore URI；`ClipData` = 全部原始 URI；`EXTRA_SELECTED_URIS`（ArrayList<String>）、`EXTRA_SELECTED_IDS`（LongArray）、`EXTRA_SELECTED_COUNT`（Int）；关闭/返回 = `RESULT_CANCELED`。外部路由再把这些 id 映射成代理 URI 并授权回传调用方（见 §10 与 [外部调用 API](external-api.md)）。
 - 无障碍：tab、格子、关闭/返回、完成均有 `contentDescription`；空态文案（暂无照片/暂无相册/该相册暂无内容）。
 

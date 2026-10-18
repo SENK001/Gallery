@@ -24,6 +24,10 @@
     <string name="album_delete_failed">删除失败</string>
     <string name="album_create_failed">创建相册失败</string>
 
+    <!-- 新建相册后立即进入选图页（多选照片/视频） -->
+    <string name="album_pick_title">选择照片和视频</string>
+    <string name="album_pick_added">已添加 %1$d 项到相册</string>
+
     <!-- ========== 「添加到」页 ========== -->
     <string name="addto_title">添加到</string>
     <string name="addto_back">返回</string>

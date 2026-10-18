@@ -509,6 +509,12 @@ class ImagePickerActivity : AppCompatActivity() {
          */
         const val EXTRA_SELECTED_IDS = "com.senk.gallery.extra.SELECTED_IDS"
 
+        /**
+         * 内部调用表示"不限数量"的 [maxCount] 取值（外部调用契约仍以 ≤0 表示用默认 9）。
+         * 用于「相册页新建相册后选择照片/视频」等需要一次加入多张的内部场景。
+         */
+        const val MAX_COUNT_UNLIMITED = Int.MAX_VALUE
+
         private const val TAB_PHOTOS = 0
         private const val TAB_ALBUMS = 1
         private const val COLUMNS = 4
@@ -518,7 +524,8 @@ class ImagePickerActivity : AppCompatActivity() {
          * 构造选图页 Intent（内部复用入口）。
          *
          * @param allowMultiple 是否多选；false 时点选一张立即返回。
-         * @param maxCount 多选上限（≤0 时用 [GalleryExternal.DEFAULT_MAX_COUNT]）。
+         * @param maxCount 多选上限（≤0 时用 [GalleryExternal.DEFAULT_MAX_COUNT]；
+         *   不限数量传 [MAX_COUNT_UNLIMITED]）。
          * @param title 选图页标题（可选，空串时用默认「选择照片」）。
          */
         fun intent(

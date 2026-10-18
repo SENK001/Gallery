@@ -442,3 +442,24 @@ androidComponents { onVariants(selector().all()) { variant ->
 - `run-as` 导出数据库检查：表结构 `favorites(media_id INTEGER PRIMARY KEY NOT NULL, created_at INTEGER NOT NULL)`，行为 `[(1000011473, …), (1000011511, …)]`；
 - 自建相册 `sqlite_migration`（SharedPreferences 存储）仍正常显示 1 项，确认未受影响；
 - 清理测试数据后 `favorites` 表为空、「收藏」相册隐藏；无崩溃；门禁构建/单测/lint/颜色校验通过。
+
+---
+
+## 2026-10-19 相册页新建相册后跳转选图（选择照片和视频）
+
+**背景（用户反馈）**：相册页「新建相册」创建成功后只回到相册列表，用户还要再走「多选 → 添加到」才能放照片；期望创建后直接进入选图页挑照片/视频。
+
+**实现**：
+
+- `AlbumsFragment` 增加 `registerForActivityResult(StartActivityForResult)`：名称对话框创建成功后构造新相册的 `AlbumInfo`（`bucketId` = 自建相册 UUID），立即启动 `ImagePickerActivity`（多选、`MAX_COUNT_UNLIMITED`、标题「选择照片和视频」）。
+- 选图结果：读 `ImagePickerActivity.EXTRA_SELECTED_IDS`（所选媒体 id）+ `GalleryExternal.EXTRA_SELECTED_URIS`（首项作封面），`CustomAlbumStore.addItems` 加入新相册 → `notifyChange` → 刷新列表 → Toast「已添加 N 项到相册」→ 直接打开 `AlbumDetailActivity` 让用户看到结果。
+- 取消选图：保留刚创建的空相册并刷新列表（可之后再加/长按删除）。
+- `ImagePickerActivity` 新增内部常量 `MAX_COUNT_UNLIMITED = Int.MAX_VALUE`（外部调用契约不变：≤0 仍表示默认 9）；选图页本身同时展示图片与视频，相册 tab 也可按分类选。
+- 文档：ui-guide §7（新建相册流程）/§9（内部调用方式）、verification 手测项、README 功能概览。
+
+**真机验证（Redmi / Android 16）**：
+
+- 相册页「新建相册」输入 `pick_test_album` → 自动打开选图页（标题「选择照片和视频」、底部「已选择 0 项」）；
+- 经「相册 tab → 视频」选 1 个视频、切「照片 tab」选 1 张图片（跨 tab 选择保留）→ 完成：进入 `AlbumDetailActivity`（标题 pick_test_album，2 格），相册页计数 2；`gallery_custom_albums` 记录 `item_ids=[videoId, imageId]`；
+- 再新建 `pick_cancel_album` → 选图页直接返回（取消）：回到相册页，该相册显示「0 项」；
+- 清理测试相册后列表恢复、无崩溃；门禁构建/单测/lint/颜色校验通过。

@@ -104,11 +104,16 @@ class ViewerActivity : AppCompatActivity() {
         viewer.onLongPress = { onViewerLongPress() }
         viewer.onPressEnd = { viewer.stopMotionVideo() }
         viewer.onSheetDragStart = {
-            detailsSheet.visibility = View.VISIBLE
-            currentItem?.let { ensureSheetContent(it) }
+            if (!immersive) {
+                detailsSheet.visibility = View.VISIBLE
+                currentItem?.let { ensureSheetContent(it) }
+            }
         }
         viewer.onSheetDrag = { dy -> setSheetProgress(sheetProgress - dy / sheetHeight) }
         viewer.onSheetDragEnd = { velocityY -> settleSheet(velocityY) }
+        // 沉浸模式下详情面板不可直接展开（面板此刻可能不可见却仍可交互）：
+        // 上划改为「先退出沉浸，再展开面板」，保证用户看到的面板才可点击。
+        viewer.onSheetUnavailableSwipeUp = { openSheet() }
         viewer.onPageChanged = { index, item ->
             bindPage(index, item)
             maybeLoadMore(index)
@@ -157,7 +162,12 @@ class ViewerActivity : AppCompatActivity() {
         sheetMapContainer = findViewById(R.id.sheet_map_container)
         sheetMapAddress = findViewById(R.id.sheet_map_address)
         sheetExifInfo = findViewById(R.id.sheet_exif_info)
-        findViewById<View>(R.id.sheet_map_overlay).setOnClickListener { openPhotoMap() }
+        findViewById<View>(R.id.sheet_map_overlay).setOnClickListener {
+            // 双重保险：面板未展开/沉浸模式下不响应地图点击（避免点到看不见的卡片）
+            if (!immersive && sheetProgress > 0.01f) {
+                openPhotoMap()
+            }
+        }
         sheetHeight = (resources.displayMetrics.heightPixels * SHEET_HEIGHT_RATIO).toInt()
         detailsSheet.layoutParams.height = sheetHeight
         detailsSheet.translationY = sheetHeight.toFloat()
@@ -355,6 +365,10 @@ class ViewerActivity : AppCompatActivity() {
         if (externalMode) {
             return
         }
+        // 沉浸模式下先退出沉浸：否则面板打开却不可见，地图等控件仍会接收点击。
+        if (immersive) {
+            toggleImmersive()
+        }
         val item = currentItem ?: return
         detailsSheet.visibility = View.VISIBLE
         if (sheetProgress < 0.99f) {
@@ -365,6 +379,14 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun closeSheet() {
         animateSheet(0f)
+    }
+
+    /** 立即收起面板（不播动画）：进入沉浸模式前强制复位，避免残留不可见面板。 */
+    private fun closeSheetImmediately() {
+        sheetAnimator?.cancel()
+        sheetAnimator = null
+        setSheetProgress(0f)
+        detailsSheet.visibility = View.INVISIBLE
     }
 
     private fun settleSheet(velocityY: Float) {
@@ -573,10 +595,17 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun toggleImmersive() {
         immersive = !immersive
+        // 沉浸模式下面板内容可能不参与合成（当前机型实测：可见性/点击判定与绘制不一致），
+        // 因此沉浸期间禁止上划开面板；退出沉浸后再按正常路径展开（见 openSheet）。
+        viewer.sheetTouchEnabled = !immersive
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = !immersive)
         viewer.setLightBackground(!immersive)
         if (immersive) {
+            // 进入沉浸前若面板还开着，先无动画收起，防止留下不可见但可交互的面板
+            if (sheetProgress > 0.01f) {
+                closeSheetImmediately()
+            }
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())

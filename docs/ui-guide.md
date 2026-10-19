@@ -224,6 +224,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 - 单击 ≈ 切换沉浸：隐藏系统栏 + `toolbar` / `bottomBar`，窗口与根视图背景变 `ThemeUtils.mediaScrim`；退出沉浸时窗口背景恢复 `surfaceContent`。渲染器的观看底色同步切换（`viewer.setLightBackground(!immersive)`）。
 - 查看器内部手势：双击缩放（2.5× / 复位）、双指缩放（1×–5×）、放大态拖动平移、非放大时横滑翻页、上划拉起详情面板；单击落在视频页播放图标内 → 进播放器，否则切换沉浸。
+- **沉浸模式与详情面板（2026-10-20 修复）**：真机上沉浸态直接展开的面板不参与窗口合成（看不见）却仍接收触摸，点地图会误跳转。因此沉浸期间 `GlImageViewer.sheetTouchEnabled = false`，垂直上划改为 `onSheetUnavailableSwipeUp` → 先 `toggleImmersive()` 退出沉浸、再 `openSheet()` 展开面板——**看得见的面板才可交互**。进入沉浸前若面板还开着，`closeSheetImmediately()` 无动画复位，避免残留不可见面板。
 - 动态照片：长按播放内嵌视频、松手/翻页/退后台停止。
 
 ### 12.4 收藏（应用内自建库）
@@ -246,7 +247,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 基本信息：名称 / 类型 / 拍摄时间 / 大小 / 尺寸 /（视频）时长 / 路径 / 来源应用 /（动态照片）(全景)标记；
   - 地图卡片（EXIF 有定位时）：`sheet_map_container` 内嵌 `TextureMapView`（160dp，禁用手势），标记 `MapMarkers.dot`，缩放 16；地址经 `LocationAddressResolver` 逆地理编码；
   - EXIF 区：品牌 / 型号 / 镜头 / 光圈 / 曝光 / ISO / 焦距 / 等效焦距 / EXIF 时间 / 软件。
-- 地图卡片整体盖了 `sheet_map_overlay`：点卡片 → `PhotoMapActivity`。
+- 地图卡片整体盖了 `sheet_map_overlay`：点卡片 → `PhotoMapActivity`。点击有双保险：仅 `!immersive && sheetProgress > 0.01`（面板确实展开且可见）时才响应，防止点到不可见面板里的地图。
 - 地图相关卡点：`TextureMapView` 构造**先于授权初始化会 NPE 崩溃**，因此 `ensureSheetMap()` 先调 `BaiduMapSdk.ensureInitialized()`，失败时隐藏地图卡片，不崩溃；坐标系 BD09LL。
 
 ## 14. 视频播放器（`VideoPlayerActivity` + `GlVideoView`）

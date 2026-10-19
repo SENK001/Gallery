@@ -582,3 +582,35 @@ androidComponents { onVariants(selector().all()) { variant ->
 - `THIRD_PARTY_NOTICES.md`：该图标从「上游复制」清单移除（数量 30→29），加入「非上游素材（本项目原创，Apache-2.0）」并注明由 Material `check_box` 替换为自绘描边。
 
 **验证**：Debug/Release 构建通过、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对；真机截图确认照片页标题栏多选按钮为线性圆角方框 + 对勾、内部无填充；无崩溃。
+
+---
+
+## 2026-10-20 修复：沉浸模式下详情面板不可见却可点击（地图误触）
+
+**背景（用户反馈）**：大图在沉浸模式时，上划会展开详情面板；虽然看不见，但地图能被点击到。
+
+**复现（真机）**：
+
+- 查看器单击进入沉浸 → 上划：`uiautomator` 显示 `details_sheet` 已展开（bounds `[0,1331][1280,2772]`），但截图里该区域仍是 GL 画面（面板不参与窗口合成）；
+- 在「看不见」的面板区域点击不会穿透到查看器，说明面板可见性判定/触摸派发与绘制不一致，
+  面板里的地图卡片（`sheet_map_overlay`）仍能接住点击并跳地图——即用户描述的问题。
+
+**修复**（选择「沉浸态不直接展开面板」的稳妥路径）：
+
+- `GlImageViewer` 新增 `sheetTouchEnabled`（默认 true）与 `onSheetUnavailableSwipeUp`：
+  - 面板不可展开时，垂直上划不再进入 sheet 拖拽，而是每次手势最多回调一次上划事件；
+- `ViewerActivity`：
+  - 沉浸期间 `viewer.sheetTouchEnabled = false`；`onSheetUnavailableSwipeUp` → `openSheet()`，
+    而 `openSheet()` 在沉浸态会**先 `toggleImmersive()` 退出沉浸**再展开面板 → 面板可见才可交互；
+  - 进入沉浸前若面板仍开着，`closeSheetImmediately()`（无动画复位 `sheetProgress = 0` + `INVISIBLE`）避免残留；
+  - 地图点击双保险：`sheet_map_overlay` 仅当 `!immersive && sheetProgress > 0.01f` 才响应；
+  - `onSheetDragStart` 增加沉浸态守卫。
+- 文档：ui-guide §12.3/§12.5、verification 手测项、backlog 记录该平台合成异常与规避方案。
+
+**真机验证（Redmi / Android 16）**：
+
+- 非沉浸上划：面板正常展开（回归通过）；
+- 沉浸态上划：先退出沉浸，再展开**可见**的详情面板（截图与 uiautomator 一致，面板占据下半屏）；
+- 沉浸态单击：仍按原逻辑切回非沉浸；
+- 地图卡片点击：守卫条件已在代码中核对（`!immersive && sheetProgress > 0.01`），本机媒体库当前没有带定位的媒体，未做「跳转 PhotoMapActivity」的真机复测；
+- 无崩溃；门禁构建/单测/lint/颜色校验通过。

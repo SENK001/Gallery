@@ -52,6 +52,9 @@ class GlImageViewer @JvmOverloads constructor(
     private var sheetDragging = false
     private var animator: ValueAnimator? = null
 
+    /** 本次手势是否已经因为「详情面板不可展开」而触发过上划回调（避免每次 MOVE 重复触发）。 */
+    private var sheetSwipeConsumed = false
+
     var onPageChanged: ((Int, MediaItem) -> Unit)? = null
     var onSingleTap: ((Float, Float) -> Unit)? = null
     var onLongPress: (() -> Unit)? = null
@@ -59,6 +62,17 @@ class GlImageViewer @JvmOverloads constructor(
     var onSheetDragStart: (() -> Unit)? = null
     var onSheetDrag: ((Float) -> Unit)? = null
     var onSheetDragEnd: ((Float) -> Unit)? = null
+
+    /**
+     * 是否允许上划展开详情面板。
+     *
+     * 沉浸模式下宿主设为 false：面板此时可能不可见却仍能接收触摸，
+     * 由宿主改为「先退出沉浸再展开」，避免出现看不见却能点地图的面板。
+     */
+    var sheetTouchEnabled = true
+
+    /** [sheetTouchEnabled] 为 false 时检测到上划（dy < 0）的回调，每次手势最多触发一次。 */
+    var onSheetUnavailableSwipeUp: (() -> Unit)? = null
 
     init {
         setEGLContextClientVersion(2)
@@ -138,6 +152,7 @@ class GlImageViewer @JvmOverloads constructor(
                 dragging = false
                 zooming = false
                 sheetDragging = false
+                sheetSwipeConsumed = false
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 zooming = true
@@ -164,9 +179,13 @@ class GlImageViewer @JvmOverloads constructor(
                         ) {
                             if (abs(dx) >= abs(dy)) {
                                 dragging = true
-                            } else {
+                            } else if (sheetTouchEnabled) {
                                 sheetDragging = true
                                 onSheetDragStart?.invoke()
+                            } else if (dy < 0f && !sheetSwipeConsumed) {
+                                // 面板不可展开（沉浸模式）：交给宿主退出沉浸后展开
+                                sheetSwipeConsumed = true
+                                onSheetUnavailableSwipeUp?.invoke()
                             }
                             onPressEnd?.invoke()
                         }
@@ -188,6 +207,7 @@ class GlImageViewer @JvmOverloads constructor(
                 val wasSheetDragging = sheetDragging
                 dragging = false
                 sheetDragging = false
+                sheetSwipeConsumed = false
                 onPressEnd?.invoke()
                 if (wasSheetDragging) {
                     velocityTracker?.computeCurrentVelocity(1000)
@@ -202,6 +222,7 @@ class GlImageViewer @JvmOverloads constructor(
                 val wasSheetDragging = sheetDragging
                 dragging = false
                 sheetDragging = false
+                sheetSwipeConsumed = false
                 onPressEnd?.invoke()
                 if (wasSheetDragging) {
                     onSheetDragEnd?.invoke(0f)

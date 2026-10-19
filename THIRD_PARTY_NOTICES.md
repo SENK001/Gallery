@@ -8,7 +8,7 @@
 
 ## 1. 代码素材：Material Design Icons（图形资源，随源码分发）
 
-**重要**：项目中有 30 个矢量图标的路径数据是从 Google Material Design Icons **逐字节复制**而来（并非仅"参考样式"），因此必须保留以下声明。
+**重要**：项目中有 29 个矢量图标的路径数据是从 Google Material Design Icons **逐字节复制**而来（并非仅"参考样式"），因此必须保留以下声明。
 | 项目 | 内容 |
 |---|---|
 | 素材 | Material Design Icons（Material Symbols 前身） |
@@ -42,7 +42,6 @@
 | `main-ui/src/main/res/drawable/ic_create_folder.xml` | `create_new_folder` |
 | `main-ui/src/main/res/drawable/ic_delete.xml` | `delete` |
 | `main-ui/src/main/res/drawable/ic_library_add.xml` | `library_add` |
-| `main-ui/src/main/res/drawable/ic_multi_select.xml` | `check_box` |
 | `main-ui/src/main/res/drawable/ic_select_all.xml` | `done_all` |
 | `main-ui/src/main/res/drawable/grid_ic_check.xml` | `check`（宫格选中框内对勾） |
 | `main-ui/src/main/res/drawable/grid_ic_play.xml` | `play_arrow`（视频角标小三角） |
@@ -51,9 +50,10 @@
 | `main-ui/src/main/res/drawable/ic_delete_forever.xml` | `delete_forever`（最近删除-彻底删除） |
 | `main-ui/src/main/res/drawable/ic_add.xml` | `add`（相册详情页「添加照片」） |
 
-合计 **30** 个文件复制自上游（其中 `image` 有 3 处、`favorite` 有 2 处、`check` 有 2 处、`play_arrow` 有 2 处，为同一图标的不同尺寸/色调复用）。
+合计 **29** 个文件复制自上游（其中 `image` 有 3 处、`favorite` 有 2 处、`check` 有 2 处、`play_arrow` 有 2 处，为同一图标的不同尺寸/色调复用）。
 
 **非上游素材（本项目原创，随代码以 Apache-2.0 授权）**：
+- `main-ui/src/main/res/drawable/ic_multi_select.xml`（多选按钮线性图标：圆角方框 + 对勾，自绘描边几何，2026-10-20 由 Material `check_box` 填充图标替换为线性无填充版本）
 - `main/src/main/res/drawable/ic_launcher_foreground.xml`（应用图标前景，机器人与网格为自绘路径）
 - `main/src/main/res/drawable/ic_launcher_background.xml`（108×108 网格底，Android 自适应图标模板式几何）
 - `main/src/main/res/drawable/ic_privacy_badge_shield.xml`（隐私标识盾牌）

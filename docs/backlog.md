@@ -6,7 +6,7 @@
 
 | 项 | 内容与依据 | 备注 |
 |---|---|---|
-| **自建相册增强** | `CustomAlbumStore` 已有 `rename / removeItems` 与封面字段，UI 仅提供新建/删除/加入；重命名、手动改封面、相册内移除照片未做 | 另：成员是逻辑 id，系统删照片后不主动 prune（相册内容查询会跳过，`item_count` 可能偏大） |
+| **自建相册增强** | `CustomAlbumStore` 已有 `rename`、`setCover` 与成员增删 API；UI 已支持新建/删除/加入/从相册详情「添加」页移除成员（2026-10-20）；**重命名、手动指定封面仍未做** | 另：成员是逻辑 id，系统删照片后不主动 prune（相册内容查询会跳过，`item_count` 可能偏大） |
 | **音频焦点** | `VideoPlayManager` 目前只设 `setAudioAttributes(USAGE_MEDIA/CONTENT_TYPE_MOVIE)`，未 `requestAudioFocus`：其它应用播放时不会自动压低/暂停 | 车载/后台共存场景需要 |
 | **XMP 文件回退** | XMP 列为空时**没有**回退读文件内嵌 XMP（exifinterface 1.3.7 无 MotionPhoto API，需自行正则解析）：XMP 空 ⇒ 判为非动态照片/非全景（全景另有尺寸兜底） | 影响特殊相机写库不全的场景 |
 | **查看器按需高分解码** | 解码上限为 `min(GL_MAX_TEXTURE_SIZE, 视口最长边)`，放大超过约 1.2× 属于纹理放大 | 需要高倍放大看细节时做 |
@@ -34,6 +34,7 @@ Provider 的 `insert` / `delete` 抛 `UnsupportedOperationException`、`call()` 
 | GL 画面 | 查看器/视频不在 `uiautomator` 视图树中，无自动化断言手段，只能截图逐像素判断；**缩略图宫格已改为 View，可以出现在视图树里** |
 | 外部调用 | 只在本应用内用 `main/src/debug/ExternalClientDebugActivity` 模拟调用方验证（选图结果转发 + 代理 URI 读取 64KB + 外部大图）；**真实第三方 APK 未验证**；`getCallingPackage()` 在非 `startActivityForResult` 场景为 null（回退 `launchedFromPackage`） |
 | 添加到/复制写入 | 已在真机验证：逻辑加入自建相册、复制到嵌套目录相册（`Pictures/douyin/comment/`）、删除（系统"最近删除"）；大文件复制/磁盘满/取消等边界未压测 |
+| 自建相册添加/管理 | 已真机验证：详情页标题栏 `[添加 +]`（仅自建相册）、选图页预选已有成员、跨数据源取消勾选 + 新勾选后按 diff 增删、封面条目被移除后清空封面；超过一整页（200 项）的相册未见真机数据（预选按相册 URI 全量拉取，逻辑上支持）；取消选图页、无变化场景已手测 |
 | 最近删除 | 已真机验证：相册页**最底部入口**（更多之后、无封面、非空显示/清空后隐藏）、trashed 条目查询（需 `QUERY_ARG_MATCH_TRASHED=MATCH_ONLY`）、恢复 / 彻底删除 / 清空（均走系统授权）、查看器翻页；**系统 30 天自动清理未等待验证**（由 MediaStore 负责）；未验证大量条目分页性能 |
 
 ## 3. 明确不做（避免误当缺陷）

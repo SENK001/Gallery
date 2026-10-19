@@ -533,3 +533,38 @@ androidComponents { onVariants(selector().all()) { variant ->
   「收藏」自动隐藏、DB 行 `is_trashed = 1`；
 - 清理：取消剩余收藏后 DB 为空、回收站为空、媒体计数回到测试前（249/220/7/12/12）；
   全程无崩溃。
+
+---
+
+## 2026-10-20 自建相册详情页标题栏「添加」（选图页预选已有成员）
+
+**背景（用户要求）**：自建相册应在标题栏有「添加」按钮，点击跳转选图页；**跳转过去要自动勾选已经添加到这个相册的图**。
+
+**实现**：
+
+- 选图页（`ImagePickerActivity`）：
+  - 新增内部 `INTENT` extra `EXTRA_PRESELECTED_ALBUM_URI` 与 `intent(..., preselectedAlbumUri)`：
+    打开时按该相册 URI 一次取回全部成员（不分页），把实例放进 `selectedItems`、
+    id 通过新增的 `SelectionState.selectIds(ids)` 一次性勾选（未滚动到的成员也计入结果）。
+  - `SelectionState.selectIds` 批量按 id 预选、受 `maxCount` 约束、只通知一次（JVM 单测覆盖）。
+- 相册详情页（`AlbumDetailActivity`）：
+  - `start()` 额外传 `EXTRA_ALBUM_TYPE` / `EXTRA_ALBUM_ID`；仅 `custom` 相册在标题栏最左
+    增加 `[添加 +]`（`ic_add`，随上划 chrome 变色；多选态隐藏）。
+  - 点击 → 选图页（多选、不限数量、标题「选择照片和视频」、预选当前相册成员）。
+  - 结果语义：**最终成员 = 选图页返回的 id 集合**（diff 增删）——新勾选加入、
+    取消勾选移除；`CustomAlbumStore.addItems/removeItems` 写入并 `notifyChange`、重载宫格；
+    Toast「已更新相册（新增 X，移除 Y）」，无变化提示「没有变化」。
+  - 封面：`CustomAlbumStore` 新增 `setCover(albumId, coverUri)`；若被移除的恰好是封面条目，
+    清空封面由成员最新一条兜底（避免相册卡灰封面）。
+- 图标 `ic_add`（THIRD_PARTY_NOTICES 29→30）；文案 `album_add_action` / `album_update_*`；
+  文档同步 ui-guide §8/§10、data-layer §6.1、verification、backlog、README。
+
+**真机验证（Redmi / Android 16）**：
+
+- 新建自建相册 `edit_test_album`（选图页选 2 张）→ 详情页标题栏出现 `[+]` 与多选按钮；
+- 点 `[+]`：选图页标题「选择照片和视频」、底部「已选择 2 项」、两格缩略图均为勾选态（预选生效）；
+- 取消勾选第 1 张 + 勾选第 3 张 →「已选择 2 项」→ 完成：返回相册详情仍 2 格，
+  `gallery_custom_albums` 的 `item_ids` 更新为原第 2 张 + 新第 3 张；被移除的正是封面 →
+  `cover_uri` 清空，相册页封面由剩余成员兜底（无灰块）；相册页计数 2；
+- 非自建相册（相机）详情页无 `[+]` 按钮；取消选图页返回相册不变；
+- 清理测试相册后列表恢复（用户已有自建相册 `ddd` 未受影响），无崩溃。

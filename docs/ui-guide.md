@@ -159,7 +159,8 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - insets：top = 状态栏 + `actionBarSize`；bottom = **系统导航栏高度**（本页没有胶囊导航，不要再加 72dp 占位）；多选时 bottom = 动作栏 64dp + 导航栏。
 - 上划切换与照片页相同的 40px 死区：静止 → 主题色标题栏 + 主题色标题/返回键；上划 → 遮罩接管、标题/返回键/菜单图标转白、`status_bar_bg` 隐藏。
 - 多选：菜单用代码创建（main-ui 不新增 menu 资源）——`[多选]` / `[全选]`；返回键先退出多选；底部动作栏同 §5.1。
-- 数据：`EXTRA_BASE_URI`（相册内容 URI）+ `EXTRA_TITLE`；`PAGE_SIZE = 200` 分页；`ContentObserver` 变化时重载回顶。
+- **自建相册的「添加」**：标题栏最左侧常驻 `[添加 +]` 菜单（仅 `album_type=custom` 显示，系统/目录/三方相册没有该按钮）。点击进入选图页（多选、不限数量、标题「选择照片和视频」），并把**当前相册已有成员预选**（`ImagePickerActivity` 的 `EXTRA_PRESELECTED_ALBUM_URI`）。确认后按「选中集合 = 相册成员」更新：新勾选加入、取消勾选移除（`CustomAlbumStore.addItems/removeItems` diff 写入），被移除的恰好是封面时清空封面交给成员兜底；Toast「已更新相册（新增 X，移除 Y）」，无变化时提示「没有变化」。
+- 数据：`EXTRA_BASE_URI`（相册内容 URI）+ `EXTRA_TITLE` + `EXTRA_ALBUM_TYPE` + `EXTRA_ALBUM_ID`（后两者供自建相册添加流程使用）；`PAGE_SIZE = 200` 分页；`ContentObserver` 变化时重载回顶。
 - 点击缩略图 → `ViewerActivity(baseUri, position)`（翻页范围就是本相册）。
 
 ## 9. 最近删除页（`RecentlyDeletedActivity`）
@@ -180,11 +181,11 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 可被外部调用（经 `ExternalEntryActivity`）或内部复用；`exported=false`、`configChanges`（旋转不重建、选择保留）。
 
 - 结构：顶部 `MaterialToolbar`（关闭/返回 + 标题）+ `TabLayout`（照片 / 相册）+ 内容容器 + 多选确认栏。
-- 入参（`GalleryExternal` 常量）：`EXTRA_ALLOW_MULTIPLE`、`EXTRA_MAX_COUNT`（默认 9）、`EXTRA_TITLE`；companion `intent(context, allowMultiple, maxCount, title)`。
+- 入参（`GalleryExternal` 常量）：`EXTRA_ALLOW_MULTIPLE`、`EXTRA_MAX_COUNT`（默认 9）、`EXTRA_TITLE`；companion `intent(context, allowMultiple, maxCount, title)`。内部额外支持 `preselectedAlbumUri`（`EXTRA_PRESELECTED_ALBUM_URI`）：打开时按该相册 URI 一次取回全部成员并全部勾选（id 进 `SelectionState`、实例进 `selectedItems`，未加载到的分页成员也会计入结果）。
 - **照片 tab**：复用 `MediaGridView` + `MediaPager`（全量媒体，200/页分页）；点击/多选语义见 §5。
 - **相册 tab**：复用 `AlbumListAdapter` + `MediaQuery`，分组「常用 / 我的相册 / 更多」；点相册在同一 Activity 内进入内容视图（toolbar 变返回、标题 = 相册名、内容源换成该相册），返回回相册列表。**分类选** = 先选相册分类再选图。「最近删除」是回收站入口、不是可选图来源，在选图页的相册 tab 中被过滤掉。
 - **选择语义**：单选模式点击一张立即返回；多选模式点击 toggle（跨 tab/相册保留已选），底部「已选择 N 项」+「完成」（空选禁用）；超 `maxCount` 时 Toast 且不选中。
-- **调用方**：外部经 `ExternalEntryActivity` 进入（单选/多选由 extras 指定，默认上限 9）；内部「相册页新建相册」以多选 + 不限数量（`ImagePickerActivity.MAX_COUNT_UNLIMITED`）进入，标题「选择照片和视频」。
+- **调用方**：外部经 `ExternalEntryActivity` 进入（单选/多选由 extras 指定，默认上限 9）；内部「相册页新建相册」以多选 + 不限数量（`ImagePickerActivity.MAX_COUNT_UNLIMITED`）进入，标题「选择照片和视频」；内部「相册详情页 → 添加」同样多选不限数量，并通过 `preselectedAlbumUri` 预选该相册已有成员（确认后宿主按 diff 增删成员）。
 - **结果契约**（内部，供外部路由消费）：`data` = 第一张原始 MediaStore URI；`ClipData` = 全部原始 URI；`EXTRA_SELECTED_URIS`（ArrayList<String>）、`EXTRA_SELECTED_IDS`（LongArray）、`EXTRA_SELECTED_COUNT`（Int）；关闭/返回 = `RESULT_CANCELED`。外部路由再把这些 id 映射成代理 URI 并授权回传调用方（见 §11 与 [外部调用 API](external-api.md)）。
 - 无障碍：tab、格子、关闭/返回、完成均有 `contentDescription`；空态文案（暂无照片/暂无相册/该相册暂无内容）。
 

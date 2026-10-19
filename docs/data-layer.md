@@ -216,9 +216,11 @@ MediaStore.Files(外置卷) 变化
 - 位置：`core-data/.../album/CustomAlbumStore.kt`；SharedPreferences 文件 `gallery_custom_albums`，版本化 JSON：`{"version":1,"albums":[{"id":"uuid","name":"…","item_ids":[…],"cover_uri":…,"created_at":…}]}`。
 - 语义：**应用内逻辑集合，不复制、不移动任何媒体文件**；同一张照片可属于多个自建相册；删除相册不会删除照片。
 - 线程安全：所有公开方法在**同一把锁**内完成「读-改-写」（UI 与 Provider Binder 线程可能并发）；JSON 损坏时回退空列表并记日志，不崩溃、不清空其它数据（下次写入覆盖）。
-- API：`albums()` / `album(id)` / `create(name)` / `delete(id)` / `rename(id, name)` / `addItems(albumId, ids, coverUri)` / `removeItems(albumId, ids)` / `containsName(name)`。
+- API：`albums()` / `album(id)` / `create(name)` / `delete(id)` / `rename(id, name)` / `addItems(albumId, ids, coverUri)` / `removeItems(albumId, ids)` / `setCover(albumId, coverUri)` / `containsName(name)`。
+  - `addItems` 的 `coverUri` 只在相册尚无封面时写入；`removeItems` 删空相册时清空封面。
+  - `setCover(albumId, null)` 用于「被移除的恰好是封面条目」：清空后查询侧（`AlbumResolver.queryCustomAlbumRows`）按成员最新一条兜底，避免相册卡显示灰色占位。
 - 名称规则：trim 后 1–40 字符、拒绝 ISO 控制字符、忽略大小写重名；非法/重名 `create` 返回 `null`。
-- 已知限制：成员是逻辑 id，系统删除照片后 store 不主动清除（相册内容查询会跳过已删除 id，但 `item_count` 可能偏大）；重命名/封面/相册内移除的 UI 暂未提供（store API 已具备）。
+- 已知限制：成员是逻辑 id，系统删除照片后 store 不主动清除（相册内容查询会跳过已删除 id，但 `item_count` 可能偏大）；重命名/手动指定封面的 UI 暂未提供（store API 已具备）；成员增删 UI 通过相册详情页「添加 → 选图页预选」实现（2026-10-20）。
 
 ### 6.2 FavoriteStore（自建收藏库，SQLite）
 

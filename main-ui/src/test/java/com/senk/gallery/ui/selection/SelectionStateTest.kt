@@ -75,6 +75,27 @@ class SelectionStateTest {
     }
 
     @Test
+    fun `selectIds preselects by id with one notification and respects max count`() {
+        val state = SelectionState()
+        var notifications = 0
+        state.addListener { notifications++ }
+
+        state.selectIds(listOf(7L, 9L, 7L, 0L, -1L))
+        assertTrue(state.isActive)
+        assertEquals(listOf(7L, 9L), state.selectedIds.toList())
+        assertEquals(1, notifications)
+
+        // 带上限后，超出的 id 不再加入
+        val limited = SelectionState()
+        limited.maxCount = 2
+        limited.selectIds(listOf(1L, 2L, 3L))
+        assertEquals(2, limited.count)
+        assertTrue(limited.isSelected(1))
+        assertTrue(limited.isSelected(2))
+        assertFalse(limited.isSelected(3))
+    }
+
+    @Test
     fun `exit clears selection and notifies listeners`() {
         val state = SelectionState()
         var notifications = 0

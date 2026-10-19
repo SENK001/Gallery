@@ -65,6 +65,9 @@ class ImagePickerActivity : AppCompatActivity() {
     private var maxCount = GalleryExternal.DEFAULT_MAX_COUNT
     private var pickerTitle: String = ""
 
+    /** 预选相册内容 URI（「相册详情页 → 添加」传入，打开时勾选该相册已有成员）。 */
+    private var preselectedAlbumUri: Uri? = null
+
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabs: TabLayout
     private lateinit var mediaPane: FrameLayout
@@ -125,7 +128,31 @@ class ImagePickerActivity : AppCompatActivity() {
             confirmBar.isVisible = true
             updateConfirmBar()
         }
+        seedPreselectedItems()
         switchTab(TAB_PHOTOS)
+    }
+
+    /**
+     * 预选「已加入当前相册」的条目（相册详情页 →「添加」进入时）。
+     *
+     * 先按相册 URI 一次取回全部成员（不分页），把 id 和实例都放进选择集合：
+     * - 选择状态只存 id，因此宫格分页加载到对应条目时勾选框会自动呈现选中；
+     * - `selectedItems` 映射预先填好实例，未滚动到的成员也会计入「已选择 N 项」并出现在结果里。
+     */
+    private fun seedPreselectedItems() {
+        val uri = preselectedAlbumUri ?: return
+        if (!allowMultiple) {
+            return
+        }
+        lifecycleScope.launch {
+            val items = MediaQuery.media(contentResolver, GalleryContract.withPage(uri, 0, 0))
+            if (isFinishing || isDestroyed || items.isEmpty()) {
+                return@launch
+            }
+            items.forEach { item -> selectedItems[item.id] = item }
+            grid.selection.selectIds(items.map { it.id })
+            updateConfirmBar()
+        }
     }
 
     override fun onDestroy() {
@@ -143,6 +170,9 @@ class ImagePickerActivity : AppCompatActivity() {
         pickerTitle = intent.getStringExtra(GalleryExternal.EXTRA_TITLE)
             ?.takeIf { it.isNotBlank() }
             ?: getString(R.string.picker_title_default)
+        preselectedAlbumUri = intent.getStringExtra(EXTRA_PRESELECTED_ALBUM_URI)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { raw -> runCatching { Uri.parse(raw) }.getOrNull() }
     }
 
     private fun bindViews() {
@@ -518,6 +548,14 @@ class ImagePickerActivity : AppCompatActivity() {
          */
         const val MAX_COUNT_UNLIMITED = Int.MAX_VALUE
 
+        /**
+         * 内部入口：预选相册内容 URI。
+         *
+         * 传入后选图页会在打开时把该相册已有成员全部勾选（「相册详情页 → 添加」用），
+         * 用户确认时由宿主按 diff 增删成员；外部调用契约不暴露此 extra。
+         */
+        const val EXTRA_PRESELECTED_ALBUM_URI = "com.senk.gallery.extra.PRESELECTED_ALBUM_URI"
+
         private const val TAB_PHOTOS = 0
         private const val TAB_ALBUMS = 1
         private const val COLUMNS = 4
@@ -530,15 +568,21 @@ class ImagePickerActivity : AppCompatActivity() {
          * @param maxCount 多选上限（≤0 时用 [GalleryExternal.DEFAULT_MAX_COUNT]；
          *   不限数量传 [MAX_COUNT_UNLIMITED]）。
          * @param title 选图页标题（可选，空串时用默认「选择照片」）。
+         * @param preselectedAlbumUri 预选相册内容 URI（可选）：打开时自动勾选该相册已有成员，
+         *   用于「相册详情页 → 添加/管理照片」。
          */
         fun intent(
             context: Context,
             allowMultiple: Boolean = false,
             maxCount: Int = GalleryExternal.DEFAULT_MAX_COUNT,
             title: String? = null,
+            preselectedAlbumUri: String? = null,
         ): Intent = Intent(context, ImagePickerActivity::class.java)
             .putExtra(GalleryExternal.EXTRA_ALLOW_MULTIPLE, allowMultiple)
             .putExtra(GalleryExternal.EXTRA_MAX_COUNT, if (maxCount <= 0) GalleryExternal.DEFAULT_MAX_COUNT else maxCount)
-            .apply { title?.let { putExtra(GalleryExternal.EXTRA_TITLE, it) } }
+            .apply {
+                title?.let { putExtra(GalleryExternal.EXTRA_TITLE, it) }
+                preselectedAlbumUri?.let { putExtra(EXTRA_PRESELECTED_ALBUM_URI, it) }
+            }
     }
 }

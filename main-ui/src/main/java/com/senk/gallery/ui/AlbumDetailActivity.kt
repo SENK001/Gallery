@@ -23,12 +23,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
+import com.senk.gallery.data.album.CustomAlbumStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.data.provider.GalleryCursorReader
+import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.grid.GridPageController
 import com.senk.gallery.ui.grid.MediaGridView
+import com.senk.gallery.ui.picker.ImagePickerActivity
 import com.senk.gallery.ui.selection.SelectionActionBar
 import com.senk.gallery.ui.selection.SelectionActions
 import com.senk.gallery.ui.selection.SelectionState
@@ -57,6 +60,11 @@ class AlbumDetailActivity : AppCompatActivity() {
     private var actions: SelectionActions? = null
     private var baseUri: Uri = Uri.EMPTY
     private var albumTitle: String = ""
+
+    /** 相册类型 / 自建相册 id（仅 custom 类型支持标题栏「添加」管理照片）。 */
+    private var albumType: String = ""
+    private var albumId: String? = null
+    private var addPhotosItem: MenuItem? = null
     private var multiSelectItem: MenuItem? = null
     private var selectAllItem: MenuItem? = null
 
@@ -86,6 +94,15 @@ class AlbumDetailActivity : AppCompatActivity() {
         actions?.onAddToAlbumResult(result.resultCode, result.data)
     }
 
+    /**
+     * 自建相册「添加」：相册详情页标题栏 → 选图页（预选相册已有成员）→ 按 diff 增删成员。
+     */
+    private val addPhotosLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        onAddPhotosResult(result.resultCode, result.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -98,6 +115,8 @@ class AlbumDetailActivity : AppCompatActivity() {
         actionBar = findViewById(R.id.selection_action_bar)
 
         albumTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        albumType = intent.getStringExtra(EXTRA_ALBUM_TYPE).orEmpty()
+        albumId = intent.getStringExtra(EXTRA_ALBUM_ID)?.takeIf { it.isNotBlank() }
         baseUri = intent.getStringExtra(EXTRA_BASE_URI)?.let(Uri::parse) ?: Uri.EMPTY
         setupToolbar()
         setupSelectionActions()
@@ -128,6 +147,22 @@ class AlbumDetailActivity : AppCompatActivity() {
         toolbar.title = albumTitle
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         // 菜单用代码建：本页属于 main-ui 模块，不新增 main-ui 的 menu 资源（菜单资源约定放在 main）
+        // 自建相册额外提供「添加」：进选图页管理相册成员（预选已有照片，可加/可减）。
+        if (albumType == MediaSet.TYPE_CUSTOM && albumId != null) {
+            addPhotosItem = toolbar.menu.add(
+                Menu.NONE,
+                MENU_ADD_PHOTOS,
+                0,
+                R.string.album_add_action,
+            ).apply {
+                icon = ContextCompat.getDrawable(this@AlbumDetailActivity, R.drawable.ic_add)
+                setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                setOnMenuItemClickListener {
+                    openAddPhotosPicker()
+                    true
+                }
+            }
+        }
         multiSelectItem = toolbar.menu.add(
             Menu.NONE,
             MENU_MULTI_SELECT,
@@ -226,11 +261,13 @@ class AlbumDetailActivity : AppCompatActivity() {
         if (state.isActive) {
             toolbar.title = getString(R.string.grid_selected_count, state.count)
             toolbar.setNavigationIcon(R.drawable.ic_close)
+            addPhotosItem?.isVisible = false
             multiSelectItem?.isVisible = false
             selectAllItem?.isVisible = true
         } else {
             toolbar.title = albumTitle
             toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
+            addPhotosItem?.isVisible = true
             multiSelectItem?.isVisible = true
             selectAllItem?.isVisible = false
         }
@@ -250,6 +287,82 @@ class AlbumDetailActivity : AppCompatActivity() {
             return
         }
         startActivity(ViewerActivity.intent(this, baseUri, index))
+    }
+
+    // ==================== 自建相册：添加/管理照片 ====================
+
+    /** 打开选图页，并预选当前相册已有成员（选图页据此自动勾选）。 */
+    private fun openAddPhotosPicker() {
+        if (albumId == null) {
+            return
+        }
+        addPhotosLauncher.launch(
+            ImagePickerActivity.intent(
+                context = this,
+                allowMultiple = true,
+                maxCount = ImagePickerActivity.MAX_COUNT_UNLIMITED,
+                title = getString(R.string.album_pick_title),
+                preselectedAlbumUri = baseUri.toString(),
+            ),
+        )
+    }
+
+    /**
+     * 选图页结果：按「选中集合」更新自建相册成员。
+     *
+     * 语义：预选已勾选相册现有成员，用户取消勾选 = 从相册移除，新勾选 = 加入；
+     * 因此最终成员 = 选图页返回的 id 集合（diff 增删，避免重复写整表）。
+     */
+    private fun onAddPhotosResult(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK) {
+            return
+        }
+        val id = albumId ?: return
+        val store = CustomAlbumStore.get(this)
+        val album = store.album(id)
+        if (album == null) {
+            Toast.makeText(this, R.string.album_update_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val selectedIds = data?.getLongArrayExtra(ImagePickerActivity.EXTRA_SELECTED_IDS)
+            ?.filter { it > 0L }
+            ?.toSet()
+            .orEmpty()
+        val existingIds = album.itemIds.toSet()
+        val toAdd = selectedIds.filterNot { it in existingIds }
+        val toRemove = existingIds.filterNot { it in selectedIds }
+        if (toAdd.isEmpty() && toRemove.isEmpty()) {
+            Toast.makeText(this, R.string.album_update_same, Toast.LENGTH_SHORT).show()
+            return
+        }
+        var added = 0
+        var removed = 0
+        if (toAdd.isNotEmpty()) {
+            val coverCandidate = data
+                ?.getStringArrayListExtra(GalleryExternal.EXTRA_SELECTED_URIS)
+                ?.firstOrNull()
+            added = store.addItems(id, toAdd, coverCandidate)
+        }
+        if (toRemove.isNotEmpty()) {
+            removed = store.removeItems(id, toRemove)
+        }
+        // 若被移除的恰好是封面条目，清掉封面（相册卡由成员最新一条兜底，避免灰封面）
+        val coverUri = store.album(id)?.coverUri
+        val coverId = coverUri?.let { Uri.parse(it).lastPathSegment?.toLongOrNull() }
+        if (coverId != null && coverId in toRemove) {
+            store.setCover(id, null)
+        }
+        contentResolver.notifyChange(GalleryContract.CONTENT_URI, null)
+        pageController?.load(reset = true)
+        if (added <= 0 && removed <= 0) {
+            Toast.makeText(this, R.string.album_update_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(
+            this,
+            getString(R.string.album_update_done, added, removed),
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     // ==================== 顶部 chrome / insets ====================
@@ -346,6 +459,7 @@ class AlbumDetailActivity : AppCompatActivity() {
         toolbar.navigationIcon?.setTint(iconColor)
         // 菜单图标（多选/全选）同样跟随标题栏明暗；menu item 的 iconTintList 对已创建/未创建的 action view 都生效
         val tint = ColorStateList.valueOf(iconColor)
+        addPhotosItem?.iconTintList = tint
         multiSelectItem?.iconTintList = tint
         selectAllItem?.iconTintList = tint
         scrim.isVisible = overGrid
@@ -361,6 +475,8 @@ class AlbumDetailActivity : AppCompatActivity() {
 
         private const val EXTRA_BASE_URI = "base_uri"
         private const val EXTRA_TITLE = "title"
+        private const val EXTRA_ALBUM_TYPE = "album_type"
+        private const val EXTRA_ALBUM_ID = "album_id"
         private const val PAGE_SIZE = 200
         private const val COLUMNS = 4
 
@@ -371,6 +487,7 @@ class AlbumDetailActivity : AppCompatActivity() {
         private const val ACTION_BAR_HEIGHT_DP = 64f
 
         /** 代码创建的菜单项 id（menu 资源在 main 模块，本页不新增 main-ui menu 资源）。 */
+        private const val MENU_ADD_PHOTOS = 0x1000
         private const val MENU_MULTI_SELECT = 0x1001
         private const val MENU_SELECT_ALL = 0x1002
 
@@ -387,7 +504,9 @@ class AlbumDetailActivity : AppCompatActivity() {
             context.startActivity(
                 Intent(context, AlbumDetailActivity::class.java)
                     .putExtra(EXTRA_BASE_URI, baseUri.toString())
-                    .putExtra(EXTRA_TITLE, album.name),
+                    .putExtra(EXTRA_TITLE, album.name)
+                    .putExtra(EXTRA_ALBUM_TYPE, album.albumType)
+                    .putExtra(EXTRA_ALBUM_ID, album.bucketId)
             )
         }
     }

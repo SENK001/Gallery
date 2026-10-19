@@ -126,6 +126,31 @@ class SelectionState {
         }
     }
 
+    /**
+     * 批量按 id 预选（一次回调）：选图页打开时用它勾选「已加入当前相册」的条目。
+     *
+     * 与 [selectAll] 的区别是入参为 id 集合，不要求调用方先拿到 [MediaItem]
+     * （条目可能还没分页加载到）；同样受 [maxCount] 上限约束。
+     */
+    fun selectIds(ids: Collection<Long>) {
+        var changed = false
+        if (!isActive) {
+            isActive = true
+            changed = true
+        }
+        for (id in ids) {
+            if (selectedIdsInternal.size >= limit()) {
+                break
+            }
+            if (id > 0L && selectedIdsInternal.add(id)) {
+                changed = true
+            }
+        }
+        if (changed) {
+            notifyListeners()
+        }
+    }
+
     fun isSelected(id: Long): Boolean = selectedIdsInternal.contains(id)
 
     /** 按 `source` 的顺序返回已选条目（不在 `source` 里的历史 id 会被忽略）。 */

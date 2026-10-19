@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Icons: add（相册详情页「添加照片」按钮，见 THIRD_PARTY_NOTICES.md） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/gallery_icon_on_surface"
+        android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+</vector>

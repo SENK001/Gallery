@@ -164,6 +164,29 @@ class CustomAlbumStore private constructor(context: Context) {
         if (!write(updated)) 0 else removed
     }
 
+    /**
+     * 直接设置/清空封面（传 null = 清空，由查询侧按成员最新一条兜底）。
+     *
+     * 场景：从相册移除的恰好是封面条目时，旧封面 URI 已失效，需要清掉，
+     * 否则相册卡会显示灰色占位。
+     *
+     * @return 相册存在且写入成功（或值本来相同）时为 true。
+     */
+    fun setCover(albumId: String, coverUri: String?): Boolean = synchronized(lock) {
+        val current = read()
+        val index = current.indexOfFirst { it.id == albumId }
+        if (index < 0) {
+            return@synchronized false
+        }
+        val album = current[index]
+        if (album.coverUri == coverUri) {
+            return@synchronized true
+        }
+        val updated = current.toMutableList()
+        updated[index] = album.copy(coverUri = coverUri?.takeIf { it.isNotBlank() })
+        write(updated)
+    }
+
     // ---------------- JSON / 名称校验 ----------------
 
     private fun read(): List<CustomAlbum> {

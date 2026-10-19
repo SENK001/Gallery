@@ -28,6 +28,12 @@
     <string name="album_pick_title">选择照片和视频</string>
     <string name="album_pick_added">已添加 %1$d 项到相册</string>
 
+    <!-- 相册详情页标题栏「添加」：进入选图页并预选相册已有成员，确认后按 diff 增删 -->
+    <string name="album_add_action">添加</string>
+    <string name="album_update_done">已更新相册（新增 %1$d，移除 %2$d）</string>
+    <string name="album_update_same">没有变化</string>
+    <string name="album_update_failed">更新相册失败</string>
+
     <!-- ========== 「添加到」页 ========== -->
     <string name="addto_title">添加到</string>
     <string name="addto_back">返回</string>

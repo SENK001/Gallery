@@ -625,9 +625,10 @@ androidComponents { onVariants(selector().all()) { variant ->
 
 - 新增 `.github/workflows/ci.yml`（workflow 名 `CI`）：
   - 触发：`push`（任意分支/标签）+ `workflow_dispatch` 手动；同一 ref 新推送用 `concurrency` 取消旧任务；
-  - 环境：`ubuntu-latest`、Temurin **JDK 21**、Gradle wrapper **9.4.1**（`gradle/actions/setup-gradle` 缓存）、
-    Android SDK 经 `android-actions/setup-android` 后 `sdkmanager --install "platforms;android-37.2" "build-tools;37.0.0"`
-    （compileSdk 是 minor API 37.2，runner 预装 SDK 不含，必须显式装）；
+  - 环境：`ubuntu-latest`、Temurin **JDK 21**（`actions/setup-java@v5`）、Gradle wrapper **9.4.1**
+    （`gradle/actions/setup-gradle` 缓存）、Android SDK **直接使用 runner 预装版本**
+    （`ANDROID_HOME=/usr/local/lib/android/sdk`，含 `platforms;android-37.2` 与 `build-tools;37.0.0`；
+    流水线只做存在性检查，缺失时打印实际列表并失败）；
   - 门禁：`gradle/actions/wrapper-validation` → `:main:assembleArm64Debug` → 单测
     （`main:testArm64DebugUnitTest` + `main-ui/core-data/common-util:testDebugUnitTest`）→
     `python3 scripts/check-color-pairs.py`；
@@ -637,11 +638,21 @@ androidComponents { onVariants(selector().all()) { variant ->
   新增 `.gitattributes` 固定 `gradlew`/`*.sh` 为 LF、`*.bat` 为 CRLF，避免 CI 上脚本换行符问题。
 - 文档：build-and-release 新增 §9（CI），README 快速开始与文档索引同步，本条目记录。
 
+**首次实跑与修正（2026-10-21）**：
+
+- push `ff208dc` 触发第 1 次 run `39468660054`：在「安装 Android SDK 命令行工具」步骤失败
+  —— `android-actions/setup-android@v3` 在 `ubuntu-latest`（已迁移 Ubuntu 26）上安装 cmdline-tools 失败；
+- 查 `actions/runner-images` 的 `Ubuntu2604-Readme.md`：镜像已预装 Android cmdline-tools 20.0、
+  `platforms;android-37.2`（rev1）、`build-tools;37.0.0`、`ANDROID_HOME=/usr/local/lib/android/sdk`；
+- 修正（commit `0ca5f09`）：移除 setup-android 与 sdkmanager 安装，改为「检查 Android SDK（runner 预装）」；
+  同时升级 `actions/checkout@v5`、`actions/setup-java@v5` 消除 Node 20 弃用警告。
+
 **验证**：
 
+- 远端实测：push `0ca5f09` 触发 run **39469039506**（CI #2）**成功**，11 个业务步骤全绿
+  （SDK 检查 → 编译 → 单测 → 色板校验 → 上传 APK），artifact `SenkGallery-Debug-arm64` 约 **18.9MB** 可下载；
 - 工作流 YAML 经 PyYAML 解析通过；`git ls-files -s gradlew` 为 `100755`；
 - 本地模拟 CI 构建条件：临时移走 `local.properties`、改用 `ANDROID_HOME/ANDROID_SDK_ROOT` 指向 SDK →
   `:main:assembleArm64Debug` 构建成功（AK 空串、无 release 签名同样可编译）；
 - 色板校验脚本与 cwd 无关（从仓库外目录执行同样通过）；
-- 本地门禁：Debug/Release 构建、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对；
-- 未做：GitHub 远端实际跑通（当前仅本地能验证工作流语法与等价构建条件；push 后需在 Actions 页面确认）。
+- 本地门禁：Debug/Release 构建、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对。

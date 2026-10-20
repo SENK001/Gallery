@@ -1,5 +1,7 @@
 # Gallery（相册）
 
+[![CI](https://github.com/SENK001/Gallery/actions/workflows/ci.yml/badge.svg)](https://github.com/SENK001/Gallery/actions/workflows/ci.yml)
+
 Android 相册应用：照片宫格、相册分类、大图查看器、视频播放、动态照片长按播放、多选操作、选图器与外部调用。
 
 **缩略图宫格是标准 `RecyclerView` + 每格 View**（可被无障碍服务逐格读取；视频时长/动态照片角标与多选选择框都是普通 View）；**大图查看器与视频渲染**仍基于 `GLSurfaceView` 自绘（shader/纹理逐帧绘制）。其余界面使用 androidx/material（`RecyclerView`、`ViewPager2`、胶囊导航、`MaterialToolbar`、`TabLayout`）与百度地图 `TextureMapView`。数据层在 MediaStore 之上自建 `ContentProvider`，UI 只经 `ContentResolver` 访问；对外另有选图结果的只读代理 Provider 与 `external-api` 契约模块。

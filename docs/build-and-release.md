@@ -174,3 +174,4 @@ versionName "1.0.0.0"
 - Debug 只编 arm64 一个变体作为「可编译」代表（其余 flavor 只差 ABI 打包）；需要全变体时把任务改成 `:main:assembleDebug`。
 - 本地复现同一组门禁的命令见 §2。
 - **为什么不用 `android-actions/setup-android`**：2026-10-21 首次 CI 运行在 `ubuntu-latest`（Ubuntu 26）上该 action 安装 cmdline-tools 失败；而该镜像本身已预装上述 SDK 组件，故移除 action，改为存在性检查。runner 镜像后续若移除对应版本，需在 workflow 里补显式安装（并以镜像文档 `actions/runner-images/images/ubuntu/Ubuntu2604-Readme.md` 的组件清单为准）。
+- **实测**（2026-10-21）：push 触发 run `39468660054` 在 setup-android 失败；修正后 run `39469039506` 成功，11 个业务步骤全绿，artifact `SenkGallery-Debug-arm64` 约 18.9MB，总耗时约 3.5 分钟（含首次 Gradle 发行版下载）。

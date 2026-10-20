@@ -217,8 +217,18 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 ### 12.2 顶栏 / 底栏
 
-- 内部模式顶栏：标题 = 拍摄时间（`DateFormats.formatDateTime`），副标题 =「当前张 / 总数」（`gallery_position_format`，如 `3 / 223`）。
-- 底栏三个按钮：分享（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`，`createChooser`）、收藏（写入应用内自建收藏库，见 12.4）、详情（打开面板）。
+- 内部模式顶栏：
+  - **大标题 = 拍摄日期**（`DateFormats.formatDate`，如「2026年10月19日」），不再带时间；
+  - **副标题 = 拍摄时间 +（有定位时）行政区划**：`08:49` 或 `08:49 · 重庆市 渝北区`（`gallery_viewer_subtitle_time_location` / `gallery_viewer_region_format`）。定位来自 Provider 的 EXIF 坐标 → 百度逆地理编码的省/市/区（`LocationAddressResolver.resolveAddress`），直辖市的 province=city 会去重后取「市 区」，普通省份取「省 市」；无定位/无 AK/无网络时只显示时间，异步解析结果按 media id 缓存并做 token 校验防翻页错位；
+  - 标题栏右侧菜单：**详情**（图标 `ic_info`，打开详情面板）——原先在底栏的详情按钮移到了这里。
+- 底栏三个按钮：分享（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`，`createChooser`）、收藏（写入应用内自建收藏库，见 12.4）、**删除**（移到最近删除，见 12.6）。
+- **外部大图模式**：没有本应用媒体库 id 与拍摄时间，标题仍用调用方 title/文件名、副标题为「当前张 / 总数」；收藏/详情/删除入口全部隐藏，只保留分享。
+
+### 12.6 删除（移到最近删除）
+
+- 底栏「删除」与多选删除同一套语义：`MediaStore.createTrashRequest(uris, true)` 由系统弹「允许相册将此照片移到最近删除吗」确认，不直接物理删除。
+- 确认成功后：从查看器内存列表移除该条 → `viewer.setItems(...)` 触发 `onPageChanged` 刷新标题/副标题/详情，停留在下一张；列表删空则 `finish()`；同时 `FavoriteStore.markTrashed(id, true)`，收藏相册随 Provider 通知刷新。
+- 外部模式不提供删除（URI 不属于本应用媒体库）。
 
 ### 12.3 沉浸模式与手势
 
@@ -248,6 +258,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 地图卡片（EXIF 有定位时）：`sheet_map_container` 内嵌 `TextureMapView`（160dp，禁用手势），标记 `MapMarkers.dot`，缩放 16；地址经 `LocationAddressResolver` 逆地理编码；
   - EXIF 区：品牌 / 型号 / 镜头 / 光圈 / 曝光 / ISO / 焦距 / 等效焦距 / EXIF 时间 / 软件。
 - 地图卡片整体盖了 `sheet_map_overlay`：点卡片 → `PhotoMapActivity`。点击有双保险：仅 `!immersive && sheetProgress > 0.01`（面板确实展开且可见）时才响应，防止点到不可见面板里的地图。
+- 面板的打开入口是标题栏右侧「详情」菜单（底栏已不再放详情按钮）；底栏「删除」见 12.6。
 - 地图相关卡点：`TextureMapView` 构造**先于授权初始化会 NPE 崩溃**，因此 `ensureSheetMap()` 先调 `BaiduMapSdk.ensureInitialized()`，失败时隐藏地图卡片，不崩溃；坐标系 BD09LL。
 
 ## 14. 视频播放器（`VideoPlayerActivity` + `GlVideoView`）

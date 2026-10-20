@@ -6,18 +6,26 @@ import android.animation.ValueAnimator
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -29,6 +37,7 @@ import com.baidu.mapapi.map.MapStatusUpdateFactory
 import com.baidu.mapapi.map.MarkerOptions
 import com.baidu.mapapi.map.TextureMapView
 import com.google.android.material.appbar.MaterialToolbar
+import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaObject
 import com.senk.gallery.external.GalleryExternal
@@ -49,6 +58,7 @@ class ViewerActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomBar: View
     private lateinit var favoriteButton: ImageButton
+    private lateinit var deleteButton: ImageButton
     private lateinit var detailsSheet: View
     private lateinit var sheetScroll: NestedScrollView
     private lateinit var sheetBasicInfo: TextView
@@ -75,6 +85,25 @@ class ViewerActivity : AppCompatActivity() {
     private var currentLocation: Pair<Double, Double>? = null
     private var currentAddress: String? = null
 
+    /** 标题栏「详情」菜单项（底栏的详情按钮已移到这里）。 */
+    private var infoMenuItem: MenuItem? = null
+
+    /** 当前页的副标题定位 token：异步解析回来时用它丢弃过期结果。 */
+    private var subtitleToken = 0
+
+    /** 媒体 id -> 行政区划副标题（null 表示已解析但无定位）。 */
+    private val regionCache = HashMap<Long, String?>()
+
+    /** 正在等待系统「移到最近删除」确认的媒体 id。 */
+    private var pendingDeleteId = -1L
+
+    /** 底栏删除：复用多选删除的同一套系统授权（MediaStore.createTrashRequest）。 */
+    private val trashConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        onDeleteConsentResult(result.resultCode == RESULT_OK)
+    }
+
     /**
      * 外部大图模式：调用方经 [GalleryExternal.EXTRA_VIEW_URIS] 传入自己的 content/file URI。
      * 这些 URI 不属于本应用媒体库（没有 MediaStore id），因此**不查 Provider**、
@@ -95,9 +124,11 @@ class ViewerActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         bottomBar = findViewById(R.id.bottom_bar)
         favoriteButton = findViewById(R.id.action_favorite)
+        deleteButton = findViewById(R.id.action_delete)
         bottomBarBaseTop = bottomBar.paddingTop
         bottomBarBaseBottom = bottomBar.paddingBottom
         toolbar.setNavigationOnClickListener { finish() }
+        setupToolbarMenu()
         setupSheet()
         applyInsets()
         viewer.onSingleTap = { x, y -> onViewerTap(x, y) }
@@ -120,7 +151,7 @@ class ViewerActivity : AppCompatActivity() {
         }
         findViewById<ImageButton>(R.id.action_share).setOnClickListener { share(currentItem) }
         favoriteButton.setOnClickListener { toggleFavorite() }
-        findViewById<ImageButton>(R.id.action_info).setOnClickListener { openSheet() }
+        deleteButton.setOnClickListener { deleteCurrent() }
         val externalUris = intent.getStringArrayListExtra(GalleryExternal.EXTRA_VIEW_URIS)
         if (externalUris != null) {
             // 外部模式：URI 列表来自调用方，不读本应用媒体库。
@@ -183,6 +214,24 @@ class ViewerActivity : AppCompatActivity() {
                 }
             },
         )
+    }
+
+    /** 标题栏菜单：底栏原来的「详情」按钮移到标题栏右侧（图标随标题栏配色）。 */
+    private fun setupToolbarMenu() {
+        infoMenuItem = toolbar.menu.add(
+            Menu.NONE,
+            MENU_INFO,
+            0,
+            R.string.gallery_info,
+        ).apply {
+            icon = ContextCompat.getDrawable(this@ViewerActivity, R.drawable.ic_info)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            iconTintList = ColorStateList.valueOf(ThemeUtils.iconOnSurface(this@ViewerActivity))
+            setOnMenuItemClickListener {
+                openSheet()
+                true
+            }
+        }
     }
 
     private fun applyInsets() {
@@ -268,9 +317,10 @@ class ViewerActivity : AppCompatActivity() {
         items.clear()
         items.addAll(externalItems)
         endReached = true
-        // 收藏、详情不支持外部 URI：隐藏入口（底栏剩余分享按钮仍可用）。
+        // 收藏、详情、删除不支持外部 URI：隐藏入口（底栏剩余分享按钮仍可用）。
         favoriteButton.isVisible = false
-        findViewById<View>(R.id.action_info).isVisible = false
+        deleteButton.isVisible = false
+        infoMenuItem?.isVisible = false
         // 禁用上划详情手势，避免进入依赖媒体库 id 的详情查询。
         viewer.onSheetDragStart = null
         viewer.onSheetDrag = null
@@ -319,17 +369,125 @@ class ViewerActivity : AppCompatActivity() {
         if (externalMode) {
             // 外部模式没有本应用媒体库的拍摄时间：标题用调用方 title 或文件名，副标题为位置/总数。
             toolbar.title = externalTitle ?: item.name.orEmpty()
+            toolbar.subtitle = getString(
+                R.string.gallery_position_format,
+                index + 1,
+                items.size,
+            )
         } else {
-            toolbar.title = DateFormats.formatDateTime(item.dateTaken)
+            // 内部模式：大标题只显示日期；副标题 = 时间 [· 一级行政区 二级行政区]
+            toolbar.title = DateFormats.formatDate(item.dateTaken)
+            applySubtitle(item, regionCache[item.id])
+            loadSubtitleRegion(item)
         }
-        toolbar.subtitle = getString(
-            R.string.gallery_position_format,
-            index + 1,
-            items.size,
-        )
         updatePageUi()
         if (!externalMode && sheetProgress > 0.01f) {
             ensureSheetContent(item)
+        }
+    }
+
+    /** 副标题 = 拍摄时间 +（有定位时）一级/二级行政区划；外部模式下不调用。 */
+    private fun applySubtitle(item: MediaItem, region: String?) {
+        val time = DateFormats.formatTime(item.dateTaken)
+        toolbar.subtitle = when {
+            time.isBlank() -> region.orEmpty()
+            region.isNullOrBlank() -> time
+            else -> getString(R.string.gallery_viewer_subtitle_time_location, time, region)
+        }
+    }
+
+    /**
+     * 异步补全副标题的定位行政区划。
+     *
+     * 先查 Provider 的 EXIF 坐标（轻量，只有 has_location/latitude/longitude 三列），
+     * 再走百度逆地理编码拿省/市/区；同一条目只解析一次（[regionCache]）。
+     * token + currentItem 双重校验，快速翻页时丢弃过期结果。
+     */
+    private fun loadSubtitleRegion(item: MediaItem) {
+        if (externalMode || item.id <= 0L) {
+            return
+        }
+        if (regionCache.containsKey(item.id)) {
+            return
+        }
+        val token = ++subtitleToken
+        lifecycleScope.launch {
+            val location = withContext(Dispatchers.IO) { queryItemLocation(item.id) }
+            if (isFinishing || isDestroyed || token != subtitleToken || currentItem?.id != item.id) {
+                return@launch
+            }
+            if (location == null) {
+                regionCache[item.id] = null
+                return@launch
+            }
+            val resolver = addressResolver
+                ?: LocationAddressResolver(this@ViewerActivity).also { addressResolver = it }
+            resolver.resolveAddress(location.first, location.second) { address ->
+                if (isFinishing || isDestroyed || token != subtitleToken ||
+                    currentItem?.id != item.id
+                ) {
+                    return@resolveAddress
+                }
+                val region = formatRegion(address)
+                regionCache[item.id] = region
+                applySubtitle(item, region)
+            }
+        }
+    }
+
+    /** Provider EXIF 查询：只读 has_location / latitude / longitude（无定位或异常返回 null）。 */
+    private fun queryItemLocation(id: Long): Pair<Double, Double>? = try {
+        contentResolver.query(
+            GalleryContract.exifUri(id),
+            arrayOf(
+                GalleryContract.ExifColumns.HAS_LOCATION,
+                GalleryContract.ExifColumns.LATITUDE,
+                GalleryContract.ExifColumns.LONGITUDE,
+            ),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst() &&
+                cursor.getString(cursor.getColumnIndexOrThrow(
+                    GalleryContract.ExifColumns.HAS_LOCATION,
+                )) == "1"
+            ) {
+                val latitude = cursor.getDouble(
+                    cursor.getColumnIndexOrThrow(GalleryContract.ExifColumns.LATITUDE),
+                )
+                val longitude = cursor.getDouble(
+                    cursor.getColumnIndexOrThrow(GalleryContract.ExifColumns.LONGITUDE),
+                )
+                latitude to longitude
+            } else {
+                null
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "query location failed: $id", e)
+        null
+    }
+
+    /**
+     * 行政区划展示：一级（省/直辖市）+ 二级（市/区）。
+     *
+     * 百度对直辖市会同时给出 province=city（如 重庆市/重庆市/渝北区），去重后取前两段，
+     * 显示「重庆市 渝北区」；普通省份显示「四川省 成都市」。组件全空时退回完整地址。
+     */
+    private fun formatRegion(address: LocationAddressResolver.Address?): String? {
+        if (address == null) {
+            return null
+        }
+        val parts = LinkedHashSet<String>()
+        listOf(address.province, address.city, address.district).forEach { value ->
+            value?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+        }
+        val ordered = parts.toList()
+        return when {
+            ordered.isEmpty() -> address.formatted
+            ordered.size == 1 -> ordered[0]
+            else -> getString(R.string.gallery_viewer_region_format, ordered[0], ordered[1])
         }
     }
 
@@ -338,6 +496,51 @@ class ViewerActivity : AppCompatActivity() {
         favoriteButton.setImageResource(
             if (item.isFavorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border,
         )
+    }
+
+    // ==================== 删除（移到最近删除） ====================
+
+    /**
+     * 删除当前媒体：与多选删除一致，走 `MediaStore.createTrashRequest` 由系统确认；
+     * 确认成功后从查看器列表移除并停留在下一张（没有下一张则退出）。
+     */
+    private fun deleteCurrent() {
+        if (externalMode) {
+            return
+        }
+        val item = currentItem ?: return
+        val uri = item.uri ?: return
+        try {
+            val request = MediaStore.createTrashRequest(contentResolver, listOf(uri), true)
+            pendingDeleteId = item.id
+            trashConsentLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+        } catch (e: Exception) {
+            pendingDeleteId = -1L
+            Log.e(TAG, "create trash request failed", e)
+            Toast.makeText(this, R.string.selection_action_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun onDeleteConsentResult(granted: Boolean) {
+        val id = pendingDeleteId
+        pendingDeleteId = -1L
+        if (!granted || id <= 0L) {
+            return
+        }
+        // 收藏联动：媒体进回收站后从「收藏」相册剔除（恢复时由最近删除页清标记）
+        FavoriteStore.get(this).markTrashed(listOf(id), true)
+        val index = items.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            items.removeAt(index)
+        }
+        if (items.isEmpty()) {
+            finish()
+            return
+        }
+        val nextIndex = index.coerceIn(0, items.size - 1)
+        // setItems 内部会触发 onPageChanged -> bindPage，更新标题/副标题/详情内容
+        viewer.setItems(ArrayList(items), nextIndex)
+        Toast.makeText(this, R.string.selection_deleted_done, Toast.LENGTH_SHORT).show()
     }
 
     private fun onViewerTap(x: Float, y: Float) {
@@ -724,6 +927,9 @@ class ViewerActivity : AppCompatActivity() {
         private const val SHEET_SETTLE_THRESHOLD = 0.4f
         private const val SHEET_ANIMATION_DURATION = 200L
         private const val MAP_CARD_ZOOM = 16f
+
+        /** 标题栏「详情」菜单项 id（main-ui 不新增 menu 资源，代码创建）。 */
+        private const val MENU_INFO = 0x3001
 
         fun intent(context: Context, baseUri: Uri, position: Int): Intent =
             Intent(context, ViewerActivity::class.java)

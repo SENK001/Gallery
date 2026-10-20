@@ -14,6 +14,9 @@
     <string name="gallery_share">分享</string>
     <string name="gallery_favorite">收藏</string>
     <string name="gallery_info">详情</string>
+    <string name="gallery_delete">删除</string>
+    <string name="gallery_viewer_region_format">%1$s %2$s</string>
+    <string name="gallery_viewer_subtitle_time_location">%1$s · %2$s</string>
     <string name="gallery_count_format">%1$d 项</string>
     <string name="gallery_position_format">%1$d / %2$d</string>
     <string name="gallery_info_title">详细信息</string>

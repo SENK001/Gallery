@@ -53,13 +53,13 @@
             app:tint="@color/gallery_icon_on_surface" />
 
         <ImageButton
-            android:id="@+id/action_info"
+            android:id="@+id/action_delete"
             style="?attr/borderlessButtonStyle"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:contentDescription="@string/gallery_info"
-            android:src="@drawable/ic_info"
+            android:contentDescription="@string/gallery_delete"
+            android:src="@drawable/ic_delete"
             app:tint="@color/gallery_icon_on_surface" />
 
     </LinearLayout>

@@ -704,3 +704,42 @@ androidComponents { onVariants(selector().all()) { variant ->
   lint 0 error/3 warning、颜色校验 31 色成对。
 
 **未覆盖**：地图导航应用列表弹窗（本机媒体库无带定位媒体，入口不可达；与列表变体同一代码路径）。
+
+---
+
+## 2026-10-21 查看器：底栏删除、详情移到标题栏、标题/副标题改版
+
+**背景（用户要求）**：大图加入删除按钮；详情按钮放到标题栏；大标题只显示日期；副标题显示时间和定位（一级/二级行政区划）。
+
+**实现**：
+
+- 顶栏（`ViewerActivity.bindPage`）：
+  - 大标题 `DateFormats.formatDate`（只日期，如「2026年10月19日」）；
+  - 副标题 `DateFormats.formatTime`（HH:mm）+ 有定位时拼接行政区划：`08:49 · 重庆市 渝北区`
+    （新增 `gallery_viewer_subtitle_time_location`、`gallery_viewer_region_format`；`DateFormats` 增加
+    `TIME_PATTERN`/`formatTime`）；
+  - 标题栏右侧新增代码创建的「详情」菜单（`ic_info`，`MENU_INFO`），点击 `openSheet()`；外部模式隐藏。
+- 定位解析：
+  - 新增 `queryItemLocation(id)` 轻量查 Provider 的 EXIF（`has_location/latitude/longitude` 三列）；
+  - `LocationAddressResolver` 扩展 `Address(formatted/province/city/district)` + `resolveAddress(...)`：
+    取百度 `addressDetail` 的省/市/区；同一坐标并发回调合并、只发一次 SDK 请求；旧 `resolve()` 保留给详情地图卡片；
+  - `formatRegion`：省/市/区去重后取前两段（直辖市 province=city 去重 →「重庆市 渝北区」；普通省份 →「四川省 成都市」），组件全空退回完整地址；
+  - 结果按 media id 缓存（`regionCache`），`subtitleToken` + `currentItem.id` 丢弃翻页过期结果。
+- 底栏：详情换为**删除**（`ic_delete`、`gallery_delete`）；删除复用多选删除的系统授权
+  `MediaStore.createTrashRequest(uris, true)`（`ActivityResultContracts.StartIntentSenderForResult`）；
+  确认成功后从内存列表移除该条并 `viewer.setItems(...)`（触发标题/副标题/详情刷新）停留下一张，
+  删空则 `finish()`；同时 `FavoriteStore.markTrashed(id, true)` 让「收藏」相册同步剔除。
+- 外部大图模式：标题/副标题维持调用方 title 与「位置/总数」，收藏/详情/删除全部隐藏，仅分享。
+- 文档：ui-guide §12.2 重写 + 新增 §12.6 删除、verification 手测项、backlog 未覆盖项、README 查看器描述。
+
+**真机验证（Redmi / Android 16）**：
+
+- 复制一张照片（可删除的测试副本）后打开查看器：标题「2026年10月21日」、副标题「02:34」；
+  右侧「详情」菜单打开详情面板（EXIF 内容正常）；底栏为 分享 / 收藏 / 删除；
+- 点删除 → 系统「要允许相册将此照片移到最近删除吗？」→ 允许：查看器停留到下一张
+  （标题变「2026年10月20日」、副标题「22:34」），无崩溃；
+- 最近删除页确认该副本进入回收站，随后「彻底删除」清理，回收站入口消失；
+- 外部大图模式（debug 客户端 VIEW_IMAGE）：标题/副标题为文件名与「1 / 1」，底栏只剩全宽分享，
+  无详情/删除入口；
+- 未覆盖：副标题行政区划（本机媒体库无 GPS 媒体、开发机未配置百度 AK，只验证了无定位时仅显示时间的降级）；
+- 门禁：Debug/Release 构建、单测 23/23、lint 0 error/3 warning、颜色校验 31 色成对。

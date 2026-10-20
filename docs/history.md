@@ -614,3 +614,34 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 沉浸态单击：仍按原逻辑切回非沉浸；
 - 地图卡片点击：守卫条件已在代码中核对（`!immersive && sheetProgress > 0.01`），本机媒体库当前没有带定位的媒体，未做「跳转 PhotoMapActivity」的真机复测；
 - 无崩溃；门禁构建/单测/lint/颜色校验通过。
+
+---
+
+## 2026-10-21 GitHub Actions CI：推送自动编译
+
+**背景（用户要求）**：编写 GitHub Actions CI，推送到 GitHub 时自动触发编译。
+
+**实现**：
+
+- 新增 `.github/workflows/ci.yml`（workflow 名 `CI`）：
+  - 触发：`push`（任意分支/标签）+ `workflow_dispatch` 手动；同一 ref 新推送用 `concurrency` 取消旧任务；
+  - 环境：`ubuntu-latest`、Temurin **JDK 21**、Gradle wrapper **9.4.1**（`gradle/actions/setup-gradle` 缓存）、
+    Android SDK 经 `android-actions/setup-android` 后 `sdkmanager --install "platforms;android-37.2" "build-tools;37.0.0"`
+    （compileSdk 是 minor API 37.2，runner 预装 SDK 不含，必须显式装）；
+  - 门禁：`gradle/actions/wrapper-validation` → `:main:assembleArm64Debug` → 单测
+    （`main:testArm64DebugUnitTest` + `main-ui/core-data/common-util:testDebugUnitTest`）→
+    `python3 scripts/check-color-pairs.py`；
+  - 产物：artifact `SenkGallery-Debug-arm64`（arm64/debug 下的 APK），保留 7 天；
+  - 不需要 `local.properties`：CI 用 runner 的 `ANDROID_HOME`，AK 空串、release 跳过签名（不影响 Debug）。
+- 仓库工程性修正：`gradlew` 在 git index 中置为可执行（`100755`，原为 `100644`，Linux 上 checkout 后无法直接执行）；
+  新增 `.gitattributes` 固定 `gradlew`/`*.sh` 为 LF、`*.bat` 为 CRLF，避免 CI 上脚本换行符问题。
+- 文档：build-and-release 新增 §9（CI），README 快速开始与文档索引同步，本条目记录。
+
+**验证**：
+
+- 工作流 YAML 经 PyYAML 解析通过；`git ls-files -s gradlew` 为 `100755`；
+- 本地模拟 CI 构建条件：临时移走 `local.properties`、改用 `ANDROID_HOME/ANDROID_SDK_ROOT` 指向 SDK →
+  `:main:assembleArm64Debug` 构建成功（AK 空串、无 release 签名同样可编译）；
+- 色板校验脚本与 cwd 无关（从仓库外目录执行同样通过）；
+- 本地门禁：Debug/Release 构建、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对；
+- 未做：GitHub 远端实际跑通（当前仅本地能验证工作流语法与等价构建条件；push 后需在 Actions 页面确认）。

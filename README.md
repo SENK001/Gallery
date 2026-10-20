@@ -44,6 +44,7 @@ release 产物同构（`<flavor>/release/SenkGallery-Release-<ABI>.apk`）；未
 
 - 打包 ABI 由**构建变体**决定：`arm64` / `armv7` / `x86` / `x86_64` 各只打包一个 ABI（debug ≈33–40MB），`universal` 不做过滤、4 个 ABI 全打包（debug ≈90MB）。
 - 百度地图 AK 与 release 签名都从 `local.properties` 注入（模板见 [local.properties.example](local.properties.example)）：缺失时地图功能不可用 / 产出未签名包，**不影响构建与其余功能**。
+- **GitHub Actions CI**：推送到 GitHub 自动编译 arm64 Debug、跑单元测试与色板校验，并上传 APK artifact；手动触发与细节见 [构建与发布 §9](docs/build-and-release.md#9-cigithub-actions)。
 
 完整细节（工具链版本、ABI 变体、签名与 keytool、依赖清单）见 [构建与发布](docs/build-and-release.md)。
 

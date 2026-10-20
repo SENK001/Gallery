@@ -15,6 +15,8 @@ python scripts/check-color-pairs.py                # 颜色成对 + 悬空引用
 
 发布前再加 `:main:assembleRelease`（含签名）与冷编译（`--stop` + `clean` + `--no-build-cache`）。
 
+CI（推送 GitHub 自动运行，见 [构建与发布 §9](build-and-release.md)）执行的是本节的子集：wrapper 校验 → `:main:assembleArm64Debug` → 单元测试 → 颜色校验 → 上传 APK；**lint / Release / 冷编译 / 真机手测仍按本地门禁执行**，CI 绿灯不等于全部通过。
+
 **通过线**（2026-10-19 基线；数值可随环境漂移，判断时看「规则 + 位置」而非总数）：
 
 | 项 | 通过线 |

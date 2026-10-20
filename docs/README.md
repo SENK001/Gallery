@@ -12,7 +12,7 @@
 | [gl-rendering.md](gl-rendering.md) | 查看器/视频的 GL 几何、纹理、线程与异步管线；窗口层排查 |
 | [external-api.md](external-api.md) | 外部调用契约：选图/大图 action、extras、结果、代理 URI 与临时授权 |
 | [theme.md](theme.md) | 色板、styles 约定、`ThemeUtils`、颜色成对校验 |
-| [build-and-release.md](build-and-release.md) | 工具链、ABI 变体、签名与 AK、APK 产物命名、依赖清单 |
+| [build-and-release.md](build-and-release.md) | 工具链、ABI 变体、签名与 AK、APK 产物命名、依赖清单、GitHub Actions CI |
 | [verification.md](verification.md) | 门禁命令、通过线、真机流程、GL 专项判据、本机基线数据 |
 | [history.md](history.md) | 日期化的实测结论与缺陷根因（含结论被推翻的「更正记录」） |
 | [backlog.md](backlog.md) | 未实现 / 未覆盖 / 明确不做的唯一收口 |
@@ -30,7 +30,7 @@
 | 查看器/视频的绘制、几何、纹理与线程 | [gl-rendering.md](gl-rendering.md) |
 | 外部调用的 action/extras/结果、代理 URI 与授权 | [external-api.md](external-api.md) |
 | 新增颜色或样式 | [theme.md](theme.md)（并跑 `scripts/check-color-pairs.py`） |
-| 构建脚本、依赖版本、签名、AK、ABI、产物命名 | [build-and-release.md](build-and-release.md) |
+| 构建脚本、依赖版本、签名、AK、ABI、产物命名、CI 工作流 | [build-and-release.md](build-and-release.md) |
 | 验证命令、通过线、基线数值 | [verification.md](verification.md) |
 | 修复 bug / 得到新的实测结论 | [history.md](history.md) 追加日期条目 |
 | 新限制、新待办、决定不做的事 | [backlog.md](backlog.md) |

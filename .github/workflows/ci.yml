@@ -1,0 +1,85 @@
+# GitHub Actions CI：推送到 GitHub 时自动编译。
+#
+# 工具链与本地一致（详见 docs/build-and-release.md）：
+#   AGP 9.2.1 / Gradle wrapper 9.4.1 / JDK 21 / compileSdk 37.2（minor API）/ build-tools 37.0.0。
+#
+# 说明：
+# - 不在仓库里的 local.properties 不是必需项：百度 AK 注入空串、release 签名跳过，
+#   不影响 Debug 编译（CI 通过 ANDROID_HOME/ANDROID_SDK_ROOT 提供 SDK 路径）；
+# - Debug 只编 arm64-v8a 一个变体作为「代码可编译」的代表（其余 flavor 只差 ABI 打包，
+#   编译期无差异）；需要全变体时可把任务改成 :main:assembleDebug；
+# - APK 作为 workflow artifact 上传，保留 7 天。
+name: CI
+
+on:
+  # 推送到任意分支/标签都触发
+  push:
+  # 支持在 Actions 页面手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一 ref 的新推送取消仍在进行的旧任务，避免浪费排队时间
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 编译（arm64-v8a Debug）
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验 Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: 配置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 安装 Android SDK 命令行工具
+        uses: android-actions/setup-android@v3
+
+      # compileSdk 37.2 属于 minor SDK 版本（platforms;android-37.2），
+      # GitHub runner 预装 SDK 通常没有它，必须显式安装；build-tools 37.0.0 同理。
+      - name: 安装 compileSdk 37.2 与 build-tools 37.0.0
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "platforms;android-37.2" "build-tools;37.0.0"
+
+      # Windows 上提交的 gradlew 可能没有可执行位，这里兜底（同时已在 git index 中置为 100755）
+      - name: 准备 Gradle 包装器
+        run: chmod +x ./gradlew
+
+      - name: 编译 Debug APK（arm64-v8a）
+        run: ./gradlew :main:assembleArm64Debug --stacktrace
+
+      - name: 单元测试
+        run: |
+          ./gradlew \
+            :main:testArm64DebugUnitTest \
+            :main-ui:testDebugUnitTest \
+            :core-data:testDebugUnitTest \
+            :common-util:testDebugUnitTest \
+            --stacktrace
+
+      - name: 色板配对校验
+        run: python3 scripts/check-color-pairs.py
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SenkGallery-Debug-arm64
+          path: main/build/outputs/apk/arm64/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

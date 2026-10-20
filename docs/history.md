@@ -656,3 +656,51 @@ androidComponents { onVariants(selector().all()) { variant ->
   `:main:assembleArm64Debug` 构建成功（AK 空串、无 release 签名同样可编译）；
 - 色板校验脚本与 cwd 无关（从仓库外目录执行同样通过）；
 - 本地门禁：Debug/Release 构建、单测 23/23、lint 0 error/3 warning、颜色校验 29 色成对。
+
+---
+
+## 2026-10-21 封装应用统一自定义对话框 `GalleryDialog`（按钮对齐隐私页）
+
+**背景（用户要求）**：封装自定义 dialog，使对话框风格符合当前应用风格，按钮参考隐私页样式。
+
+**现状问题**：各页面用 `MaterialAlertDialogBuilder` / `AlertDialog`，按钮是 Material 默认文字按钮；
+隐私页却是 56dp 圆角胶囊（「退出」中性 tonal、「同意」品牌主色实心），弹窗与页面观感割裂。
+
+**实现**：
+
+- 新增 `main-ui/.../ui/dialog/GalleryDialog`（`Dialog` 子类 + Builder）与资源：
+  - `values/styles_dialog.xml`：`Theme.Gallery.Dialog`（透明窗口、`Theme.Material3.DayNight.Dialog` +
+    品牌色映射）、`TextAppearance.Gallery.DialogTitle/DialogBody/DialogListItem`、
+    `Widget.Gallery.DialogButton(.Primary/.Secondary)`（48dp 高、24dp 圆角胶囊；
+    取消 = 中性色 tonal、确认 = 品牌主色实心）、`Widget.Gallery.DialogInput`（16dp 圆角输入框）；
+  - `layout/dialog_gallery.xml`（28dp 圆角卡片 + 标题/正文/内容区/按钮行）、
+    `dialog_gallery_input.xml`、`dialog_gallery_list_item.xml`、`drawable/bg_gallery_dialog.xml`；
+  - 支持五种形态：标题/正文确认、输入（`validate` 返回错误时显示在输入框下且不关闭）、
+    自定义内容（尊重视图自身宽高，用于隐私政策正文）、列表、无按钮（复制进度，`setCancelable(false)`）；
+  - 输入弹窗 show 后自动聚焦 + 延迟 120ms 请求 IME；宽度 88% 屏宽（上限 560dp）。
+- 新增危险色 `gallery_brand_danger` / `gallery_brand_on_danger`（浅色深红底白字、深色浅红底深红字），
+  相册删除、最近删除「清空」确认按钮使用；`ThemeUtils` 增加 `brandDanger/brandOnDanger`。
+- 迁移全部系统弹窗到统一组件：
+  - `AlbumNameDialog`（相册新建/重命名，删除 `dialog_album_name.xml`，校验逻辑改为 `setInput(validate)`）；
+  - `AlbumsFragment` 相册删除确认（destructive）；
+  - `RecentlyDeletedActivity` 清空确认（destructive）；
+  - `PhotoMapActivity` 导航应用列表（`setItems`）；
+  - `AddToAlbumActivity` 复制进度（自定义内容 + 无按钮，不再叠加 24dp 内边距）；
+  - `PrivacyActivity` 隐私政策正文（内容区固定屏高 62% 由 ScrollView 滚动，标题/关闭按钮由组件提供）。
+- 文档：ui-guide §2/§15/§16（新增「统一对话框」小节）、theme.md（色板 + 对话框样式组）、
+  verification 手测项与颜色基线（29→31）、backlog 验证盲区、本条目。
+
+**真机验证（Redmi / Android 16）**：
+
+- 相册「新建相册」：28dp 圆角卡片 + 标题 19sp 加粗 + 16dp 圆角输入框；取消/确定为 24dp 圆角胶囊
+  （中性灰 / 品牌蓝），打开即弹出键盘；输入重名 `dlg_test` 点确定 → 输入框下方显示「已存在同名相册」，
+  弹窗保持打开；改名成功 → 创建并进入选图页（取消返回后相册 0 项保留）；布局 dump 按钮边界正确；
+- 相册长按删除：正文 + 红色 danger 胶囊「删除」/ 中性「取消」，点击「删除」后相册被移除；
+- 隐私政策：`pm clear` 后进入首启页点链接 → 弹窗为圆角卡片 + 标题 + 可滚动正文 + 全宽品牌蓝「关闭」胶囊；
+  点击关闭返回首启页（内容区高度正确，按钮不再被长正文挤出屏幕）；
+- 深色模式（`cmd uimode night yes`）：卡片深色 surface、标题/正文浅色、危险/中性/主色按钮均成对适配；
+- 添加到（相机）复制流程：统一弹窗路径跑通、复制成功；文件过小进度弹窗瞬间完成（未截到中间态）；
+- 无 `com.senk.gallery` 崩溃（`logcat -b crash`）；门禁：Debug/Release 构建、单测 23/23、
+  lint 0 error/3 warning、颜色校验 31 色成对。
+
+**未覆盖**：地图导航应用列表弹窗（本机媒体库无带定位媒体，入口不可达；与列表变体同一代码路径）。

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GalleryDialog 的输入区（相册命名等）：单行输入 + 错误提示，样式见 Widget.Gallery.DialogInput。 -->
+<com.google.android.material.textfield.TextInputLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/dialog_input_layout"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    style="@style/Widget.Gallery.DialogInput">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/dialog_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:imeOptions="actionDone"
+        android:inputType="text"
+        android:maxLines="1"
+        android:singleLine="true" />
+
+</com.google.android.material.textfield.TextInputLayout>

@@ -24,7 +24,7 @@ CI（推送 GitHub 自动运行，见 [构建与发布 §9](build-and-release.md
 | 构建 | BUILD SUCCESSFUL，冷编译任务真实执行 |
 | 单元测试 | **23/23** 全绿（见 §2） |
 | lint | **0 error** / 3 warning（2026-10-19 基线：`UnusedResources` ×1、`UselessParent` ×2，均为历史遗留）；无「与本次改动相关」的新条目 |
-| 颜色校验 | `OK —— 29 个颜色全部成对定义，且无悬空引用。`（新增颜色时总数会变，以脚本输出为准） |
+| 颜色校验 | `OK —— 31 个颜色全部成对定义，且无悬空引用。`（新增颜色时总数会变，以脚本输出为准） |
 | 崩溃 | `adb logcat -d -b crash` 中无 `com.senk.gallery` |
 
 lint 的版本检查类告警（`GradleDependency` / `NewerVersionAvailable`）会随联网查 Maven 新版而漂移，凡出现在 `libs.versions.toml` 的此类条目与代码改动无因果关系，按「文件位置」排除。
@@ -113,6 +113,7 @@ $ADB shell am start -a com.senk.gallery.action.VIEW_IMAGE \
 - 收藏删除标记：收藏 1–2 张 → 删除这些媒体（进回收站）→ 相册页「收藏」应**消失或只保留仍可见的条目**（不出现灰封面、点进去不空白）、`favorites` 表中对应行 `is_trashed = 1`；从最近删除恢复后「收藏」重新出现且计数恢复、标记回 0；彻底删除后收藏行被移除
 - 收藏存储（SQLite）：收藏 1 张 → `am force-stop` 重启 → 计数保持；`run-as` 拉取 `databases/gallery_favorites.db` 可看到 `favorites` 表与记录；自建相册（SharedPreferences 存储）不受影响；旧 SharedPreferences 收藏数据不兼容（开发期换方案，直接丢弃）
 - 添加到：自建相册逻辑加入、相机/文件夹相册物理复制（进度、结果、相册计数变化）
+- 统一对话框（`GalleryDialog`）：新建相册输入弹窗、相册删除确认、最近删除「清空」确认、隐私政策正文、添加到复制进度均应显示 28dp 圆角卡片 + 胶囊按钮（取消=中性灰、确认=品牌蓝、危险操作=红色）；深色模式下成对适配；输入型弹窗自动聚焦并弹出键盘、键盘「完成」等同确定、重名时错误显示在输入框下方且弹窗不关闭；点外部/返回键可关闭（进度弹窗除外）
 - 选图页：外部 PICK_IMAGE 进入、单选/多选/上限、照片/相册双 tab、相册内分类进出、完成回传
 - 外部大图：VIEW_IMAGE 打开、退出无崩溃；外部调用测试壳的代理 URI 可读
 - 查看器：翻页 / 沉浸 / 上划详情面板 / EXIF / 地图卡片 / 逆地理编码 / 收藏（应用内自建库，不弹系统授权）

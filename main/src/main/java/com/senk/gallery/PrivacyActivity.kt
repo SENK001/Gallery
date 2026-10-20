@@ -6,12 +6,13 @@ import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.senk.gallery.ui.PrivacyPrefs
+import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.util.SystemBarUtils
 
 /**
@@ -88,25 +89,23 @@ class PrivacyActivity : AppCompatActivity() {
     }
 
     private fun showPolicy() {
-        val view = layoutInflater.inflate(R.layout.dialog_privacy_policy, null)
-        val dialog = AlertDialog.Builder(this)
-            .setView(view)
-            .create()
-        view.findViewById<View>(R.id.privacy_policy_close).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.setOnShowListener {
-            // 弹窗高度受限于屏幕可用高度，正文超出时由 ScrollView 滚动。
-            // 注意：不要改 window 背景，否则会丢掉 AlertDialog 默认的圆角白卡。
-            dialog.window?.let { w ->
-                val metrics = resources.displayMetrics
-                w.setLayout(
-                    (metrics.widthPixels * 0.9f).toInt(),
-                    (metrics.heightPixels * 0.8f).toInt(),
-                )
-            }
-        }
-        dialog.show()
+        // 正文很高：内容区固定为屏幕高度的一部分，交给 ScrollView 滚动；其余（标题/圆角/按钮）
+        // 由统一对话框 GalleryDialog 提供，按钮与下方「退出 / 同意」同款胶囊样式。
+        // 用一个临时 FrameLayout 作为 inflate 父容器，避免 InflateParams 告警（布局参数随后覆盖）。
+        val content = layoutInflater.inflate(
+            R.layout.dialog_privacy_policy,
+            android.widget.FrameLayout(this),
+            false,
+        )
+        content.layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            (resources.displayMetrics.heightPixels * POLICY_BODY_HEIGHT_RATIO).toInt(),
+        )
+        GalleryDialog.builder(this)
+            .setTitle(getString(R.string.privacy_policy_title))
+            .setContent(content)
+            .setPositiveButton(getString(R.string.privacy_close))
+            .show()
     }
 
     private fun goToMain() {
@@ -115,5 +114,10 @@ class PrivacyActivity : AppCompatActivity() {
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP),
         )
         finish()
+    }
+
+    private companion object {
+        /** 政策正文可滚动区域占屏幕高度比例（加上标题/按钮后整体约 80%）。 */
+        const val POLICY_BODY_HEIGHT_RATIO = 0.62f
     }
 }

@@ -15,7 +15,7 @@ import com.baidu.mapapi.map.MarkerOptions
 import com.baidu.mapapi.map.TextureMapView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.util.SystemBarUtils
 
 class PhotoMapActivity : AppCompatActivity() {
@@ -102,9 +102,9 @@ class PhotoMapActivity : AppCompatActivity() {
     }
 
     private fun showNavigationChooser() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.gallery_nav_choose)
-            .setItems(navApps.map { it.label }.toTypedArray()) { _, which ->
+        GalleryDialog.builder(this)
+            .setTitle(getString(R.string.gallery_nav_choose))
+            .setItems(navApps.map { it.label }) { which ->
                 NavigationHelper.start(this, navApps[which])
             }
             .show()

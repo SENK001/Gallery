@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用统一自定义对话框（`GalleryDialog`）的样式。
+
+  设计目标：弹窗卡片与按钮观感对齐首启隐私页——
+    · 卡片：圆角 28dp、主题 surface 底（同隐私页卡片的圆角量级）；
+    · 按钮：左右并排两个 48dp 高的圆角胶囊；主操作 = 品牌主色实心（同隐私页「同意」），
+      次操作 = 中性色底（同隐私页「退出」的 tonal 按钮）；危险操作（删除/清空）用 danger 色；
+    · 标题/正文：19sp 加粗标题 + 15sp 次要色正文，与隐私页 PrivacyTitle/PrivacyBody 同族。
+
+  颜色全部走色板（含 values-night），不在布局/代码里写颜色字面量。
+-->
+<resources>
+
+    <!-- ==================== 对话框主题 ==================== -->
+
+    <!--
+      独立 Dialog 窗口主题：内容由 GalleryDialog 自绘（透明窗口 + 自定义圆角卡），
+      因此窗口背景透明、无标题；DayNight 父主题保证深浅色自动切换。
+    -->
+    <style name="Theme.Gallery.Dialog" parent="Theme.Material3.DayNight.Dialog">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+        <item name="android:windowMinWidthMajor">65%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
+        <!-- 与品牌主题对齐：输入框光标/聚焦描边、错误提示使用应用色板 -->
+        <item name="colorPrimary">@color/gallery_brand_primary</item>
+        <item name="colorOnPrimary">@color/gallery_brand_on_primary</item>
+        <item name="colorSurface">@color/gallery_surface_chrome</item>
+        <item name="colorOnSurface">@color/gallery_text_primary</item>
+        <item name="colorError">@color/gallery_brand_danger</item>
+        <item name="colorOnError">@color/gallery_brand_on_danger</item>
+    </style>
+
+    <!-- ==================== 文本 ==================== -->
+
+    <style name="TextAppearance.Gallery.DialogTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+        <item name="android:textSize">19sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Gallery.DialogBody" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/gallery_text_secondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:lineSpacingExtra">4dp</item>
+    </style>
+
+    <!-- 列表项（导航应用选择等）：整行可点 + 水波纹 -->
+    <style name="TextAppearance.Gallery.DialogListItem" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textColor">@color/gallery_text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <!-- ==================== 按钮（参考隐私页胶囊按钮） ==================== -->
+
+    <style name="Widget.Gallery.DialogButton" parent="Widget.Material3.Button">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">16sp</item>
+        <item name="cornerRadius">24dp</item>
+    </style>
+
+    <!-- 主操作：品牌主色实心（同隐私页「同意」） -->
+    <style name="Widget.Gallery.DialogButton.Primary">
+        <item name="backgroundTint">@color/gallery_brand_primary</item>
+        <item name="android:textColor">@color/gallery_brand_on_primary</item>
+    </style>
+
+    <!-- 次操作：中性色 tonal（同隐私页「退出」） -->
+    <style name="Widget.Gallery.DialogButton.Secondary" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">16sp</item>
+        <item name="backgroundTint">@color/gallery_brand_neutral</item>
+        <item name="android:textColor">@color/gallery_text_primary</item>
+        <item name="cornerRadius">24dp</item>
+    </style>
+
+    <!-- ==================== 输入框 ==================== -->
+
+    <style name="Widget.Gallery.DialogInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/gallery_brand_primary</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCornerRadiusTopStart">16dp</item>
+        <item name="boxCornerRadiusTopEnd">16dp</item>
+        <item name="boxCornerRadiusBottomStart">16dp</item>
+        <item name="boxCornerRadiusBottomEnd">16dp</item>
+        <item name="hintTextColor">@color/gallery_text_secondary</item>
+    </style>
+
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用统一对话框卡片底：主题 surface（浅色白 / 深色近黑）+ 28dp 圆角。
+  与隐私页按钮/卡片的圆角观感一致；颜色全部语义化，不写死。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/gallery_surface_chrome" />
+    <corners android:radius="28dp" />
+</shape>

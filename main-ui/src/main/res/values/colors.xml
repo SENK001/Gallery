@@ -59,6 +59,10 @@
     <color name="gallery_brand_on_primary">#FFFFFFFF</color>
     <!-- 中性按钮底色 -->
     <color name="gallery_brand_neutral">#FFF2F2F2</color>
+    <!-- 危险操作主色（删除/清空等不可逆操作确认按钮） -->
+    <color name="gallery_brand_danger">#FFB3261E</color>
+    <!-- 危险色按钮上的文字/图标 -->
+    <color name="gallery_brand_on_danger">#FFFFFFFF</color>
 
     <!-- ========== 媒体层（有意不跟随主题） ========== -->
     <!--

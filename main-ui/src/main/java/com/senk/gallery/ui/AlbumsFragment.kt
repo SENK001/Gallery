@@ -16,13 +16,13 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.senk.gallery.data.album.CustomAlbumStore
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.data.provider.GalleryCursorReader
 import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.addto.AlbumNameDialog
+import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.ui.picker.ImagePickerActivity
 import kotlinx.coroutines.launch
 
@@ -297,11 +297,11 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
         if (!isAdded) {
             return
         }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.album_delete_title)
+        GalleryDialog.builder(requireContext())
+            .setTitle(getString(R.string.album_delete_title))
             .setMessage(getString(R.string.album_delete_message, album.name))
-            .setNegativeButton(R.string.album_dialog_cancel, null)
-            .setPositiveButton(R.string.album_delete_confirm) { _, _ ->
+            .setNegativeButton(getString(R.string.album_dialog_cancel))
+            .setPositiveButton(getString(R.string.album_delete_confirm), destructive = true) {
                 val albumId = album.bucketId.orEmpty()
                 val removed = albumId.isNotEmpty() && store.delete(albumId)
                 val ctx = context

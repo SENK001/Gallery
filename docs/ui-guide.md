@@ -42,7 +42,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - **全屏页**而不是弹窗；结构对齐系统应用首启同意页：应用标识 + 欢迎说明 + 权限逐条说明 + 「隐私」标识 + 可点政策链接 + 底部「退出 / 同意」。
 - 已同意（`PrivacyPrefs.isAgreed`）→ 直接转 `MainActivity` 并 `finish()`，用户无感知。
 - 「同意」→ `PrivacyPrefs.setAgreed` + 转主界面；「退出」/返回键 → `finishAffinity()`，不进入主界面、不记录同意。
-- 政策正文：`AlertDialog` + `dialog_privacy_policy` 布局，宽 90% 屏、高 80% 屏，正文超长由内部 `ScrollView` 滚动。
+- 政策正文：统一对话框 `GalleryDialog`（`dialog_privacy_policy` 仅作可滚动内容区），标题/圆角/关闭按钮由组件提供；正文区高约屏高 62%，超长由内部 `ScrollView` 滚动。
 - 同意状态持久化在 `PrivacyPrefs`（`gallery_privacy` SharedPreferences）；`reset()` 仅供调试。**未同意前不初始化任何三方 SDK、不进主界面**（`MainActivity` 是 `exported=false`，无法被外部绕过同意页调起）。
 - 外部调用同样受此闸门约束：`ExternalEntryActivity` 未同意时 Toast 提示并返回 `RESULT_CANCELED`，不读取媒体。
 
@@ -264,7 +264,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 - **`BaiduMapSdk.ensureInitialized()` 必须早于 `setContentView`**（布局内含 `TextureMapView`）。
 - 内容：全屏地图（缩放 16、标记点）+ 底部卡片（地址 + 「导航」按钮）。
-- 地址：进入时若未携带地址则现场逆地理编码；导航：`NavigationHelper.navigationApps()` 检测已安装的地图应用（高德 / 百度 / 腾讯 / Google），弹 `MaterialAlertDialog` 选择后 `startActivity`，找不到时 `Toast`。
+- 地址：进入时若未携带地址则现场逆地理编码；导航：`NavigationHelper.navigationApps()` 检测已安装的地图应用（高德 / 百度 / 腾讯 / Google），弹 `GalleryDialog` 列表选择后 `startActivity`，找不到时 `Toast`。
 - 各导航 App 的 scheme 与坐标系：高德 `androidamap://navi`（GCJ-02）、百度 `baidumap://map/navi`（BD09LL）、腾讯 `qqmap://map/routeplan`（GCJ-02）、Google `google.navigation:`（原始 WGS-84）。
 
 ## 16. 通用小部件
@@ -278,6 +278,25 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 | `ToolbarScrimDrawable` | 顶部约 55% 黑（`0x8C`）→ 全透明单段线性渐变；高度由调用方给（状态栏 + 标题栏） | 首页与相册详情共用 |
 | `MapMarkers.dot` | 白底圆 + 蓝色圆点（`0xFF2A6BF2`），18dp 起，进程内缓存 | 查看器卡片与地图页共用 |
 | `MainPagerAdapter` | 2 页固定 Fragment；pager 禁用户滑动，只由胶囊导航切 | |
+| `GalleryDialog` | 应用统一自定义对话框：28dp 圆角卡片；按钮为胶囊（取消 = 中性 tonal、确认 = 品牌主色实心、危险操作 = danger 色），与首启隐私页按钮同款；支持标题/正文、输入（带校验错误）、自定义内容、列表、无按钮（进度） | 替代 `MaterialAlertDialogBuilder`；见下方「统一对话框」 |
+
+### 统一对话框（`GalleryDialog`）
+
+- 代码：`main-ui/.../ui/dialog/GalleryDialog.kt`；样式：`values/styles_dialog.xml`（`Theme.Gallery.Dialog`、`TextAppearance.Gallery.Dialog*`、`Widget.Gallery.DialogButton*`、`Widget.Gallery.DialogInput`）。
+- 决策原因：Material 默认弹窗是文字按钮，与隐私页「胶囊按钮」风格不一致；各页面手写布局又会造成圆角/字号/配色漂移。统一为一个 `Dialog` 子类 + 自定义布局。
+- 调用方式：
+  ```kotlin
+  GalleryDialog.builder(context)
+      .setTitle("删除相册")
+      .setMessage("确定删除「xxx」吗？")
+      .setNegativeButton("取消")
+      .setPositiveButton("删除", destructive = true) { /* 确认动作；回调后自动 dismiss */ }
+      .show()
+  ```
+- 变体：`setInput(hint, initial, validate)`（输入型；`validate` 返回错误文案时显示在输入框下方且不关闭，相册命名用）、`setContent(view)`（自定义内容，尊重视图自身宽高；隐私政策正文用）、`setItems(items) {}`（列表项，如地图导航应用选择）、无按钮时用于不可交互的进度弹窗（`setCancelable(false)`，添加到页复制进度用）。
+- 危险操作（相册删除、最近删除「清空」）确认按钮使用 `gallery_brand_danger` / `gallery_brand_on_danger`（浅色深红底白字、深色浅红底深红字）。
+- 宽度 = 屏宽 88%（上限 560dp）；输入型弹窗 show 后自动聚焦并请求 IME（延迟 120ms 等窗口焦点）；内容区外层内边距统一 24dp，调用方内容视图不要再重复加边距。
+- 已迁移：相册新建/重命名输入、相册删除确认、最近删除「清空」确认、地图导航应用选择、隐私政策正文、添加到页复制进度。
 
 **遮罩/渐变的验证约定**（`ToolbarScrimDrawable` 类注释）：怀疑「顶部空白/压黑」类问题时，先把 `START_ALPHA` 临时改为 `0x00` 重建——能直接看到未压暗的缩略图 ⇒ 布局正确、只是观感问题；仍纯白 ⇒ 查宫格 `setContentInsets` / 覆盖层 insets。不屏蔽时的辅助判据：同一高度取**多个 x**，取值互不相同才说明有图像内容透出。
 

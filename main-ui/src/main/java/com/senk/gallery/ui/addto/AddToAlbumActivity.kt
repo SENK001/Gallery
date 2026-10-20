@@ -15,7 +15,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.senk.gallery.data.album.CustomAlbumStore
 import com.senk.gallery.data.entity.MediaSet
@@ -24,6 +23,7 @@ import com.senk.gallery.data.provider.GalleryCursorReader
 import com.senk.gallery.data.provider.MediaWriter
 import com.senk.gallery.ui.MediaQuery
 import com.senk.gallery.ui.R
+import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.util.DisplayUtils
 import kotlinx.coroutines.CancellationException
@@ -230,12 +230,11 @@ class AddToAlbumActivity : AppCompatActivity() {
             info.folderPath?.takeIf { it.isNotBlank() } ?: "Pictures/${info.name}/"
         }
         val progress = createProgressViews(mediaIds.size)
-        val dialog = MaterialAlertDialogBuilder(this)
+        val dialog = GalleryDialog.builder(this)
             .setTitle(getString(R.string.addto_copy_title, targetName))
-            .setView(progress.container)
+            .setContent(progress.container)
             .setCancelable(false)
-            .create()
-        dialog.show()
+            .show()
 
         lifecycleScope.launch {
             try {
@@ -287,14 +286,9 @@ class AddToAlbumActivity : AppCompatActivity() {
 
     /** 复制进度视图：标题 + 「正在复制 x/y…」+ 进度条（不用布局文件，随对话框生命周期回收）。 */
     private fun createProgressViews(total: Int): ProgressViews {
+        // 内边距由 GalleryDialog 卡片统一提供（24dp），这里不再叠加
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(
-                DisplayUtils.dp2px(this@AddToAlbumActivity, 24f).toInt(),
-                DisplayUtils.dp2px(this@AddToAlbumActivity, 20f).toInt(),
-                DisplayUtils.dp2px(this@AddToAlbumActivity, 24f).toInt(),
-                DisplayUtils.dp2px(this@AddToAlbumActivity, 8f).toInt(),
-            )
         }
         val text = TextView(this).apply {
             text = getString(R.string.addto_copying, 0, total)

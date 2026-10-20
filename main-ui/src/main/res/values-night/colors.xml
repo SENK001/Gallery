@@ -33,6 +33,9 @@
     <color name="gallery_brand_primary">#FF6EA8FF</color>
     <color name="gallery_brand_on_primary">#FF10233F</color>
     <color name="gallery_brand_neutral">#FF2A2A2E</color>
+    <!-- 危险操作主色：深色下改为浅红底 + 深红字（Material3 深色 error 组合） -->
+    <color name="gallery_brand_danger">#FFF2B8B5</color>
+    <color name="gallery_brand_on_danger">#FF601410</color>
 
     <!-- ========== 媒体层（不跟随主题，与浅色保持一致） ========== -->
     <color name="gallery_media_scrim">#99000000</color>

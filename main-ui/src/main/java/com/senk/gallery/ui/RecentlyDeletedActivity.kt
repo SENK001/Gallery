@@ -21,11 +21,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.ui.grid.GridPageController
 import com.senk.gallery.ui.grid.MediaGridView
 import com.senk.gallery.ui.selection.SelectionState
@@ -303,11 +303,11 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             if (uris.isEmpty()) {
                 return@launch
             }
-            MaterialAlertDialogBuilder(this@RecentlyDeletedActivity)
-                .setTitle(R.string.trash_clear_title)
+            GalleryDialog.builder(this@RecentlyDeletedActivity)
+                .setTitle(getString(R.string.trash_clear_title))
                 .setMessage(getString(R.string.trash_clear_message, uris.size))
-                .setNegativeButton(R.string.trash_clear_cancel, null)
-                .setPositiveButton(R.string.trash_clear_confirm) { _, _ ->
+                .setNegativeButton(getString(R.string.trash_clear_cancel))
+                .setPositiveButton(getString(R.string.trash_clear_confirm), destructive = true) {
                     try {
                         val request = MediaStore.createDeleteRequest(contentResolver, uris)
                         pendingAction = PendingAction.CLEAR_ALL

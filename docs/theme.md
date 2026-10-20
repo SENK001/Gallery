@@ -47,6 +47,8 @@
 | `gallery_brand_primary` | `#FF3482FF` | `#FF6EA8FF` | 品牌主色（选中、主按钮） |
 | `gallery_brand_on_primary` | `#FFFFFF` | `#FF10233F` | 主色之上的内容 |
 | `gallery_brand_neutral` | `#FFF2F2F2` | `#FF2A2A2E` | 中性按钮底 |
+| `gallery_brand_danger` | `#FFB3261E` | `#FFF2B8B5` | 危险操作主色（删除/清空确认按钮） |
+| `gallery_brand_on_danger` | `#FFFFFF` | `#FF601410` | 危险色按钮上的文字/图标 |
 | `gallery_media_scrim` | `#99000000` | 同浅色 | 播放器/查看器深色遮罩 |
 | `gallery_media_control_bg` | `#66000000` | 同浅色 | 视频控件圆钮底 |
 | `gallery_media_on_scrim` | `#FFFFFF` | 同浅色 | 媒体层图标/文字/进度条 |
@@ -87,7 +89,8 @@
 - 容器：`Widget.Gallery.RootSurface`（内容底色，全屏页根布局）、`Widget.Gallery.ChromeSurface`（chrome 底色，标题栏/状态栏底条透出的那层）、`Widget.Gallery.ViewerBar`（查看器栏，不透明内容底）、`Widget.Gallery.ViewerIcon`；
 - 媒体层：`Widget.Gallery.MediaControl`（圆钮底）、`MediaControlsBar`（控件条底）、`MediaSeekBar`（进度条恒定白系）、`MediaIcon`；
 - 文本：`TextAppearance.Gallery.Title/Body/Caption/OnScrim`；相册：`AlbumName/AlbumCount/AlbumSectionHeader`；main：`PermissionTitle/PermissionMessage/PrivacyTitle/PrivacyBody`；
-- 其他：`ShapeAppearance.Gallery.Cover`（封面圆角 8dp）、`Widget.Gallery.NavCard`（胶囊卡片：半透明底 + 34dp 圆角 + 10dp elevation）、`NavIcon` / `NavLabel`（引用 ColorStateList）、`PermissionOverlay`、`PrivacyRoot`。
+- 其他：`ShapeAppearance.Gallery.Cover`（封面圆角 8dp）、`Widget.Gallery.NavCard`（胶囊卡片：半透明底 + 34dp 圆角 + 10dp elevation）、`NavIcon` / `NavLabel`（引用 ColorStateList）、`PermissionOverlay`、`PrivacyRoot`；
+- 对话框（`values/styles_dialog.xml`）：`Theme.Gallery.Dialog`（独立 Dialog 窗口主题：`Theme.Material3.DayNight.Dialog` + 透明窗口 + 品牌色映射）、`TextAppearance.Gallery.DialogTitle/DialogBody/DialogListItem`、`Widget.Gallery.DialogButton(.Primary/.Secondary)`（胶囊按钮，参考隐私页「同意/退出」）、`Widget.Gallery.DialogInput`（圆角 16dp 输入框）；配套 drawable `bg_gallery_dialog`（28dp 圆角 surface 卡）。
 
 形状/圆角资源：查看器面板 `bg_viewer_sheet`、地图卡片 `bg_viewer_map_card`、导航项选中底 `bg_nav_item` 等 drawable 同受本规范约束（颜色引用色板/状态列表）。
 

@@ -94,6 +94,14 @@ object ThemeUtils {
     @ColorInt
     fun brandOnPrimary(context: Context): Int = resolve(context, R.color.gallery_brand_on_primary)
 
+    /** 危险操作主色（删除/清空等不可逆操作的确认按钮）。 */
+    @ColorInt
+    fun brandDanger(context: Context): Int = resolve(context, R.color.gallery_brand_danger)
+
+    /** 画在危险色按钮上的文字/图标。 */
+    @ColorInt
+    fun brandOnDanger(context: Context): Int = resolve(context, R.color.gallery_brand_on_danger)
+
     // ===================== 媒体层（有意恒定，不跟随主题） =====================
 
     /**

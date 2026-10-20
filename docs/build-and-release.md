@@ -163,13 +163,14 @@ versionName "1.0.0.0"
 | 触发 | `push`（任意分支/标签）自动运行；`workflow_dispatch` 可在 Actions 页面手动运行 |
 | 并发 | 同一 ref 的新推送取消仍在跑的旧任务（`concurrency.cancel-in-progress`） |
 | Runner | `ubuntu-latest`，单 job，超时 45 分钟 |
-| JDK | Temurin **21**（`actions/setup-java`） |
+| JDK | Temurin **21**（`actions/setup-java@v5`） |
 | Gradle | wrapper **9.4.1**；`gradle/actions/setup-gradle` 负责依赖/构建缓存与配置缓存 |
-| Android SDK | `android-actions/setup-android` + `sdkmanager --install "platforms;android-37.2" "build-tools;37.0.0"`（compileSdk 是 minor API 37.2，runner 预装 SDK 不含，必须显式装） |
+| Android SDK | **直接使用 runner 预装 SDK**：`ubuntu-latest` 镜像自带 `ANDROID_HOME=/usr/local/lib/android/sdk`、`platforms;android-37.2`、`build-tools;37.0.0`；流水线只做存在性检查，缺失时打印实际 platforms/build-tools 列表并失败 |
 | 门禁步骤 | 编译 `:main:assembleArm64Debug` → 单测（`main:testArm64DebugUnitTest` + 三个 library 的 `testDebugUnitTest`）→ `python3 scripts/check-color-pairs.py` |
 | 产物 | artifact `SenkGallery-Debug-arm64`（`main/build/outputs/apk/arm64/debug/*.apk`），保留 7 天 |
 
 - **不需要 `local.properties`**：CI 用 runner 的 `ANDROID_HOME` 定位 SDK；AK 注入空串、release 签名跳过，均不影响 Debug 编译（已本地模拟验证）。
 - `gradlew` 在 git index 中已置为可执行（`100755`）；Windows 检出后流水线仍带 `chmod +x ./gradlew` 兜底。
 - Debug 只编 arm64 一个变体作为「可编译」代表（其余 flavor 只差 ABI 打包）；需要全变体时把任务改成 `:main:assembleDebug`。
-- 本地复现同一组门禁的命令见 §2；CI 日志里 SDK 安装失败时优先核对 `sdkmanager --install` 的包名/是否已发布，而不是移除显式安装。
+- 本地复现同一组门禁的命令见 §2。
+- **为什么不用 `android-actions/setup-android`**：2026-10-21 首次 CI 运行在 `ubuntu-latest`（Ubuntu 26）上该 action 安装 cmdline-tools 失败；而该镜像本身已预装上述 SDK 组件，故移除 action，改为存在性检查。runner 镜像后续若移除对应版本，需在 workflow 里补显式安装（并以镜像文档 `actions/runner-images/images/ubuntu/Ubuntu2604-Readme.md` 的组件清单为准）。

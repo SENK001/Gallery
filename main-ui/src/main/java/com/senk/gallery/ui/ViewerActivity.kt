@@ -74,6 +74,9 @@ class ViewerActivity : AppCompatActivity() {
     private var loading = false
     private var endReached = false
     private var immersive = false
+
+    /** 沉浸切换时标题栏上滑收起 / 底部菜单下滑收起的动画（同一条 ValueAnimator 驱动两栏）。 */
+    private var chromeAnimator: ValueAnimator? = null
     private var currentItem: MediaItem? = null
     private var addressResolver: LocationAddressResolver? = null
     private var sheetMapView: TextureMapView? = null
@@ -180,6 +183,8 @@ class ViewerActivity : AppCompatActivity() {
         addressResolver?.release()
         addressResolver = null
         sheetAnimator?.cancel()
+        chromeAnimator?.cancel()
+        chromeAnimator = null
         sheetMapView?.onDestroy()
         sheetMapView = null
         super.onDestroy()
@@ -619,6 +624,11 @@ class ViewerActivity : AppCompatActivity() {
         sheetProgress = progress.coerceIn(0f, 1f)
         detailsSheet.translationY = sheetHeight * (1f - sheetProgress)
         if (!immersive) {
+            // 面板手势接管两栏时，取消可能还在播放的沉浸收/起动画，避免两处同时改 alpha/位移
+            chromeAnimator?.cancel()
+            chromeAnimator = null
+            toolbar.translationY = 0f
+            bottomBar.translationY = 0f
             val barsAlpha = 1f - sheetProgress
             toolbar.alpha = barsAlpha
             bottomBar.alpha = barsAlpha
@@ -812,19 +822,92 @@ class ViewerActivity : AppCompatActivity() {
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            toolbar.isVisible = false
-            bottomBar.isVisible = false
+            // 标题栏向上收起、底部菜单向下收起
+            animateChromeHidden(true)
             window.decorView.setBackgroundColor(ThemeUtils.mediaScrim(this))
             rootView.setBackgroundColor(ThemeUtils.mediaScrim(this))
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
-            toolbar.isVisible = true
-            bottomBar.isVisible = true
+            // 标题栏从上方滑回、底部菜单从下方滑回
+            animateChromeHidden(false)
             updatePageUi()
             window.decorView.setBackgroundColor(ThemeUtils.surfaceContent(this))
             rootView.setBackgroundColor(Color.WHITE)
         }
     }
+
+    /**
+     * 沉浸切换的栏动画：
+     * - [hidden] = true：标题栏向上滑出屏幕、底部菜单向下滑出屏幕，同时淡出，结束后 GONE；
+     * - [hidden] = false：从屏幕外滑回原位并淡入。
+     *
+     * 动画中途再次切换会从当前位移/透明度继续，不会跳变；面板手势接管两栏时由
+     * [setSheetProgress] 取消本动画。
+     */
+    private fun animateChromeHidden(hidden: Boolean) {
+        if (hidden && !toolbar.isVisible && !bottomBar.isVisible) {
+            return
+        }
+        chromeAnimator?.cancel()
+        chromeAnimator = null
+        val toolbarHeight = toolbar.height.takeIf { it > 0 } ?: dpPx(CHROME_FALLBACK_HEIGHT_DP)
+        val bottomHeight =
+            bottomBar.height.takeIf { it > 0 } ?: dpPx(CHROME_FALLBACK_HEIGHT_DP)
+        val targetToolbarY = if (hidden) -toolbarHeight.toFloat() else 0f
+        val targetBottomY = if (hidden) bottomHeight.toFloat() else 0f
+        val targetAlpha = if (hidden) 0f else 1f
+        if (!hidden && !toolbar.isVisible) {
+            // 从完全隐藏状态滑回：先恢复可见并摆到屏幕外（隐藏动画结束时已位于该处）
+            toolbar.translationY = if (toolbar.translationY == 0f) {
+                -toolbarHeight.toFloat()
+            } else {
+                toolbar.translationY
+            }
+            bottomBar.translationY = if (bottomBar.translationY == 0f) {
+                bottomHeight.toFloat()
+            } else {
+                bottomBar.translationY
+            }
+            toolbar.isVisible = true
+            bottomBar.isVisible = true
+        }
+        toolbar.isVisible = true
+        bottomBar.isVisible = true
+        val startToolbarY = toolbar.translationY
+        val startBottomY = bottomBar.translationY
+        val startToolbarAlpha = toolbar.alpha
+        val startBottomAlpha = bottomBar.alpha
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = CHROME_ANIMATION_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                toolbar.translationY =
+                    startToolbarY + (targetToolbarY - startToolbarY) * fraction
+                bottomBar.translationY =
+                    startBottomY + (targetBottomY - startBottomY) * fraction
+                toolbar.alpha = startToolbarAlpha + (targetAlpha - startToolbarAlpha) * fraction
+                bottomBar.alpha = startBottomAlpha + (targetAlpha - startBottomAlpha) * fraction
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    chromeAnimator = null
+                    toolbar.translationY = targetToolbarY
+                    bottomBar.translationY = targetBottomY
+                    toolbar.alpha = targetAlpha
+                    bottomBar.alpha = targetAlpha
+                    if (hidden) {
+                        toolbar.isVisible = false
+                        bottomBar.isVisible = false
+                    }
+                }
+            })
+            start()
+        }
+        chromeAnimator = animator
+    }
+
+    private fun dpPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
     private class ViewerInfo(
         val basic: String,
@@ -927,6 +1010,12 @@ class ViewerActivity : AppCompatActivity() {
         private const val SHEET_SETTLE_THRESHOLD = 0.4f
         private const val SHEET_ANIMATION_DURATION = 200L
         private const val MAP_CARD_ZOOM = 16f
+
+        /** 沉浸切换时标题栏/底部菜单的收放动画时长。 */
+        private const val CHROME_ANIMATION_MS = 200L
+
+        /** 栏未完成测量时的兜底高度（dp），保证动画方向与距离可用。 */
+        private const val CHROME_FALLBACK_HEIGHT_DP = 80
 
         /** 标题栏「详情」菜单项 id（main-ui 不新增 menu 资源，代码创建）。 */
         private const val MENU_INFO = 0x3001

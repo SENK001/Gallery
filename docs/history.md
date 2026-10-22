@@ -982,3 +982,31 @@ androidComponents { onVariants(selector().all()) { variant ->
   菜单变「取消全选」；再点一次 →「已选择 0 项」、保持多选态、菜单变回「全选」；
 - 相册详情页（动态照片相册，12 项）全选同样按数据源全量选中；
 - 无崩溃。
+
+---
+
+## 2026-10-23 查看器沉浸切换：标题栏上滑收起、底部菜单下滑收起
+
+**背景（用户要求）**：大图隐藏标题栏和底部菜单栏时，标题栏向上收起、底部菜单栏向下收起。
+
+**实现**（`ViewerActivity`）：
+
+- 新增 `chromeAnimator` 与 `animateChromeHidden(hidden)`：
+  - 进入沉浸：`toolbar.translationY` 0 → `-toolbar.height`（向上滑出）、
+    `bottomBar.translationY` 0 → `+bottomBar.height`（向下滑出），同时 alpha → 0，
+    200ms `Decelerate`；动画结束后两栏才置 `GONE`；
+  - 退出沉浸：从屏幕外位置滑回 0 并淡入（若已完全隐藏则先恢复可见并摆到屏幕外再动画）；
+  - 动画中断（快速连点）时从当前位移/透明度继续，不跳变；
+  - 栏未完成测量时用 80dp 兜底高度，保证方向/距离可用。
+- `toggleImmersive()` 用 `animateChromeHidden(...)` 替换原来的 `isVisible = false/true`（系统栏、背景切换顺序不变）。
+- 面板手势接管两栏时（`setSheetProgress` 且非沉浸）取消本动画并复位 `translationY`，避免与面板淡入淡出叠加错位。
+- `onDestroy` 取消未完成的动画。
+
+**真机验证（Redmi / Android 16）**：
+
+- 用 `screenrecord` 录屏后逐帧（20fps）检查：
+  - 中间帧可见**标题栏标题文字已被顶出屏幕上半部**（滑动中）、底部菜单已下移只剩底边一条；
+  - 结束后 `uiautomator` 中 `toolbar` / `bottom_bar` 节点均不存在（GONE），画面为媒体 scrim 全屏；
+- 再次单击退出沉浸：两栏从屏幕外滑回，`uiautomator` 中标题栏/底栏节点恢复；
+- 录制过程中意外产生双击缩放（测试脚本问题，非本功能）不影响动画判定；动画结束/中途均无崩溃；
+- 附带确认：带 GPS 的照片副标题正常显示「18:23 · 重庆市 南岸区」。

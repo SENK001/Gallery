@@ -1,12 +1,16 @@
 package com.senk.gallery
 
 import android.Manifest
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,6 +57,9 @@ class MainActivity : AppCompatActivity() {
     private var requestCount = 0
     private var pendingSettingsCheck = false
     private var navBaseMarginBottom = 0
+
+    /** 底部导航胶囊的下滑/滑入动画（进入多选时先隐藏导航、再展开多选菜单）。 */
+    private var navAnimator: ValueAnimator? = null
 
     /** 当前是否在「照片」页（0）。相册页要保持原有的不透明标题栏。 */
     private var onPhotosPage = true
@@ -330,13 +337,21 @@ class MainActivity : AppCompatActivity() {
             toolbar.setNavigationOnClickListener {
                 photosFragment()?.exitSelectionMode()
             }
-            bottomNav.isVisible = false
+            // 视觉顺序：底部导航胶囊先下滑隐藏，完全隐藏后再播放多选菜单「圆 → 胶囊」展开
+            hideBottomNavAnimated {
+                photosFragment()?.showSelectionActionBarAnimated()
+            }
         } else {
             toolbar.title = getString(R.string.app_name)
             toolbar.navigationIcon = null
             toolbar.navigationContentDescription = null
             toolbar.setNavigationOnClickListener(null)
-            bottomNav.isVisible = hasMediaPermission()
+            // 视觉顺序：多选菜单先收起，收起完成后再把底部导航胶囊滑入
+            photosFragment()?.hideSelectionActionBarAnimated {
+                if (!selectionActive && hasMediaPermission()) {
+                    showBottomNavAnimated()
+                }
+            }
         }
         // 复用三态配色：多选态不改变标题栏的「静止/上划」外观，只换文案与图标
         applyToolbarAppearance(overGrid = onPhotosPage && gridScrolledPast)
@@ -345,6 +360,83 @@ class MainActivity : AppCompatActivity() {
 
     private fun photosFragment(): PhotosFragment? =
         supportFragmentManager.fragments.filterIsInstance<PhotosFragment>().firstOrNull()
+
+    // ==================== 底部导航胶囊动画（进入多选时先下滑隐藏） ====================
+
+    /**
+     * 底部导航胶囊下滑隐藏；动画结束后回调 [onHidden]（宿主据此再播放多选菜单展开动画）。
+     *
+     * 从当前 translationY 起算，可从中途打断的状态平滑衔接；导航原本已隐藏时直接回调。
+     */
+    private fun hideBottomNavAnimated(onHidden: () -> Unit) {
+        navAnimator?.cancel()
+        navAnimator = null
+        if (!bottomNav.isVisible) {
+            bottomNav.translationY = 0f
+            bottomNav.alpha = 1f
+            onHidden()
+            return
+        }
+        val navHeight = bottomNav.height.takeIf { it > 0 } ?: dpPx(NAV_FALLBACK_HEIGHT_DP)
+        val start = bottomNav.translationY
+        val target = (navHeight + navBaseMarginBottom + dpPx(NAV_SLIDE_EXTRA_DP)).toFloat()
+        val span = (target - start).takeIf { it > 0.01f } ?: 1f
+        val startAlpha = bottomNav.alpha
+        navAnimator = ValueAnimator.ofFloat(start, target).apply {
+            duration = NAV_ANIMATION_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val translation = animation.animatedValue as Float
+                bottomNav.translationY = translation
+                bottomNav.alpha = startAlpha * (1f - ((translation - start) / span)).coerceIn(0f, 1f)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    bottomNav.isVisible = false
+                    bottomNav.translationY = 0f
+                    bottomNav.alpha = 1f
+                    navAnimator = null
+                    onHidden()
+                }
+            })
+            start()
+        }
+    }
+
+    /** 底部导航胶囊从下方滑入（退出多选、菜单收起完成后调用）。 */
+    private fun showBottomNavAnimated() {
+        navAnimator?.cancel()
+        navAnimator = null
+        if (bottomNav.isVisible && bottomNav.translationY == 0f) {
+            bottomNav.alpha = 1f
+            return
+        }
+        val navHeight = bottomNav.height.takeIf { it > 0 } ?: dpPx(NAV_FALLBACK_HEIGHT_DP)
+        val fallbackStart = (navHeight + navBaseMarginBottom + dpPx(NAV_SLIDE_EXTRA_DP)).toFloat()
+        val start = bottomNav.translationY.takeIf { it > 0.01f } ?: fallbackStart
+        bottomNav.isVisible = true
+        bottomNav.translationY = start
+        bottomNav.alpha = 0f
+        navAnimator = ValueAnimator.ofFloat(start, 0f).apply {
+            duration = NAV_ANIMATION_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val translation = animation.animatedValue as Float
+                bottomNav.translationY = translation
+                bottomNav.alpha = (1f - translation / start).coerceIn(0f, 1f)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    bottomNav.translationY = 0f
+                    bottomNav.alpha = 1f
+                    navAnimator = null
+                }
+            })
+            start()
+        }
+    }
+
+    private fun dpPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
     /**
      * 绑定照片页回调的**兜底机制**。
@@ -390,6 +482,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        navAnimator?.cancel()
+        navAnimator = null
+        super.onDestroy()
+    }
+
     private fun hasMediaPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) ==
             PackageManager.PERMISSION_GRANTED ||
@@ -432,6 +530,11 @@ class MainActivity : AppCompatActivity() {
         val granted = hasMediaPermission()
         permissionView.isVisible = !granted
         pager.isVisible = granted
+        // 权限态变化时直接落到最终可见性：取消可能正在进行的导航滑入/滑出动画
+        navAnimator?.cancel()
+        navAnimator = null
+        bottomNav.translationY = 0f
+        bottomNav.alpha = 1f
         bottomNav.isVisible = granted && !selectionActive
         if (!granted) {
             toolbar.alpha = 1f
@@ -512,5 +615,14 @@ class MainActivity : AppCompatActivity() {
             R.id.action_multi_select,
             R.id.action_select_all,
         )
+
+        /** 底部导航胶囊下滑/滑入动画时长；多选菜单展开在导航隐藏完成后才开始。 */
+        const val NAV_ANIMATION_MS = 180L
+
+        /** 导航布局尚未完成测量时的兜底高度。 */
+        const val NAV_FALLBACK_HEIGHT_DP = 120
+
+        /** 下滑目标额外多滑一点，确保完全移出屏幕边缘。 */
+        const val NAV_SLIDE_EXTRA_DP = 8
     }
 }

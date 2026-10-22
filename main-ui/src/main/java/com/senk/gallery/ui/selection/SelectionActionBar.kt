@@ -98,9 +98,10 @@ class SelectionActionBar @JvmOverloads constructor(
         }
     }
 
-    /** 退出多选：胶囊收缩回圆后隐藏。重复调用幂等。 */
-    fun hideAnimated() {
+    /** 退出多选：胶囊收缩回圆后隐藏；若本来就没显示则立即回调 [onEnd]。 */
+    fun hideAnimated(onEnd: (() -> Unit)? = null) {
         if (!shown) {
+            onEnd?.invoke()
             return
         }
         shown = false
@@ -113,9 +114,11 @@ class SelectionActionBar @JvmOverloads constructor(
             start()
         }
         postDelayed({
+            // 收起期间若又进入多选（shown 重新为 true），保留胶囊并跳过结束回调
             if (!shown) {
                 visibility = GONE
                 resetToWrapContent()
+                onEnd?.invoke()
             }
         }, COLLAPSE_DURATION_MS + 40L)
     }

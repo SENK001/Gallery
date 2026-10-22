@@ -35,7 +35,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
                       → ViewerActivity（外部大图模式，不读本应用媒体库）
 ```
 
-胶囊导航的选中态：`nav_photos` / `nav_albums` 的 `isSelected`，由 `MainActivity.updateNavSelection(position)` 维护。多选态下胶囊导航隐藏。
+胶囊导航的选中态：`nav_photos` / `nav_albums` 的 `isSelected`，由 `MainActivity.updateNavSelection(position)` 维护。多选态下胶囊导航隐藏——**进入多选时先播放导航下滑隐藏（180ms），完全隐藏后再展开多选菜单**；退出时菜单先收起，再滑入导航。
 
 ## 2. 首启与隐私同意（`PrivacyActivity`）
 
@@ -96,7 +96,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 ### 4.4 多选与标题栏（`MainActivity`）
 
 - 标题栏菜单（`menu_main.xml`）：普通态 `[多选]`（`ic_multi_select`）；多选态 `[全选]`（`ic_select_all`）。点击分别调 `PhotosFragment.enterSelectionMode()` / `selectAll()`。
-- 多选态：标题 =「已选择 N 项」、导航图标 = 关闭（点击退出）、隐藏底部胶囊导航；返回键优先退出多选；退出后恢复应用标题与胶囊导航。
+- 多选态：标题 =「已选择 N 项」、导航图标 = 关闭（点击退出）、隐藏底部胶囊导航；返回键优先退出多选；退出后恢复应用标题与胶囊导航。照片页进入多选时**胶囊导航先下滑隐藏，隐藏完成后才播放多选菜单「圆 → 胶囊」展开动画**（`MainActivity.hideBottomNavAnimated` → `PhotosFragment.showSelectionActionBarAnimated`）；退出时顺序相反（菜单收缩完成后 `showBottomNavAnimated` 滑入导航）。
 - 菜单/标题/导航图标的颜色跟随 4.3 的三态。
 
 ### 4.5 宫格回调与 Fragment 懒创建
@@ -132,6 +132,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
 - 「全选」只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。
 - 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
+- **与底部导航的先后顺序（照片页）**：进入多选时 `MainActivity` 先把底部胶囊导航下滑隐藏（180ms，`translationY` + 透明度动画，动画结束回调），隐藏完成后才调用 `PhotosFragment.showSelectionActionBarAnimated()` 播放多选菜单展开；退出多选时先调用 `hideSelectionActionBarAnimated { showBottomNavAnimated() }` 让菜单收起后再滑入导航。快速来回切换时两段动画均可被取消并从中途状态衔接。
 
 ## 6. 照片页（`PhotosFragment`）
 

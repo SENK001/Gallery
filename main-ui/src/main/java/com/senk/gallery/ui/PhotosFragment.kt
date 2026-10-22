@@ -204,15 +204,21 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             return
         }
         lastSelectionCount = state.count
-        // 悬浮胶囊：进入多选从「圆」展开成胶囊，退出时收缩隐藏
-        if (state.isActive) {
-            actionBar?.showAnimated()
-        } else {
-            actionBar?.hideAnimated()
-        }
+        // 悬浮胶囊的显示/隐藏时机交给宿主（MainActivity）：进入时先让底部导航胶囊下滑隐藏，
+        // 退出时先让多选菜单收起，宿主再通过下面两个方法驱动胶囊动画，保证视觉顺序。
         // 多选时底部预留动作栏高度，避免最后一行被胶囊遮挡
         updateGridInsets()
         onSelectionStateChanged?.invoke(state.isActive, state.count)
+    }
+
+    /** 宿主（MainActivity）在底部导航胶囊下滑隐藏完成后调用：播放多选菜单「圆 → 胶囊」展开动画。 */
+    fun showSelectionActionBarAnimated() {
+        actionBar?.showAnimated()
+    }
+
+    /** 宿主（MainActivity）在退出多选时调用：收起多选菜单；收起完成后回调（用于滑入导航胶囊）。 */
+    fun hideSelectionActionBarAnimated(onEnd: (() -> Unit)? = null) {
+        actionBar?.hideAnimated(onEnd)
     }
 
     /** 动作栏动作的目标集合：按当前列表顺序返回已选条目。 */

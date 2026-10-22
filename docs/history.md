@@ -858,3 +858,35 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 退出多选：点关闭图标后动作栏收缩并隐藏（`uiautomator` 中 `selection_action_bar` 消失）；
 - 相册详情页（相机相册）点「多选」：胶囊 bounds 与照片页一致 `[146,2460][1134,2668]`；
 - 无崩溃。
+
+---
+
+## 2026-10-23 照片页进入多选：导航胶囊先下滑隐藏，再展开多选菜单
+
+**背景（用户要求）**：照片页进入多选时，tab 导航胶囊先下滑隐藏再播放多选菜单进入动画。
+
+**实现**：
+
+- `MainActivity` 新增底部导航胶囊的滑出/滑入动画：
+  - `hideBottomNavAnimated(onHidden)`：`translationY` 从当前值滑到「自身高度 + 底部 margin + 8dp」，
+    同时 alpha → 0（180ms `DecelerateInterpolator`），结束后 `GONE` 并回调；
+  - `showBottomNavAnimated()`：从屏幕下方滑回原位，alpha → 1；
+  - 从当前 `translationY` 起算，快速切换时可中途衔接；`updatePermissionState`/`onDestroy` 会取消动画并落到最终态。
+- 照片页多选状态改为**宿主编排**：
+  - `PhotosFragment.handleSelectionChanged` 不再直接播放菜单动画；新增
+    `showSelectionActionBarAnimated()` / `hideSelectionActionBarAnimated(onEnd)`；
+  - 进入：`onSelectionStateChanged(active=true)` → 隐藏导航 → 回调里
+    `photosFragment().showSelectionActionBarAnimated()` → 菜单「圆 → 胶囊」展开；
+  - 退出：`hideSelectionActionBarAnimated { if (!selectionActive) showBottomNavAnimated() }`
+    → 菜单先收缩，再滑入导航；
+  - `SelectionActionBar.hideAnimated(onEnd)` 增加结束回调（未显示时立即回调）。
+- 文档：ui-guide §5.1 / §6（胶囊导航）、verification 手测项、history。
+
+**真机验证（Redmi / Android 16）**：
+
+- 进入：点「多选」后约 50–100ms 截图已能看到**导航胶囊消失、多选菜单尚未出现**的中间帧，
+  下一帧菜单为完整胶囊（顺序正确，不同时播放）；最终 `uiautomator`：`bottom_nav` 不存在、
+  `selection_action_bar` 存在、标题「已选择 0 项」；
+- 退出：点关闭后先截到菜单**收缩中**（半透明且宽度变小的中间帧），最终 `bottom_nav` 恢复、
+  `selection_action_bar` 消失；
+- 快速回到正常态后重复进出一次无残留；无崩溃。

@@ -1010,3 +1010,32 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 再次单击退出沉浸：两栏从屏幕外滑回，`uiautomator` 中标题栏/底栏节点恢复；
 - 录制过程中意外产生双击缩放（测试脚本问题，非本功能）不影响动画判定；动画结束/中途均无崩溃；
 - 附带确认：带 GPS 的照片副标题正常显示「18:23 · 重庆市 南岸区」。
+
+---
+
+## 2026-10-23 修复：退出沉浸后标题栏/底部菜单不显示
+
+**背景（用户反馈）**：退出沉浸模式时，标题栏和菜单栏不显示。
+
+**现象与定位**：
+
+- `uiautomator` 里 `toolbar` / `bottom_bar` 节点都存在、`isVisible=true`、alpha=1、translationY=0、
+  width/height 正常，但截图只有两栏的白色背景与 GL 画面的白边，**标题文字与底部图标没有绘制**；
+- 打开/收起详情面板或左右翻页后，两栏会突然正常出现 —— 说明是**窗口内容没有重新合成**，不是属性错；
+- 根因：`GlImageViewer` 是使用独立 Surface 的 `GLSurfaceView`。进入沉浸把两栏设为 `GONE` 后，
+  退出时仅靠 ValueAnimator 把 alpha/translation 调回正常值，窗口内容在该区域没有重新合成。
+
+**修法**（`ViewerActivity.animateChromeHidden` 的显示分支）：
+
+- 退出动画结束时先置 `toolbar/bottomBar = INVISIBLE`，下一帧（`rootView.post`）再置 `VISIBLE`
+  （并检查 `!immersive`），用一次可见性切换强制窗口内容重新合成；
+- 进入沉浸（隐藏分支）仍为动画结束置 `GONE`，行为不变；
+- 清掉为定位问题临时加的 `dumpBarState` 日志。
+
+**真机验证（Redmi / Android 16）**：
+
+- 进入沉浸：两栏滑出，`uiautomator` 中两节点消失；
+- 退出沉浸（等动画结束）：截图标题「2026年10月16日 / 18:23 · 重庆市 南岸区」与底部
+  分享/收藏/删除图标均正常显示（修复前为空白白条）；
+- 快速 120ms 内进出一次：退出后两栏同样正常显示；
+- 无崩溃。

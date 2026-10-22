@@ -238,6 +238,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 - 单击 ≈ 切换沉浸：隐藏系统栏 + `toolbar` / `bottomBar`，窗口与根视图背景变 `ThemeUtils.mediaScrim`；退出沉浸时窗口背景恢复 `surfaceContent`。渲染器的观看底色同步切换（`viewer.setLightBackground(!immersive)`）。
 - **沉浸收放动画**：进入沉浸时**标题栏向上滑出、底部菜单向下滑出**并同步淡出（200ms，`ViewerActivity.animateChromeHidden(true)`），结束后才置 `GONE`；退出沉浸时标题栏从上方、底部菜单从下方滑回原位并淡入。动画中途再次单击会从当前位移/透明度继续（不跳变），面板手势接管两栏时由 `setSheetProgress` 取消动画并恢复栏状态；`onDestroy` 取消未完成的动画。
+- **退出沉浸后两栏必须可见（2026-10-23 修复）**：`GlImageViewer` 是独立 Surface 的 `GLSurfaceView`，仅把两栏的 alpha/translation/visibility 调回正常值时，真机出现「栏白色背景还在、标题与图标不绘制」，要等开合详情面板或翻页重新合成后才出现。因此退出动画结束时先置 `INVISIBLE`、下一帧再置 `VISIBLE`（一帧的可见性切换）强制窗口内容重新合成；进入沉浸/正常收放动画不受影响。
 - 查看器内部手势：双击缩放（2.5× / 复位）、双指缩放（1×–5×）、放大态拖动平移、非放大时横滑翻页、上划拉起详情面板；单击落在视频页播放图标内 → 进播放器，否则切换沉浸。
 - **沉浸模式与详情面板（2026-10-20 修复）**：真机上沉浸态直接展开的面板不参与窗口合成（看不见）却仍接收触摸，点地图会误跳转。因此沉浸期间 `GlImageViewer.sheetTouchEnabled = false`，垂直上划改为 `onSheetUnavailableSwipeUp` → 先 `toggleImmersive()` 退出沉浸、再 `openSheet()` 展开面板——**看得见的面板才可交互**。进入沉浸前若面板还开着，`closeSheetImmediately()` 无动画复位，避免残留不可见面板。
 - 动态照片：长按播放内嵌视频、松手/翻页/退后台停止。

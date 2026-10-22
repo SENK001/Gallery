@@ -899,6 +899,18 @@ class ViewerActivity : AppCompatActivity() {
                     if (hidden) {
                         toolbar.isVisible = false
                         bottomBar.isVisible = false
+                    } else {
+                        // GLSurfaceView 使用独立 Surface：动画结束仅把 alpha/translation 调回 1/0
+                        // 时，窗口内容不一定重新合成（真机表现为栏背景还在但标题/图标不显示）。
+                        // 用一帧的 INVISIBLE → VISIBLE 强制窗口内容重新合成，确保两栏可见。
+                        toolbar.isVisible = false
+                        bottomBar.isVisible = false
+                        rootView.post {
+                            if (!immersive) {
+                                toolbar.isVisible = true
+                                bottomBar.isVisible = true
+                            }
+                        }
                     }
                 }
             })

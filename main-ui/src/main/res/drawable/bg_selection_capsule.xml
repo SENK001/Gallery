@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  多选动作栏的「悬浮胶囊」底：主题 surface 底 + 高度一半的圆角（32dp = 64dp 高 / 2）。
+  宽度动画到 64dp 时恰好是一个圆（进入多选时由圆展开成胶囊）。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/gallery_surface_chrome" />
+    <corners android:radius="32dp" />
+</shape>

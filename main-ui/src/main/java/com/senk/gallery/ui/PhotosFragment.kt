@@ -204,8 +204,13 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             return
         }
         lastSelectionCount = state.count
-        actionBar?.isVisible = state.isActive
-        // 多选时底部换成动作栏高度，避免最后一行被动作栏遮挡
+        // 悬浮胶囊：进入多选从「圆」展开成胶囊，退出时收缩隐藏
+        if (state.isActive) {
+            actionBar?.showAnimated()
+        } else {
+            actionBar?.hideAnimated()
+        }
+        // 多选时底部预留动作栏高度，避免最后一行被胶囊遮挡
         updateGridInsets()
         onSelectionStateChanged?.invoke(state.isActive, state.count)
     }
@@ -227,7 +232,7 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             systemBarsBottom = bars.bottom
             topInset = bars.top + toolbarHeightPx()
-            actionBar?.setPadding(0, 0, 0, bars.bottom)
+            actionBar?.setBottomInset(bars.bottom)
             updateGridInsets()
             insets
         }

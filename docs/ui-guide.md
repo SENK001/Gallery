@@ -125,13 +125,13 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 进入方式：标题栏「多选」按钮，或长按格子（进入时选中该格）。退出：关闭图标、返回键、或用户把已选取消到 0 项（自动退出）。
 - **滑动选择（刷选）**：多选态下在格子上按下并**横向拖动**，手指划过的格子按起点格子的状态批量**选中/取消**（起点未选 → 整段为选中刷选；起点已选 → 整段为取消刷选）；可跨行斜向拖动，快速滑动时按半格步长插值命中、不漏格；手指靠近上下边缘会自动滚动以便连续刷选。**纵向拖动仍是正常滚动列表**：首个超过 `touchSlop` 的位移方向决定本次手势类型（横 = 刷选、纵 = 滚动），锁定后不再切换，避免边滚边误选。实现见 `MediaGridView.onInterceptTouchEvent` / `onTouchEvent`；上限/Toast 逻辑与点击选择一致（一次刷选最多提示一次「已达最大选择数」）。
 - **长按进入多选后不松手继续拖动**：直接进入刷选（长按已表达选择意图，**方向不再区分**，固定为批量选中；起点格子已由长按选中，不会被误判为取消刷选）。松手后再开始新手势则恢复上面的方向判定规则。
-- 底部动作栏 `view_selection_action_bar.xml`（分享/收藏/添加到/删除，图标+中文，深色模式跟随主题）：
+- **底部动作栏（悬浮胶囊）** `view_selection_action_bar.xml`：4 个动作项（分享/收藏/添加到/删除，图标+中文，深色模式跟随主题），每项固定 72dp 宽；整体是**居中悬浮在底部的胶囊**（圆角 = 高度一半 32dp，底部外边距 = 系统导航栏 + 16dp），不占满整行、不贴屏幕边缘。**进入多选时从底部中央的 64dp 圆横向展开成 304dp 胶囊**（宽度动画 260ms + 内容延迟 80ms 淡入），退出时反向收缩后隐藏；动画在 `SelectionActionBar.showAnimated()/hideAnimated()` 中实现。动作：
   - **分享**：单张 `ACTION_SEND`、多张 `ACTION_SEND_MULTIPLE` + `ClipData` + `FLAG_GRANT_READ_URI_PERMISSION`。
   - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
   - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
 - 「全选」只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。
-- 多选时宫格底部预留切换为动作栏高度，避免最后一行被动作栏遮挡。
+- 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
 
 ## 6. 照片页（`PhotosFragment`）
 

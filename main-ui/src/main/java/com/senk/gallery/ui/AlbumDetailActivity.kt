@@ -257,7 +257,12 @@ class AlbumDetailActivity : AppCompatActivity() {
             return
         }
         lastSelectionCount = state.count
-        actionBar.isVisible = state.isActive
+        // 悬浮胶囊：进入多选从「圆」展开成胶囊，退出时收缩隐藏
+        if (state.isActive) {
+            actionBar.showAnimated()
+        } else {
+            actionBar.hideAnimated()
+        }
         if (state.isActive) {
             toolbar.title = getString(R.string.grid_selected_count, state.count)
             toolbar.setNavigationIcon(R.drawable.ic_close)
@@ -391,7 +396,7 @@ class AlbumDetailActivity : AppCompatActivity() {
                 scrim.layoutParams = it
             }
             scrim.background = ToolbarScrimDrawable(scrimHeight)
-            actionBar.setPadding(0, 0, 0, bars.bottom)
+            actionBar.setBottomInset(bars.bottom)
             updateGridInsets()
             insets
         }

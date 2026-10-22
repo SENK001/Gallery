@@ -822,3 +822,39 @@ androidComponents { onVariants(selector().all()) { variant ->
   漏掉手指经过的第一格），标题「已选择 4 项」；
 - 长按后**向下**拖动（`DOWN → 长按 → MOVE 700/900 → UP`）：方向不限直接刷选，选中 2 格；
 - 回归：松手后普通横向刷选仍为 4 格；多选态纵向拖动仍正常滚动且已选计数不变；无崩溃。
+
+---
+
+## 2026-10-23 多选菜单改为悬浮胶囊（进入时由圆展开）
+
+**背景（用户要求）**：多选模式菜单改为悬浮胶囊形；进入多选时菜单从中间由一个圆展开成胶囊。
+
+**实现**：
+
+- 外观：新增 `bg_selection_capsule`（surface 底 + 32dp 圆角 = 高度 64dp 的一半）与
+  `Widget.Gallery.SelectionCapsule`（12dp elevation、clipToOutline、左右 8dp 内边距）；
+  照片页/相册详情页的 `SelectionActionBar` 改为 `layout_width=wrap_content`、
+  `layout_gravity=bottom|center_horizontal`，底部外边距 = 系统导航栏 + 16dp，**不再占满整行**。
+- 动作项：`view_selection_action_bar.xml` 由 4 个 `0dp + weight=1` 改为固定 **72dp**，
+  胶囊最终宽度 = 8 + 4×72 + 8 = **304dp**（与 `SelectionActionBar` 动画常量一致）。
+- 动画（`SelectionActionBar`）：
+  - `showAnimated()`：先显示 64dp×64dp 圆（宽度=高度 → 圆角 32dp 即正圆），
+    下一帧开始宽度 64→304dp（260ms `DecelerateInterpolator`），动作项 alpha 延迟 80ms 从 0→1；
+  - `hideAnimated()`：宽度收缩回 64dp（160ms）后 GONE，动作项同步淡出；
+  - 幂等、可被快速切换打断（取消动画），detach 时取消动画。
+- 宿主：`PhotosFragment` / `AlbumDetailActivity` 的可见性从 `isVisible = active` 改为
+  `showAnimated()/hideAnimated()`；insets 从 `setPadding(bottom)` 改为 `setBottomInset(bars.bottom)`
+  （胶囊改用外边距，避免内容被垫在胶囊内部）。宫格底部预留仍为 64dp + 导航栏，滚动到底时最后一行不被胶囊遮挡。
+- 「最近删除」页的两动作栏（`trash_action_bar`）保持不变，仍用整行 `Widget.Gallery.SelectionActionBar`。
+- 文档：ui-guide §5.1、theme.md 样式分组、verification 手测项、README、history。
+
+**真机验证（Redmi / Android 16）**：
+
+- 照片页点「多选」：动作栏最终 bounds `[146,2460][1134,2668]`（宽 988px = 304dp、高 208px = 64dp、
+  水平居中、底部距屏底 104px = 32dp = 导航栏 16dp + 外边距 16dp），截图确认是悬浮胶囊；
+- 进入动画：进入后约 80ms 截图可见胶囊处于**半展开**状态、动作项尚未完全淡入（宽度动画生效），
+  约 500ms 后为完整 304dp 胶囊（4 个动作 图标+文字齐全）；
+- 动作点击：选中 1 张后点胶囊「添加到」→ 正常进入 `AddToAlbumActivity`；
+- 退出多选：点关闭图标后动作栏收缩并隐藏（`uiautomator` 中 `selection_action_bar` 消失）；
+- 相册详情页（相机相册）点「多选」：胶囊 bounds 与照片页一致 `[146,2460][1134,2668]`；
+- 无崩溃。

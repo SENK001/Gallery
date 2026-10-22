@@ -16,13 +16,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 多选动作栏：仅多选态可见（底部内边距 = 系统导航栏，由 Fragment 按 insets 设置） -->
+    <!-- 多选动作栏：悬浮胶囊、仅多选态可见（底部外边距 = 系统导航栏 + 16dp，由 Fragment 按 insets 设置） -->
     <com.senk.gallery.ui.selection.SelectionActionBar
         android:id="@+id/selection_action_bar"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
+        android:layout_gravity="bottom|center_horizontal"
         android:visibility="gone"
-        style="@style/Widget.Gallery.SelectionActionBar" />
+        style="@style/Widget.Gallery.SelectionCapsule" />
 
 </FrameLayout>

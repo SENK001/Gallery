@@ -55,8 +55,21 @@
 
     <!-- ==================== 多选底部动作栏 ==================== -->
 
-    <!-- 动作栏：与标题栏同色（chrome 底色），深色模式自动跟随；阴影与内容分层。
-         高度 = 内容 64dp（由布局里的动作项决定）+ 系统导航栏 padding（由代码按 insets 设置）。 -->
+    <!--
+      悬浮胶囊动作栏（照片页 / 相册详情页）：居中悬浮在底部、不贴屏幕边缘，
+      圆角 = 高度一半（32dp），进入多选时宽度由 64dp 圆展开为 304dp 胶囊。
+      左右 8dp + 4 个 72dp 动作项 = 304dp（与 view_selection_action_bar.xml 保持一致）。
+    -->
+    <style name="Widget.Gallery.SelectionCapsule">
+        <item name="android:background">@drawable/bg_selection_capsule</item>
+        <item name="android:elevation">12dp</item>
+        <item name="android:clipToOutline">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+    </style>
+
+    <!-- 「最近删除」页的两动作栏仍用不透明整行底（非悬浮胶囊） -->
     <style name="Widget.Gallery.SelectionActionBar">
         <item name="android:background">@color/gallery_surface_chrome</item>
         <item name="android:elevation">8dp</item>

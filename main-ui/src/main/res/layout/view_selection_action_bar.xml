@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   多选底部动作栏的内容（由 SelectionActionBar 以 merge 方式 inflate 进自身）。
+  每个动作固定 72dp 宽：4 个动作 + 胶囊左右各 8dp 内边距 = 304dp（与 SelectionActionBar 的宽度动画常量一致）。
 
   每个动作 = 图标 + 中文文字，容器可点击/可聚焦，contentDescription 直接用文字，
   保证 TalkBack 能逐项读出「分享 / 收藏 / 添加到 / 删除」。
@@ -9,9 +10,8 @@
 
     <LinearLayout
         android:id="@+id/selection_action_share"
-        android:layout_width="0dp"
+        android:layout_width="72dp"
         android:layout_height="64dp"
-        android:layout_weight="1"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
         android:contentDescription="@string/gallery_share"
@@ -38,9 +38,8 @@
 
     <LinearLayout
         android:id="@+id/selection_action_favorite"
-        android:layout_width="0dp"
+        android:layout_width="72dp"
         android:layout_height="64dp"
-        android:layout_weight="1"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
         android:contentDescription="@string/gallery_favorite"
@@ -67,9 +66,8 @@
 
     <LinearLayout
         android:id="@+id/selection_action_add_to"
-        android:layout_width="0dp"
+        android:layout_width="72dp"
         android:layout_height="64dp"
-        android:layout_weight="1"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
         android:contentDescription="@string/selection_add_to_album"
@@ -96,9 +94,8 @@
 
     <LinearLayout
         android:id="@+id/selection_action_delete"
-        android:layout_width="0dp"
+        android:layout_width="72dp"
         android:layout_height="64dp"
-        android:layout_weight="1"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
         android:contentDescription="@string/selection_delete"

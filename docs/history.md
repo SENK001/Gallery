@@ -890,3 +890,37 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 退出：点关闭后先截到菜单**收缩中**（半透明且宽度变小的中间帧），最终 `bottom_nav` 恢复、
   `selection_action_bar` 消失；
 - 快速回到正常态后重复进出一次无残留；无崩溃。
+
+---
+
+## 2026-10-23 修复：全选按钮再次点击无法取消全选
+
+**背景（用户反馈）**：全选按钮被再次点击时无法取消全选。
+
+**原因**：全选只有「选中全部」单向逻辑（`SelectionState.selectAll` / `GridPageController.selectAll`），
+再次点击只会重复全选；且 hosts 的「选到 0 项自动退出多选」逻辑会让清空操作直接退出多选，
+无法实现「取消全选但保持多选态」。
+
+**修法**：
+
+- `SelectionState` 新增 `clear()`（清空已选、保持 `isActive`，一次通知）与
+  `isAllSelected(items)`（空列表返回 false）；
+- `GridPageController` 新增 `toggleSelectAll()` / `isAllSelected()`：已全选 → `clear()`，
+  否则 `selectAll()`；
+- 三个多选宿主统一改为切换语义：
+  - 照片页：`PhotosFragment.toggleSelectAll()`（MainActivity 菜单点击），
+    `suppressAutoExitOnZero` 抑制「取消全选」触发的自动退出；菜单文案随 `isAllSelected()`
+    在「全选 / 取消全选」之间切换（新增 `grid_deselect_all`）；
+  - 相册详情页 / 最近删除页：`selectAllItem` 点击改 `toggleSelectAll()`，同样抑制自动退出，
+    并同步菜单文案；
+- 单元测试：`SelectionStateTest` 新增 `clear keeps active`、`isAllSelected` 两个用例。
+
+**真机验证（Redmi / Android 16）**：
+
+- 照片页：进多选（0 项）→ 点全选：标题「已选择 200 项」（已加载一页）、按钮变「取消全选」→
+  再点一次：标题「已选择 0 项」、全部勾选清空、**多选态与底部胶囊仍在**、按钮变回「全选」；
+- 回归：取消全选后点某个格子选中 1 项、再点同一格 → 仍自动退出多选（胶囊消失、导航恢复）；
+- 相册详情页（相机相册，12 项）：全选 →「已选择 12 项」/「取消全选」→ 再点 →「已选择 0 项」保持多选态；
+- 最近删除页（先制造 1 条可删副本）：全选 → 1 项、按钮「取消全选」→ 再点 → 0 项、保持多选态；
+  测试后已「彻底删除」该副本，回收站清空、相册页入口消失；
+- 单测通过（新增 2 个用例）；无崩溃。

@@ -61,6 +61,9 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     /** 上一次回调的选中数量：用于「取消最后一项时自动退出多选」。 */
     private var lastSelectionCount = 0
 
+    /** `toggleSelectAll` 期间置 true：取消全选导致 count=0 时不自动退出多选。 */
+    private var suppressAutoExitOnZero = false
+
     /** 正在等待系统确认的动作（恢复 / 彻底删除 / 清空）。 */
     private enum class PendingAction { RESTORE, DELETE, CLEAR_ALL }
 
@@ -143,7 +146,12 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             isVisible = false
             setOnMenuItemClickListener {
-                pageController?.selectAll()
+                suppressAutoExitOnZero = true
+                try {
+                    pageController?.toggleSelectAll()
+                } finally {
+                    suppressAutoExitOnZero = false
+                }
                 true
             }
         }
@@ -211,7 +219,9 @@ class RecentlyDeletedActivity : AppCompatActivity() {
 
     private fun handleSelectionChanged(state: SelectionState) {
         // 用户取消最后一项时自动退出多选（通过菜单刚进入、还没选任何项时不触发）
-        if (state.isActive && state.count == 0 && lastSelectionCount > 0) {
+        if (state.isActive && state.count == 0 && lastSelectionCount > 0 &&
+            !suppressAutoExitOnZero
+        ) {
             lastSelectionCount = 0
             grid.selection.exit()
             return
@@ -222,6 +232,14 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             toolbar.title = getString(R.string.grid_selected_count, state.count)
             toolbar.setNavigationIcon(R.drawable.ic_close)
             toolbar.navigationContentDescription = getString(R.string.grid_exit_selection)
+            // 全选按钮切换语义：全部已选时显示「取消全选」
+            selectAllItem?.title = getString(
+                if (pageController?.isAllSelected() == true) {
+                    R.string.grid_deselect_all
+                } else {
+                    R.string.grid_select_all
+                },
+            )
         } else {
             toolbar.title = getString(R.string.trash_title)
             toolbar.setNavigationIcon(R.drawable.ic_arrow_back)

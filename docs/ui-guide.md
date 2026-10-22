@@ -95,7 +95,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 ### 4.4 多选与标题栏（`MainActivity`）
 
-- 标题栏菜单（`menu_main.xml`）：普通态 `[多选]`（`ic_multi_select`）；多选态 `[全选]`（`ic_select_all`）。点击分别调 `PhotosFragment.enterSelectionMode()` / `selectAll()`。
+- 标题栏菜单（`menu_main.xml`）：普通态 `[多选]`（`ic_multi_select`）；多选态 `[全选]`（`ic_select_all`，全部已选时文案/无障碍描述切为 **取消全选**）。点击分别调 `PhotosFragment.enterSelectionMode()` / `toggleSelectAll()`。
 - 多选态：标题 =「已选择 N 项」、导航图标 = 关闭（点击退出）、隐藏底部胶囊导航；返回键优先退出多选；退出后恢复应用标题与胶囊导航。照片页进入多选时**胶囊导航先下滑隐藏，隐藏完成后才播放多选菜单「圆 → 胶囊」展开动画**（`MainActivity.hideBottomNavAnimated` → `PhotosFragment.showSelectionActionBarAnimated`）；退出时顺序相反（菜单收缩完成后 `showBottomNavAnimated` 滑入导航）。
 - 菜单/标题/导航图标的颜色跟随 4.3 的三态。
 
@@ -122,7 +122,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 - `SelectionState` 是**与 View 无关**的状态机：只保存媒体 id（`LinkedHashSet`，保留点选顺序）、`isActive`、`maxCount`，监听器回调刷新宫格/宿主 UI；分页刷新后旧 `MediaItem` 被替换也不会错位（按 id 匹配）。
 - `MediaGridView` 在多选态内自行处理点击 toggle；宿主只监听 `onSelectionChanged`，更新标题/动作栏/底部 inset。
-- 进入方式：标题栏「多选」按钮，或长按格子（进入时选中该格）。退出：关闭图标、返回键、或用户把已选取消到 0 项（自动退出）。
+- 进入方式：标题栏「多选」按钮，或长按格子（进入时选中该格）。退出：关闭图标、返回键、或用户把已选取消到 0 项（自动退出；**「取消全选」批量清空除外**，保持多选态）。
 - **滑动选择（刷选）**：多选态下在格子上按下并**横向拖动**，手指划过的格子按起点格子的状态批量**选中/取消**（起点未选 → 整段为选中刷选；起点已选 → 整段为取消刷选）；可跨行斜向拖动，快速滑动时按半格步长插值命中、不漏格；手指靠近上下边缘会自动滚动以便连续刷选。**纵向拖动仍是正常滚动列表**：首个超过 `touchSlop` 的位移方向决定本次手势类型（横 = 刷选、纵 = 滚动），锁定后不再切换，避免边滚边误选。实现见 `MediaGridView.onInterceptTouchEvent` / `onTouchEvent`；上限/Toast 逻辑与点击选择一致（一次刷选最多提示一次「已达最大选择数」）。
 - **长按进入多选后不松手继续拖动**：直接进入刷选（长按已表达选择意图，**方向不再区分**，固定为批量选中；起点格子已由长按选中，不会被误判为取消刷选）。松手后再开始新手势则恢复上面的方向判定规则。
 - **底部动作栏（悬浮胶囊）** `view_selection_action_bar.xml`：4 个动作项（分享/收藏/添加到/删除，图标+中文，深色模式跟随主题），每项固定 72dp 宽；整体是**居中悬浮在底部的胶囊**（圆角 = 高度一半 32dp，底部外边距 = 系统导航栏 + 16dp），不占满整行、不贴屏幕边缘。**进入多选时从底部中央的 64dp 圆横向展开成 304dp 胶囊**（宽度动画 260ms + 内容延迟 80ms 淡入），退出时反向收缩后隐藏；动画在 `SelectionActionBar.showAnimated()/hideAnimated()` 中实现。动作：
@@ -130,7 +130,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
   - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
-- 「全选」只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。
+- 「全选」是**切换按钮**：只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。全部已选时按钮文案变为「取消全选」，**再次点击清空已选并保持多选态**（不会因 count 归零自动退出；`toggleSelectAll` 期间用 `suppressAutoExitOnZero` 抑制自动退出）。取消全选后再点单个格子/关闭按钮仍按原逻辑退出。
 - 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
 - **与底部导航的先后顺序（照片页）**：进入多选时 `MainActivity` 先把底部胶囊导航下滑隐藏（180ms，`translationY` + 透明度动画，动画结束回调），隐藏完成后才调用 `PhotosFragment.showSelectionActionBarAnimated()` 播放多选菜单展开；退出多选时先调用 `hideSelectionActionBarAnimated { showBottomNavAnimated() }` 让菜单收起后再滑入导航。快速来回切换时两段动画均可被取消并从中途状态衔接。
 
@@ -161,7 +161,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 - insets：top = 状态栏 + `actionBarSize`；bottom = **系统导航栏高度**（本页没有胶囊导航，不要再加 72dp 占位）；多选时 bottom = 动作栏 64dp + 导航栏。
 - 上划切换与照片页相同的 40px 死区：静止 → 主题色标题栏 + 主题色标题/返回键；上划 → 遮罩接管、标题/返回键/菜单图标转白、`status_bar_bg` 隐藏。
-- 多选：菜单用代码创建（main-ui 不新增 menu 资源）——`[多选]` / `[全选]`；返回键先退出多选；底部动作栏同 §5.1。
+- 多选：菜单用代码创建（main-ui 不新增 menu 资源）——`[多选]` / `[全选]`（切换语义：全部已选时变「取消全选」，再次点击清空并保持多选态）；返回键先退出多选；底部动作栏同 §5.1。
 - **自建相册的「添加」**：标题栏最左侧常驻 `[添加 +]` 菜单（仅 `album_type=custom` 显示，系统/目录/三方相册没有该按钮）。点击进入选图页（多选、不限数量、标题「选择照片和视频」），并把**当前相册已有成员预选**（`ImagePickerActivity` 的 `EXTRA_PRESELECTED_ALBUM_URI`）。确认后按「选中集合 = 相册成员」更新：新勾选加入、取消勾选移除（`CustomAlbumStore.addItems/removeItems` diff 写入），被移除的恰好是封面时清空封面交给成员兜底；Toast「已更新相册（新增 X，移除 Y）」，无变化时提示「没有变化」。
 - 数据：`EXTRA_BASE_URI`（相册内容 URI）+ `EXTRA_TITLE` + `EXTRA_ALBUM_TYPE` + `EXTRA_ALBUM_ID`（后两者供自建相册添加流程使用）；`PAGE_SIZE = 200` 分页；`ContentObserver` 变化时重载回顶。
 - 点击缩略图 → `ViewerActivity(baseUri, position)`（翻页范围就是本相册）。
@@ -173,7 +173,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - **页面结构**：不透明标题栏 + View 宫格 + 多选底部动作栏；复用 `MediaGridView` / `GridPageController` / `SelectionState`，与照片页/相册详情页同一套宫格与多选交互。
 - **交互**：
   - 点击缩略图 → 查看器（baseUri 为最近删除列表，翻页范围即回收站）；
-  - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选；底部动作栏 **恢复 / 彻底删除**；
+  - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选（切换语义，再次点击取消全选）；底部动作栏 **恢复 / 彻底删除**；
   - 标题栏溢出菜单 **清空**：先二次确认（显示条数），再彻底删除回收站全部条目；
   - **恢复** = `MediaStore.createTrashRequest(uris, false)`、**彻底删除** = `MediaStore.createDeleteRequest(uris)`，两者都会由系统弹出「允许修改/删除」确认框；
   - 成功后退出多选并重新加载；回收站清空后返回相册页，入口自动消失。

@@ -32,7 +32,7 @@ import com.senk.gallery.util.DisplayUtils
  * 与宿主的解耦：
  * - 标题栏渐变由 [onGridScroll] 交给 MainActivity（40px 死区判定在宿主）；
  * - 多选状态由 [onSelectionStateChanged] 通知宿主（标题「已选择 N 项」/导航图标/隐藏胶囊导航）；
- * - 宿主通过 [enterSelectionMode]/[exitSelectionMode]/[selectAll] 反向驱动本页。
+ * - 宿主通过 [enterSelectionMode]/[exitSelectionMode]/[toggleSelectAll] 反向驱动本页。
  * - 分页/内容变化刷新等页面无关逻辑在 [GridPageController]（与相册详情页共用）。
  */
 class PhotosFragment : Fragment(R.layout.fragment_photos) {
@@ -60,6 +60,12 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
 
     /** 上一次回调的选中数量：用于「用户取消最后一项时自动退出多选」。 */
     private var lastSelectionCount = 0
+
+    /**
+     * 「取消全选」触发的 count=0 不应自动退出多选（否则用户无法在全选后继续换选）。
+     * 仅在 `toggleSelectAll` 调用期间置 true。
+     */
+    private var suppressAutoExitOnZero = false
 
     // ActivityResult 统一在这里注册（生命周期安全），再转给 SelectionActions：
     // 删除走系统授权 IntentSender；添加到相册走普通 ActivityResult。
@@ -156,10 +162,18 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         grid?.selection?.exit()
     }
 
-    /** 全选当前已加载的条目（受 selection.maxCount 限制）。 */
-    fun selectAll() {
-        pageController?.selectAll()
+    /** 全选 / 取消全选当前已加载的条目（受 selection.maxCount 限制）；取消全选后保持多选态。 */
+    fun toggleSelectAll() {
+        suppressAutoExitOnZero = true
+        try {
+            pageController?.toggleSelectAll()
+        } finally {
+            suppressAutoExitOnZero = false
+        }
     }
+
+    /** 当前已加载条目是否已全选（宿主用于把菜单文案切到「取消全选」）。 */
+    fun isAllSelected(): Boolean = pageController?.isAllSelected() == true
 
     /**
      * 把宫格**当前**滚动位置同步给宿主（MainActivity 的标题栏三态）。
@@ -198,7 +212,9 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
 
     private fun handleSelectionChanged(state: SelectionState) {
         // 用户取消最后一项时自动退出多选（通过菜单刚进入、还没选任何项时不触发）
-        if (state.isActive && state.count == 0 && lastSelectionCount > 0) {
+        if (state.isActive && state.count == 0 && lastSelectionCount > 0 &&
+            !suppressAutoExitOnZero
+        ) {
             lastSelectionCount = 0
             grid?.selection?.exit()
             return

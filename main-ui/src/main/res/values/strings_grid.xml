@@ -16,6 +16,7 @@
     <!-- 多选入口 / 状态 -->
     <string name="grid_multi_select">多选</string>
     <string name="grid_select_all">全选</string>
+    <string name="grid_deselect_all">取消全选</string>
     <string name="grid_exit_selection">退出多选</string>
     <string name="grid_selected_count">已选择 %1$d 项</string>
     <string name="grid_selection_limit_reached">最多只能选择 %1$d 项</string>

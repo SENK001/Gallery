@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.action_select_all -> {
-                    photosFragment()?.selectAll()
+                    photosFragment()?.toggleSelectAll()
                     true
                 }
                 else -> false
@@ -295,7 +295,18 @@ class MainActivity : AppCompatActivity() {
         val menu = toolbar.menu
         menu.findItem(R.id.action_multi_select)?.isVisible =
             !selectionActive && onPhotosPage && hasMediaPermission()
-        menu.findItem(R.id.action_select_all)?.isVisible = selectionActive
+        val selectAllItem = menu.findItem(R.id.action_select_all)
+        selectAllItem?.isVisible = selectionActive
+        if (selectionActive) {
+            // 全选按钮为切换语义：全部已选时显示「取消全选」，再次点击清空并保持多选态
+            selectAllItem?.title = getString(
+                if (photosFragment()?.isAllSelected() == true) {
+                    UiR.string.grid_deselect_all
+                } else {
+                    UiR.string.grid_select_all
+                },
+            )
+        }
     }
 
     /**

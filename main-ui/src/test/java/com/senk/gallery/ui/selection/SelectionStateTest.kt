@@ -96,6 +96,40 @@ class SelectionStateTest {
     }
 
     @Test
+    fun `clear empties selection but keeps selection mode active`() {
+        val state = SelectionState()
+        state.enter(item(1))
+        state.toggle(item(2))
+        var notifications = 0
+        state.addListener { notifications++ }
+
+        state.clear()
+        assertEquals(0, state.count)
+        assertTrue("取消全选后仍应保持多选态", state.isActive)
+        assertEquals(1, notifications)
+
+        // 已空时再 clear 不重复通知
+        state.clear()
+        assertEquals(1, notifications)
+    }
+
+    @Test
+    fun `isAllSelected detects full partial and empty states`() {
+        val state = SelectionState()
+        val items = listOf(item(1), item(2), item(3))
+
+        assertFalse("空列表不算全选", state.isAllSelected(emptyList()))
+        assertFalse(state.isAllSelected(items))
+
+        state.selectAll(items)
+        assertTrue(state.isAllSelected(items))
+        assertTrue(state.isAllSelected(listOf(item(2), item(1))))
+
+        state.deselect(2)
+        assertFalse(state.isAllSelected(items))
+    }
+
+    @Test
     fun `exit clears selection and notifies listeners`() {
         val state = SelectionState()
         var notifications = 0

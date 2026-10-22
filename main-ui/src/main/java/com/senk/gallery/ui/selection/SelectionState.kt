@@ -126,6 +126,19 @@ class SelectionState {
         }
     }
 
+    /** 取消全部已选（保持多选态，用于「取消全选」）。 */
+    fun clear() {
+        if (selectedIdsInternal.isEmpty()) {
+            return
+        }
+        selectedIdsInternal.clear()
+        notifyListeners()
+    }
+
+    /** 给定列表是否已全部选中（空列表返回 false，避免「全选/取消全选」来回跳）。 */
+    fun isAllSelected(items: List<MediaItem>): Boolean =
+        items.isNotEmpty() && items.all { selectedIdsInternal.contains(it.id) }
+
     /**
      * 批量按 id 预选（一次回调）：选图页打开时用它勾选「已加入当前相册」的条目。
      *

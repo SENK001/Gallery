@@ -80,6 +80,9 @@ class AlbumDetailActivity : AppCompatActivity() {
     /** 上一次回调的选中数量：用于「用户取消最后一项时自动退出多选」。 */
     private var lastSelectionCount = 0
 
+    /** `toggleSelectAll` 期间置 true：取消全选导致 count=0 时不自动退出多选。 */
+    private var suppressAutoExitOnZero = false
+
     // ActivityResult（删除授权 / 添加到相册）统一在这里注册，再转给 SelectionActions；
     // 收藏已改为应用内自建库（不写系统媒体库），无需系统授权。
     private val trashConsentLauncher = registerForActivityResult(
@@ -186,7 +189,12 @@ class AlbumDetailActivity : AppCompatActivity() {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             isVisible = false
             setOnMenuItemClickListener {
-                pageController?.selectAll()
+                suppressAutoExitOnZero = true
+                try {
+                    pageController?.toggleSelectAll()
+                } finally {
+                    suppressAutoExitOnZero = false
+                }
                 true
             }
         }
@@ -251,7 +259,9 @@ class AlbumDetailActivity : AppCompatActivity() {
 
     private fun handleSelectionChanged(state: SelectionState) {
         // 用户取消最后一项时自动退出多选（进入多选但还没选任何项时不触发）
-        if (state.isActive && state.count == 0 && lastSelectionCount > 0) {
+        if (state.isActive && state.count == 0 && lastSelectionCount > 0 &&
+            !suppressAutoExitOnZero
+        ) {
             lastSelectionCount = 0
             grid.selection.exit()
             return
@@ -269,6 +279,14 @@ class AlbumDetailActivity : AppCompatActivity() {
             addPhotosItem?.isVisible = false
             multiSelectItem?.isVisible = false
             selectAllItem?.isVisible = true
+            // 全选按钮切换语义：全部已选时显示「取消全选」
+            selectAllItem?.title = getString(
+                if (pageController?.isAllSelected() == true) {
+                    R.string.grid_deselect_all
+                } else {
+                    R.string.grid_select_all
+                },
+            )
         } else {
             toolbar.title = albumTitle
             toolbar.setNavigationIcon(R.drawable.ic_arrow_back)

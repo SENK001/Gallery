@@ -109,6 +109,25 @@ class GridPageController(
         grid.selection.selectAll(pager.items())
     }
 
+    /**
+     * 全选 / 取消全选当前已加载条目（多选菜单「全选」按钮的切换语义）：
+     * 已全选 → 清空已选并**保持多选态**；否则全选。
+     */
+    fun toggleSelectAll() {
+        val items = pager.items()
+        if (items.isEmpty()) {
+            return
+        }
+        if (grid.selection.isAllSelected(items)) {
+            grid.selection.clear()
+        } else {
+            grid.selection.selectAll(items)
+        }
+    }
+
+    /** 当前已加载条目是否已全选（用于切换菜单文案「全选 / 取消全选」）。 */
+    fun isAllSelected(): Boolean = grid.selection.isAllSelected(pager.items())
+
     /** 当前列表里是否存在指定 id 的条目（查看器定位用）。 */
     fun indexOf(id: Long): Int = pager.items().indexOfFirst { it.id == id }
 

@@ -956,3 +956,29 @@ androidComponents { onVariants(selector().all()) { variant ->
   点「恢复」无反应（无系统确认框）；选中 1 项后恢复可点，随后「彻底删除」走系统确认，
   测试后回收站清空、相册页入口消失；
 - 无崩溃。
+
+---
+
+## 2026-10-23 修复：冷启动未滑动时全选只选中首屏 200 项
+
+**背景（用户反馈）**：冷启动且未滑动时全选只能选中 200 项（总共 248 项）。
+
+**原因**：宫格按 `PAGE_SIZE=200` 分页加载，旧 `GridPageController.toggleSelectAll()` 只对
+`pager.items()`（当时已加载的一页）调用 `selectAll`，所以未滑动的冷启动最多只选 200 项。
+
+**修法**：
+
+- `GridPageController.toggleSelectAll()` 改为协程异步：
+  - 若**所有分页已加载且全选中**（新的 `isAllSelected()` = `pager.endReached()` 且已加载条目全选）→ `clear()`；
+  - 否则先 `loadAllPages()` 循环补加载剩余页（`pager.load(false)`，追加到宫格、保持滚动位置，
+    另一路径正在加载时 50ms 重试，最多 500 轮防死循环），完成后对完整列表 `selection.selectAll(...)`；
+  - `selectAllInProgress` 防止加载期间重复点击菜单；
+- 全选完成后 `pager.endReached() == true`，`selectedItems()` 也能覆盖全部条目，分享/删除等动作不会漏项；
+- 全选变成异步后，选择状态更新会照常触发宿主的标题/菜单/角标刷新（「取消全选」文案依旧正确）。
+
+**真机验证（Redmi / Android 16）**：
+
+- 冷启动后**不滑动**，进多选点「全选」：标题显示「已选择 **248** 项」（修复前 200 项），
+  菜单变「取消全选」；再点一次 →「已选择 0 项」、保持多选态、菜单变回「全选」；
+- 相册详情页（动态照片相册，12 项）全选同样按数据源全量选中；
+- 无崩溃。

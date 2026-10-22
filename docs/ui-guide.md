@@ -131,7 +131,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
 - **未选择任何项时禁用菜单**：多选态下 4 个动作置灰（38% 透明度、`enabled=false`）并禁用点击，**不弹 Toast / 不弹系统框**；选择至少 1 项后恢复。实现：`SelectionActionBar.setActionsEnabled(enabled)`，宿主在 `onSelectionChanged` 里传 `state.isActive && state.count > 0`（照片页同时挂到宿主的菜单顺序动画上；选择 0 时胶囊展开过程中也保持置灰观感）。禁用仍保留 `clickable=true`，让触摸被胶囊消费、不会穿透到下面的宫格误选。
-- 「全选」是**切换按钮**：只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。全部已选时按钮文案变为「取消全选」，**再次点击清空已选并保持多选态**（不会因 count 归零自动退出；`toggleSelectAll` 期间用 `suppressAutoExitOnZero` 抑制自动退出）。取消全选后再点单个格子/关闭按钮仍按原逻辑退出。
+- 「全选」是**切换按钮**：选中**全部条目**（不止当前已加载的一页）——点击时会先自动把剩余分页全部加载完（`GridPageController.toggleSelectAll` → `loadAllPages`），再一次性选中；冷启动未滑动时也能选满整个数据源（如 248 项而不是首屏 200 项）。全部已选时按钮文案变为「取消全选」，**再次点击清空已选并保持多选态**（不会因 count 归零自动退出；`toggleSelectAll` 期间用 `suppressAutoExitOnZero` 抑制自动退出）。取消全选后再点单个格子/关闭按钮仍按原逻辑退出。加载期间重复点击菜单会被忽略。
 - 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
 - **与底部导航的先后顺序（照片页）**：进入多选时 `MainActivity` 先把底部胶囊导航下滑隐藏（180ms，`translationY` + 透明度动画，动画结束回调），隐藏完成后才调用 `PhotosFragment.showSelectionActionBarAnimated()` 播放多选菜单展开；退出多选时先调用 `hideSelectionActionBarAnimated { showBottomNavAnimated() }` 让菜单收起后再滑入导航。快速来回切换时两段动画均可被取消并从中途状态衔接。
 
@@ -322,4 +322,4 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 视频播放无音频焦点管理；播放结束停在结尾画面，不自动重播。
 - 详情面板的地图地址、EXIF 均为进入面板时单次加载，翻页后自动重取（有 token 防错页）。
 - 外部大图模式不提供收藏/详情，只做浏览、分享与视频播放；`file://` 受 Android 7+ 跨应用限制。
-- 收藏保存在应用内自建库：系统相册不显示、旧系统收藏不导入、卸载/清数据后丢失；多选「全选」只覆盖已加载的条目；「添加到相机/文件夹相册」是复制（会产生重复文件），自建相册是逻辑集合（不复制）。
+- 收藏保存在应用内自建库：系统相册不显示、旧系统收藏不导入、卸载/清数据后丢失；多选「全选」会先加载全部条目再选中（覆盖整个数据源）；「添加到相机/文件夹相册」是复制（会产生重复文件），自建相册是逻辑集合（不复制）。

@@ -3,12 +3,16 @@ package com.senk.gallery.ui.grid
 import android.content.Context
 import android.graphics.Rect
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.util.DisplayUtils
+import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * 宫格控件（RecyclerView 子类）—— 照片页、相册详情页、选图页共用的多选宫格。
@@ -18,11 +22,14 @@ import com.senk.gallery.util.DisplayUtils
  * - 触摸/滚动/fling 全交给 RecyclerView，行为与系统一致；
  * - 多选状态由 [SelectionState] 持有，本类只负责：
  *   点击语义（普通点击 = onItemClick；多选态 = 内部 toggle）、局部刷新格子、把外部回调转发给宿主；
+ * - **滑动选择（刷选）**：仅多选态生效。首个移动方向用于区分手势——
+ *   横向拖动 = 刷选（手指划过的格子按起点状态批量选中/取消，可跨行、可在上下边缘自动滚动），
+ *   纵向拖动 = 正常滚动列表；手势在一开始锁定，避免边滚边误选；
  * - 分页：接近底部时回调 [onLoadMore]，宿主用 [MediaPager] 拉下一页后 [appendItems]；
  * - 铺满式布局：用 [setContentInsets] 设 padding 并 `clipToPadding = false`，
  *   内容可滚到状态栏/标题栏下面（标题栏渐变由宿主按 [onScrollChanged] 驱动）。
  *
- * 公开 API 即跨组契约，改动前先与选图页/相册页对齐。
+ * 公开 API 即跨模块契约，改动前先与选图页/相册页对齐。
  */
 class MediaGridView @JvmOverloads constructor(
     context: Context,
@@ -40,6 +47,24 @@ class MediaGridView @JvmOverloads constructor(
         cellSizeProvider = ::computeCellSize,
         emptyHeightProvider = { (height - paddingTop - paddingBottom).coerceAtLeast(0) },
     )
+
+    // ==================== 滑动选择（刷选）状态 ====================
+
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var paintStartPosition = NO_POSITION
+    private var gestureMode = GestureMode.UNDECIDED
+
+    /** 刷选模式：true = 本次手势批量选中；false = 批量取消（由起点格子的选中态决定）。 */
+    private var paintSelecting = true
+    private var lastPaintX = 0f
+    private var lastPaintY = 0f
+
+    /** 本次刷选是否已经提示过「已达最大选择数」（避免一次拖动弹多次 Toast）。 */
+    private var limitNotifiedInPaint = false
+
+    private enum class GestureMode { UNDECIDED, SCROLL, PAINT }
 
     /** 普通点击（非多选态）回调。 */
     var onItemClick: ((MediaItem) -> Unit)? = null
@@ -116,6 +141,165 @@ class MediaGridView @JvmOverloads constructor(
         )
     }
 
+    // ==================== 触摸：区分「滚动」与「刷选」 ====================
+
+    /**
+     * 多选态下的手势判定：
+     * - 首个超过 touchSlop 的位移若**横向占优** → 锁定为刷选，并拦截后续事件自己处理；
+     * - 若纵向占优 → 交给 RecyclerView 正常滚动（本次手势不再可能进入刷选）；
+     * - 非多选态完全走父类逻辑。
+     */
+    override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+        if (!selection.isActive) {
+            resetPaintGesture()
+            return super.onInterceptTouchEvent(e)
+        }
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                resetPaintGesture()
+                downX = e.x
+                downY = e.y
+                paintStartPosition = findAdapterPositionAt(e.x, e.y)
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (gestureMode == GestureMode.PAINT) {
+                    return true
+                }
+                if (gestureMode == GestureMode.UNDECIDED) {
+                    val dx = e.x - downX
+                    val dy = e.y - downY
+                    if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
+                        if (abs(dx) > abs(dy) && beginPaint()) {
+                            gestureMode = GestureMode.PAINT
+                            lastPaintX = e.x
+                            lastPaintY = e.y
+                            parent?.requestDisallowInterceptTouchEvent(true)
+                            return true
+                        }
+                        // 纵向为主（或起点不是有效格子）：本次手势按滚动处理
+                        gestureMode = GestureMode.SCROLL
+                    }
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> resetPaintGesture()
+        }
+        return super.onInterceptTouchEvent(e)
+    }
+
+    /**
+     * 刷选开始后事件被本控件拦截，后续 MOVE 在这里沿手指轨迹逐格应用选择；
+     * 手指靠近上下边缘时自动滚动，方便连续刷选长列表。
+     */
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (!selection.isActive || gestureMode != GestureMode.PAINT) {
+            return super.onTouchEvent(e)
+        }
+        when (e.actionMasked) {
+            MotionEvent.ACTION_MOVE -> {
+                paintAlong(lastPaintX, lastPaintY, e.x, e.y)
+                lastPaintX = e.x
+                lastPaintY = e.y
+                autoScrollWhilePainting(e.y)
+                return true
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // 刷选中出现多指：结束刷选，避免第二根手指继续改选中集合
+                resetPaintGesture()
+                return true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                resetPaintGesture()
+                return true
+            }
+        }
+        return true
+    }
+
+    /** 开始刷选：由起点格子当前是否选中决定整段手势是「批量选中」还是「批量取消」。 */
+    private fun beginPaint(): Boolean {
+        val position = paintStartPosition
+        if (position == NO_POSITION) {
+            return false
+        }
+        val item = gridAdapter.itemAt(position) ?: return false
+        paintSelecting = !selection.isSelected(item.id)
+        paintAt(position)
+        // 起点是「唯一已选项」且本次为取消刷选时，取消第一格后宿主可能会自动退出多选：
+        // 此时不再进入刷选，交给父类按普通触摸处理。
+        if (!selection.isActive) {
+            resetPaintGesture()
+            return false
+        }
+        return true
+    }
+
+    /**
+     * 沿两点之间插值逐点命中格子：快速滑动时 MOVE 事件稀疏，直接取终点会漏格，
+     * 因此按半格步长采样，保证划过的每一格都被处理。
+     */
+    private fun paintAlong(fromX: Float, fromY: Float, toX: Float, toY: Float) {
+        val distance = hypot((toX - fromX).toDouble(), (toY - fromY).toDouble())
+        val step = (cellSizePx() / 2f).coerceAtLeast(1f)
+        val steps = (distance / step).toInt().coerceAtLeast(1)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            val x = fromX + (toX - fromX) * t
+            val y = fromY + (toY - fromY) * t
+            val position = findAdapterPositionAt(x, y)
+            if (position != NO_POSITION) {
+                paintAt(position)
+            }
+        }
+    }
+
+    private fun paintAt(position: Int) {
+        val item = gridAdapter.itemAt(position) ?: return
+        if (paintSelecting) {
+            val wasSelected = selection.isSelected(item.id)
+            val nowSelected = selection.select(item)
+            if (!wasSelected && !nowSelected && !limitNotifiedInPaint &&
+                selection.count >= currentLimit()
+            ) {
+                limitNotifiedInPaint = true
+                onSelectionLimitReached?.invoke(currentLimit())
+            }
+        } else {
+            selection.deselect(item.id)
+        }
+    }
+
+    /** 刷选时手指接近上下边缘 → 自动滚动，便于连续选择长列表。 */
+    private fun autoScrollWhilePainting(y: Float) {
+        val edge = autoScrollEdgePx
+        when {
+            y < paddingTop + edge -> scrollBy(0, -AUTO_SCROLL_STEP_PX)
+            y > height - paddingBottom - edge -> scrollBy(0, AUTO_SCROLL_STEP_PX)
+        }
+    }
+
+    private fun findAdapterPositionAt(x: Float, y: Float): Int {
+        val child = findChildViewUnder(x, y) ?: return NO_POSITION
+        val position = getChildAdapterPosition(child)
+        if (position == NO_POSITION) {
+            return NO_POSITION
+        }
+        // 空态占位行也占一个 adapter position，用 itemAt 过滤掉
+        return if (gridAdapter.itemAt(position) != null) position else NO_POSITION
+    }
+
+    private fun resetPaintGesture() {
+        gestureMode = GestureMode.UNDECIDED
+        paintStartPosition = NO_POSITION
+        paintSelecting = true
+        limitNotifiedInPaint = false
+    }
+
+    // ==================== 数据 ====================
+
     /**
      * 全量替换数据（内容变化/刷新/切数据源）。
      *
@@ -189,6 +373,9 @@ class MediaGridView @JvmOverloads constructor(
 
     /** 选择状态变化：进入/退出多选整体刷新；普通勾选只刷新变化的那几格。 */
     private fun onSelectionStateChanged(state: SelectionState) {
+        if (!state.isActive) {
+            resetPaintGesture()
+        }
         if (state.isActive != lastSelectionActive) {
             lastSelectionActive = state.isActive
             lastSelectedIds = HashSet(state.selectedIds)
@@ -262,6 +449,10 @@ class MediaGridView @JvmOverloads constructor(
         return (span - gapPx).coerceAtLeast(1)
     }
 
+    /** 刷选自动滚动：手指进入上下边缘多少像素内开始滚。 */
+    private val autoScrollEdgePx: Int
+        get() = DisplayUtils.dp2px(context, AUTO_SCROLL_EDGE_DP).toInt()
+
     /**
      * 格子间隔：每格四周各留半个 gap，合并后行/列间距恰为一个 gap；
      * 每格分到的左右/上下偏移一致，因此宽度相同、高度 = 宽度的正方形不会被拉变。
@@ -290,5 +481,11 @@ class MediaGridView @JvmOverloads constructor(
 
         /** 距底部还剩几行时触发加载下一页。 */
         const val LOAD_MORE_THRESHOLD_ROWS = 2
+
+        /** 刷选时手指距上下边缘多少 dp 内开始自动滚动。 */
+        const val AUTO_SCROLL_EDGE_DP = 48f
+
+        /** 刷选自动滚动每次 MOVE 的步长（像素）。 */
+        const val AUTO_SCROLL_STEP_PX = 24
     }
 }

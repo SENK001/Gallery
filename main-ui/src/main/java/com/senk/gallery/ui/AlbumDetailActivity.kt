@@ -267,6 +267,8 @@ class AlbumDetailActivity : AppCompatActivity() {
             return
         }
         lastSelectionCount = state.count
+        // 未选择任何项时置灰禁用底部动作菜单（点击无响应、不弹 Toast）
+        actionBar.setActionsEnabled(state.isActive && state.count > 0)
         // 悬浮胶囊：进入多选从「圆」展开成胶囊，退出时收缩隐藏
         if (state.isActive) {
             actionBar.showAnimated()

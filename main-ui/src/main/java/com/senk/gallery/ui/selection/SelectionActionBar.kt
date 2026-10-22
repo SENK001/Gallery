@@ -21,6 +21,9 @@ import com.senk.gallery.ui.R
  * 只做「按钮容器 + 点击回调 + 动画」，具体动作逻辑在 [SelectionActions] 里 ——
  * 这样照片页（Fragment）与相册详情页（Activity）可以共用同一套按钮与动作实现。
  *
+ * 多选态但**未选择任何项**时，宿主调用 [setActionsEnabled] 把四个动作置灰禁用
+ * （38% 透明度、点击无响应、不弹 Toast）；选择至少 1 项后恢复。
+ *
  * 无障碍：每个动作项的 contentDescription 用可见文字（布局里已设置），可聚焦、可点击，
  * TalkBack 逐个读出动作名称。
  */
@@ -45,6 +48,12 @@ class SelectionActionBar @JvmOverloads constructor(
     private var shown = false
     private var bottomInsetPx = 0
 
+    /** 动作项是否可用：多选态但未选任何项时置灰禁用（点击无响应、无 Toast）。 */
+    private var actionsEnabled = true
+
+    /** 展开/收起动画驱动的内容透明度（与禁用态的 0.38 叠乘）。 */
+    private var contentAlpha = 1f
+
     init {
         orientation = HORIZONTAL
         LayoutInflater.from(context).inflate(R.layout.view_selection_action_bar, this)
@@ -65,6 +74,24 @@ class SelectionActionBar @JvmOverloads constructor(
         }
         bottomInsetPx = insetPx
         updateBottomMargin()
+    }
+
+    /**
+     * 设置动作项是否可用。
+     *
+     * 多选态下「未选择任何项」时由宿主传入 false：四个动作置灰（38% 透明度）、
+     * 禁用点击，避免用户点分享/删除却只看到 Toast 或完全无响应。
+     */
+    fun setActionsEnabled(enabled: Boolean) {
+        if (actionsEnabled == enabled) {
+            return
+        }
+        actionsEnabled = enabled
+        for (i in 0 until childCount) {
+            // 保持 clickable=true：禁用时仍消费触摸，避免点到下面的宫格误选
+            getChildAt(i).isEnabled = enabled
+        }
+        applyChildrenAlpha()
     }
 
     private fun updateBottomMargin() {
@@ -155,6 +182,13 @@ class SelectionActionBar @JvmOverloads constructor(
     }
 
     private fun setChildrenAlpha(alpha: Float) {
+        contentAlpha = alpha.coerceIn(0f, 1f)
+        applyChildrenAlpha()
+    }
+
+    /** 动画透明度 × 禁用态透明度：展开/收起过程中保持「未选择时置灰」的观感。 */
+    private fun applyChildrenAlpha() {
+        val alpha = contentAlpha * (if (actionsEnabled) 1f else DISABLED_ALPHA)
         for (i in 0 until childCount) {
             getChildAt(i).alpha = alpha.coerceIn(0f, 1f)
         }
@@ -186,6 +220,9 @@ class SelectionActionBar @JvmOverloads constructor(
 
         /** 胶囊底部与系统导航栏之间的间距。 */
         const val BOTTOM_MARGIN_DP = 16
+
+        /** 未选择任何项时动作项的透明度（Material 禁用态常用 38%）。 */
+        const val DISABLED_ALPHA = 0.38f
 
         const val EXPAND_DURATION_MS = 260L
         const val COLLAPSE_DURATION_MS = 160L

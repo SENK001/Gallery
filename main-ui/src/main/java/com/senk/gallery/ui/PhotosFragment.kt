@@ -220,6 +220,8 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             return
         }
         lastSelectionCount = state.count
+        // 未选择任何项时置灰禁用底部动作菜单（点击无响应、不弹 Toast）
+        actionBar?.setActionsEnabled(state.isActive && state.count > 0)
         // 悬浮胶囊的显示/隐藏时机交给宿主（MainActivity）：进入时先让底部导航胶囊下滑隐藏，
         // 退出时先让多选菜单收起，宿主再通过下面两个方法驱动胶囊动画，保证视觉顺序。
         // 多选时底部预留动作栏高度，避免最后一行被胶囊遮挡

@@ -130,6 +130,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
   - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
   - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
+- **未选择任何项时禁用菜单**：多选态下 4 个动作置灰（38% 透明度、`enabled=false`）并禁用点击，**不弹 Toast / 不弹系统框**；选择至少 1 项后恢复。实现：`SelectionActionBar.setActionsEnabled(enabled)`，宿主在 `onSelectionChanged` 里传 `state.isActive && state.count > 0`（照片页同时挂到宿主的菜单顺序动画上；选择 0 时胶囊展开过程中也保持置灰观感）。禁用仍保留 `clickable=true`，让触摸被胶囊消费、不会穿透到下面的宫格误选。
 - 「全选」是**切换按钮**：只选当前**已加载**的条目（受 `maxCount` 限制，若设置）；分页未加载的不会选中。全部已选时按钮文案变为「取消全选」，**再次点击清空已选并保持多选态**（不会因 count 归零自动退出；`toggleSelectAll` 期间用 `suppressAutoExitOnZero` 抑制自动退出）。取消全选后再点单个格子/关闭按钮仍按原逻辑退出。
 - 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
 - **与底部导航的先后顺序（照片页）**：进入多选时 `MainActivity` 先把底部胶囊导航下滑隐藏（180ms，`translationY` + 透明度动画，动画结束回调），隐藏完成后才调用 `PhotosFragment.showSelectionActionBarAnimated()` 播放多选菜单展开；退出多选时先调用 `hideSelectionActionBarAnimated { showBottomNavAnimated() }` 让菜单收起后再滑入导航。快速来回切换时两段动画均可被取消并从中途状态衔接。
@@ -173,7 +174,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - **页面结构**：不透明标题栏 + View 宫格 + 多选底部动作栏；复用 `MediaGridView` / `GridPageController` / `SelectionState`，与照片页/相册详情页同一套宫格与多选交互。
 - **交互**：
   - 点击缩略图 → 查看器（baseUri 为最近删除列表，翻页范围即回收站）；
-  - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选（切换语义，再次点击取消全选）；底部动作栏 **恢复 / 彻底删除**；
+  - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选（切换语义，再次点击取消全选）；底部动作栏 **恢复 / 彻底删除**（未选择任何项时置灰禁用、点击无响应且不弹提示，≥1 项后恢复）；
   - 标题栏溢出菜单 **清空**：先二次确认（显示条数），再彻底删除回收站全部条目；
   - **恢复** = `MediaStore.createTrashRequest(uris, false)`、**彻底删除** = `MediaStore.createDeleteRequest(uris)`，两者都会由系统弹出「允许修改/删除」确认框；
   - 成功后退出多选并重新加载；回收站清空后返回相册页，入口自动消失。

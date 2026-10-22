@@ -53,6 +53,8 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     private lateinit var grid: MediaGridView
     private lateinit var toolbar: MaterialToolbar
     private lateinit var actionBar: View
+    private lateinit var restoreAction: View
+    private lateinit var deleteAction: View
     private var pageController: GridPageController? = null
     private var multiSelectItem: MenuItem? = null
     private var selectAllItem: MenuItem? = null
@@ -102,8 +104,21 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     }
 
     private fun setupActions() {
-        findViewById<View>(R.id.trash_action_restore).setOnClickListener { restoreSelected() }
-        findViewById<View>(R.id.trash_action_delete).setOnClickListener { deleteSelected() }
+        restoreAction = findViewById(R.id.trash_action_restore)
+        deleteAction = findViewById(R.id.trash_action_delete)
+        restoreAction.setOnClickListener { restoreSelected() }
+        deleteAction.setOnClickListener { deleteSelected() }
+        setTrashActionsEnabled(false)
+    }
+
+    /** 未选择任何项时置灰禁用「恢复 / 彻底删除」（点击无响应、不弹 Toast，也不穿透到宫格）。 */
+    private fun setTrashActionsEnabled(enabled: Boolean) {
+        val alpha = if (enabled) 1f else DISABLED_ALPHA
+        for (action in listOf(restoreAction, deleteAction)) {
+            // 保持 clickable=true：禁用时仍消费触摸，避免点到下面的宫格误选
+            action.isEnabled = enabled
+            action.alpha = alpha
+        }
     }
 
     /** 本页不是铺满式页面：把 system bars 的 inset 直接作为根布局 padding。 */
@@ -227,6 +242,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
             return
         }
         lastSelectionCount = state.count
+        setTrashActionsEnabled(state.isActive && state.count > 0)
         actionBar.isVisible = state.isActive
         if (state.isActive) {
             toolbar.title = getString(R.string.grid_selected_count, state.count)
@@ -380,6 +396,9 @@ class RecentlyDeletedActivity : AppCompatActivity() {
 
         private const val COLUMNS = 4
         private const val PAGE_SIZE = 200
+
+        /** 未选择任何项时动作按钮的透明度（与 SelectionActionBar 的禁用态一致）。 */
+        private const val DISABLED_ALPHA = 0.38f
 
         /** 代码创建的菜单项 id（menu 资源约定放在 main 模块，本页不新增 main-ui menu 资源）。 */
         private const val MENU_MULTI_SELECT = 0x2001

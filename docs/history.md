@@ -924,3 +924,35 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 最近删除页（先制造 1 条可删副本）：全选 → 1 项、按钮「取消全选」→ 再点 → 0 项、保持多选态；
   测试后已「彻底删除」该副本，回收站清空、相册页入口消失；
 - 单测通过（新增 2 个用例）；无崩溃。
+
+---
+
+## 2026-10-23 多选未选择任何项时禁用底部菜单
+
+**背景（用户要求）**：多选模式下未选择任何项时，禁用菜单，点击不弹提示。
+
+**实现**：
+
+- `SelectionActionBar`：
+  - 新增 `setActionsEnabled(enabled)`：4 个动作项 `isEnabled = enabled`，
+    禁用时透明度按 `contentAlpha × 0.38` 计算（与展开/收起动画叠乘，不互相覆盖）；
+  - **保持 `clickable = true`**：禁用态仍消费触摸，避免点击置灰按钮时穿透到下方宫格造成误选；
+  - 新增 `applyChildrenAlpha()` 统一处理「动画透明度 × 禁用透明度」。
+- 宿主接线（均在 `onSelectionChanged` 里传 `state.isActive && state.count > 0`）：
+  - `PhotosFragment`（照片页悬浮胶囊）；
+  - `AlbumDetailActivity`（相册详情页胶囊）；
+  - `RecentlyDeletedActivity`：`trash_action_restore` / `trash_action_delete` 置灰禁用
+    （`setTrashActionsEnabled`，同样 0.38 透明度、保留 clickable）。
+- 这样 0 项时点分享不会再弹 `selection_share_empty` Toast，点删除也不会弹系统确认框。
+- 文档：ui-guide §5.1/§12、verification 手测项、history。
+
+**真机验证（Redmi / Android 16）**：
+
+- 照片页：进入多选（0 项）→ `uiautomator` 中 4 个动作均 `enabled=false`、截图可见置灰；
+  点分享 / 删除均**无任何反应**（无 Toast、无分享选择器、无系统「最近删除」确认框，仍停留 MainActivity）；
+  选中 1 项后 4 个动作恢复 `enabled=true`，点「添加到」正常进入 `AddToAlbumActivity`；
+- 相册详情页（相机相册）：0 项时 4 个动作 `enabled=false`，选中 1 项后全部恢复；
+- 最近删除页（临时制造 1 条可删副本）：多选 0 项时「恢复 / 彻底删除」`enabled=false`，
+  点「恢复」无反应（无系统确认框）；选中 1 项后恢复可点，随后「彻底删除」走系统确认，
+  测试后回收站清空、相册页入口消失；
+- 无崩溃。

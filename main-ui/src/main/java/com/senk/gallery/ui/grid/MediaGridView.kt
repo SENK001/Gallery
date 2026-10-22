@@ -12,6 +12,7 @@ import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.util.DisplayUtils
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.hypot
 
 /**
@@ -55,6 +56,12 @@ class MediaGridView @JvmOverloads constructor(
     private var downY = 0f
     private var paintStartPosition = NO_POSITION
     private var gestureMode = GestureMode.UNDECIDED
+
+    /**
+     * 长按进入多选后手指仍未抬起：标记本次手势可以继续刷选。
+     * 长按已表达「选择」意图，因此后续拖动不再区分横/纵方向，直接按选中刷选处理。
+     */
+    private var paintArmedByLongPress = false
 
     /** 刷选模式：true = 本次手势批量选中；false = 批量取消（由起点格子的选中态决定）。 */
     private var paintSelecting = true
@@ -145,15 +152,11 @@ class MediaGridView @JvmOverloads constructor(
 
     /**
      * 多选态下的手势判定：
-     * - 首个超过 touchSlop 的位移若**横向占优** → 锁定为刷选，并拦截后续事件自己处理；
-     * - 若纵向占优 → 交给 RecyclerView 正常滚动（本次手势不再可能进入刷选）；
-     * - 非多选态完全走父类逻辑。
+     * - **长按进入多选后不松手继续拖动** → 直接进入刷选（长按已表达选择意图，方向不再区分）；
+     * - 普通多选态：首个超过 touchSlop 的位移若**横向占优** → 刷选，纵向占优 → 正常滚动；
+     * - 非多选态完全走父类逻辑（但仍记录按下的坐标/格子，供长按武装刷选使用）。
      */
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
-        if (!selection.isActive) {
-            resetPaintGesture()
-            return super.onInterceptTouchEvent(e)
-        }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 resetPaintGesture()
@@ -162,6 +165,12 @@ class MediaGridView @JvmOverloads constructor(
                 paintStartPosition = findAdapterPositionAt(e.x, e.y)
             }
 
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> resetPaintGesture()
+        }
+        if (!selection.isActive) {
+            return super.onInterceptTouchEvent(e)
+        }
+        when (e.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
                 if (gestureMode == GestureMode.PAINT) {
                     return true
@@ -170,10 +179,20 @@ class MediaGridView @JvmOverloads constructor(
                     val dx = e.x - downX
                     val dy = e.y - downY
                     if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
-                        if (abs(dx) > abs(dy) && beginPaint()) {
+                        // 长按进入多选后同一次手势里的拖动：无论方向都按刷选处理
+                        val longPressPaint = paintArmedByLongPress
+                        if ((longPressPaint || abs(dx) > abs(dy)) &&
+                            beginPaint(forceSelect = longPressPaint)
+                        ) {
                             gestureMode = GestureMode.PAINT
                             lastPaintX = e.x
                             lastPaintY = e.y
+                            // 拦截的这一次 MOVE 不会再进 onTouchEvent，先把当前手指下的格子补上，
+                            // 否则长按后第一次快速移动会漏掉经过的第一格
+                            val current = findAdapterPositionAt(e.x, e.y)
+                            if (current != NO_POSITION) {
+                                paintAt(current)
+                            }
                             parent?.requestDisallowInterceptTouchEvent(true)
                             return true
                         }
@@ -182,8 +201,6 @@ class MediaGridView @JvmOverloads constructor(
                     }
                 }
             }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> resetPaintGesture()
         }
         return super.onInterceptTouchEvent(e)
     }
@@ -219,14 +236,20 @@ class MediaGridView @JvmOverloads constructor(
         return true
     }
 
-    /** 开始刷选：由起点格子当前是否选中决定整段手势是「批量选中」还是「批量取消」。 */
-    private fun beginPaint(): Boolean {
+    /**
+     * 开始刷选。
+     *
+     * @param forceSelect 长按进入多选后的同手势拖动：起点已由长按选中，强制按「批量选中」处理
+     *   （否则起点已选会被误判成取消刷选）。
+     */
+    private fun beginPaint(forceSelect: Boolean = false): Boolean {
         val position = paintStartPosition
         if (position == NO_POSITION) {
             return false
         }
         val item = gridAdapter.itemAt(position) ?: return false
-        paintSelecting = !selection.isSelected(item.id)
+        paintArmedByLongPress = false
+        paintSelecting = if (forceSelect) true else !selection.isSelected(item.id)
         paintAt(position)
         // 起点是「唯一已选项」且本次为取消刷选时，取消第一格后宿主可能会自动退出多选：
         // 此时不再进入刷选，交给父类按普通触摸处理。
@@ -244,7 +267,8 @@ class MediaGridView @JvmOverloads constructor(
     private fun paintAlong(fromX: Float, fromY: Float, toX: Float, toY: Float) {
         val distance = hypot((toX - fromX).toDouble(), (toY - fromY).toDouble())
         val step = (cellSizePx() / 2f).coerceAtLeast(1f)
-        val steps = (distance / step).toInt().coerceAtLeast(1)
+        // 用 ceil：距离不到两步时也必须采到终点，否则跨 1–2 格时会漏掉中间格子
+        val steps = ceil(distance / step).toInt().coerceAtLeast(1)
         for (i in 1..steps) {
             val t = i.toFloat() / steps
             val x = fromX + (toX - fromX) * t
@@ -295,6 +319,7 @@ class MediaGridView @JvmOverloads constructor(
         gestureMode = GestureMode.UNDECIDED
         paintStartPosition = NO_POSITION
         paintSelecting = true
+        paintArmedByLongPress = false
         limitNotifiedInPaint = false
     }
 
@@ -368,7 +393,14 @@ class MediaGridView @JvmOverloads constructor(
 
     private fun handleCellLongClick(position: Int) {
         val item = gridAdapter.itemAt(position) ?: return
+        val wasActive = selection.isActive
+        paintArmedByLongPress = false
         onItemLongClick?.invoke(item)
+        // 长按由宿主进入多选（未激活 → 激活）：记录起点格子，手指不抬继续拖动即可刷选
+        if (!wasActive && selection.isActive) {
+            paintArmedByLongPress = true
+            paintStartPosition = position
+        }
     }
 
     /** 选择状态变化：进入/退出多选整体刷新；普通勾选只刷新变化的那几格。 */

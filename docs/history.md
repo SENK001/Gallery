@@ -791,3 +791,34 @@ androidComponents { onVariants(selector().all()) { variant ->
 
 **边界**：刷选只处理当前已加载条目（分页未加载需先滚动）；刷选与 ViewPager2 左右切页在照片页不冲突
 （宫格横向拖动已优先进入刷选）；自动化测试仅真机手势验证，无单元测试覆盖触摸分派。
+
+---
+
+## 2026-10-23 修复：长按进入多选后不松手无法继续刷选
+
+**背景（用户反馈）**：长按进入选择模式不松手无法滑动选择。
+
+**原因**：
+
+- `ACTION_DOWN` 时多选还未激活，`onInterceptTouchEvent` 直接走父类、**没有记录按下坐标/起点格子**；
+- 长按触发（宿主在 `onItemLongClick` 里 `selection.enter(item)`）后多选已激活，但后续 MOVE 进来时
+  `paintStartPosition = NO_POSITION`，刷选无法开始，手势被当作滚动；
+- 另外按住拖动时被拦截的那一次 MOVE 不会进入 `onTouchEvent`，且两点插值用 `toInt()` 会少采中间格，
+  快速拖动会漏掉手指经过的第一格。
+
+**修法**（`MediaGridView`）：
+
+- `ACTION_DOWN` 无论多选是否激活都记录 `downX/downY` 与起点格子（`paintStartPosition`）；
+- `handleCellLongClick`：从「未激活」进入多选时置 `paintArmedByLongPress = true` 并记录起点；
+- `onInterceptTouchEvent` 的 MOVE：若 `paintArmedByLongPress`，**跳过横/纵方向判定**直接进入刷选，
+  并用 `beginPaint(forceSelect = true)` 固定为「批量选中」（起点已由长按选中，避免误判为取消刷选）；
+  进入刷选时补画当前手指下的格子；
+- `paintAlong` 的步数改为 `ceil(distance / 半格)`，修正跨 1–2 格漏格；
+- 抬手/取消/退出多选时清理武装标记。
+
+**真机验证（Redmi / Android 16）**：
+
+- `DOWN → 1.3s 长按 → MOVE 400/700/1100 → UP`（全程不抬手）：选中 4 格（修复前只选中 3 格，
+  漏掉手指经过的第一格），标题「已选择 4 项」；
+- 长按后**向下**拖动（`DOWN → 长按 → MOVE 700/900 → UP`）：方向不限直接刷选，选中 2 格；
+- 回归：松手后普通横向刷选仍为 4 格；多选态纵向拖动仍正常滚动且已选计数不变；无崩溃。

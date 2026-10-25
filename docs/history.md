@@ -1039,3 +1039,27 @@ androidComponents { onVariants(selector().all()) { variant ->
   分享/收藏/删除图标均正常显示（修复前为空白白条）；
 - 快速 120ms 内进出一次：退出后两栏同样正常显示；
 - 无崩溃。
+
+---
+
+## 2026-10-25 缩略图去掉与屏幕边缘的间隙
+
+**背景（用户要求）**：去掉缩略图与屏幕边缘的间隙。
+
+**原因**：`GridGapDecoration` 给每格四周都加半格 offset（左侧 `gap/2`、右侧 `gap-gap/2`、上下同理），
+合并后内部行列间距正确，但**首列/末列/首行/末行也各留了半格外边距**，缩略图离屏幕边缘约 2px。
+
+**修法**（`MediaGridView.GridGapDecoration`）：
+
+- 按 adapter position 与 `GridLayoutManager.spanCount` 计算列号、是否首行/末行；
+- 贴边一侧 offset 置 0：`column == 0` 左边距 0、`column == spanCount-1` 右边距 0、
+  首行上边距 0、末行（`position >= ((itemCount-1)/spanCount)*spanCount`）下边距 0；
+- 内部行/列间距保持原分配（相邻格各分一半，合计 `CELL_GAP_DP = 1.5dp`）；
+- 空态占位行与 `NO_POSITION`（回收中）仍走原逻辑。
+
+**真机验证（Redmi / Android 16）**：
+
+- 照片页 `uiautomator` 格子 bounds：首列 `[0,360][318,678]`、末列 `[962,…][1280,…]`——
+  **左/右边缘各为 0 与屏宽 1280**（修复前首列 x=2、末列右 1278）；
+- 内部间隙保持：列 1 右 318 → 列 2 左 322（4px）、行间 678 → 682（4px）；
+- 相册页宫格同样贴边（首列 x=0、末列右 1280）；截图目视无白边；无崩溃。

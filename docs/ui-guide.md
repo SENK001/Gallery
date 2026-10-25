@@ -109,6 +109,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 ## 5. 宫格（`MediaGridView` + `MediaGridAdapter`，照片页/相册详情页/选图页共用）
 
 - **一格一个 View**：`RecyclerView`（`MediaGridView`）+ `item_media_cell.xml`（正方形格子：`ImageView` centerCrop 缩略图、视频时长角标、动态照片角标、右上角选择框、选中描边/压暗）。**原 GL 自绘宫格已删除**，因此 `uiautomator dump` 能看到每格节点。
+- **贴边与内部间距**：`GridGapDecoration` 按 adapter position/span 判断行/列——**贴屏幕边缘的一侧外边距为 0**（首列左、末列右、首行上、末行下），缩略图直接贴屏幕边缘；行/列**内部**之间仍保留 `CELL_GAP_DP = 1.5dp` 的间隙（相邻格各分一半）；空态/占位行保持零偏移。
 - **无障碍**：每格根 View 可聚焦/可点击，`contentDescription` =「照片/视频，拍摄时间，已选择/未选择」；多选态通过 `AccessibilityDelegate` 暴露 CheckBox 语义（`checkable/checked`），TalkBack 能读出选中状态；多选按钮、全选、动作按钮均有中文 `contentDescription`。
 - **缩略图加载**：`ImageViewThumbLoader` 带 LRU Bitmap 缓存（约堆内存 1/8）+ `tag` 防复用错位；`loadThumbnail(uri, Size)`，格子边长 = 屏宽/4。
 - **铺满式 insets**：`MediaGridView.setContentInsets(top, bottom)` 内部转成 padding 并保持 `clipToPadding=false`：

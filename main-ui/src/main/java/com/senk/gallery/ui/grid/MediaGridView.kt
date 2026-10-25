@@ -486,8 +486,9 @@ class MediaGridView @JvmOverloads constructor(
         get() = DisplayUtils.dp2px(context, AUTO_SCROLL_EDGE_DP).toInt()
 
     /**
-     * 格子间隔：每格四周各留半个 gap，合并后行/列间距恰为一个 gap；
-     * 每格分到的左右/上下偏移一致，因此宽度相同、高度 = 宽度的正方形不会被拉变。
+     * 格子间隔：内部行/列之间保留一个 gap（相邻两格各分一半，合并后恰为 gap）；
+     * **贴屏幕边缘的一侧外边距为 0**——首列左边、末列右边、首行上边、末行下边不再留半格间隙，
+     * 缩略图直接贴屏幕边缘。行/列内部间距因此仍保持 [CELL_GAP_DP]。
      */
     private inner class GridGapDecoration : ItemDecoration() {
         override fun getItemOffsets(
@@ -501,7 +502,27 @@ class MediaGridView @JvmOverloads constructor(
                 return
             }
             val half = gapPx / 2
-            outRect.set(half, half, gapPx - half, gapPx - half)
+            val position = parent.getChildAdapterPosition(view)
+            if (position == NO_POSITION) {
+                outRect.set(half, half, gapPx - half, gapPx - half)
+                return
+            }
+            val spanCount = gridLayoutManager.spanCount.coerceAtLeast(1)
+            val itemCount = gridAdapter.itemCount
+            val column = position % spanCount
+            val firstRow = position < spanCount
+            val lastRowStart = ((itemCount - 1) / spanCount) * spanCount
+            val lastRow = itemCount > 0 && position >= lastRowStart
+            outRect.set(
+                // 左边：首列贴边，其余保留半格列间距
+                if (column == 0) 0 else half,
+                // 上边：首行贴边
+                if (firstRow) 0 else half,
+                // 右边：末列贴边
+                if (column == spanCount - 1) 0 else gapPx - half,
+                // 下边：末行贴边
+                if (lastRow) 0 else gapPx - half,
+            )
         }
     }
 

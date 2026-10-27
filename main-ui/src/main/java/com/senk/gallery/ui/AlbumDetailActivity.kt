@@ -36,6 +36,7 @@ import com.senk.gallery.ui.selection.SelectionActionBar
 import com.senk.gallery.ui.selection.SelectionActions
 import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.ui.theme.ThemeUtils
+import com.senk.gallery.ui.transition.ViewerTransition
 import com.senk.gallery.util.DisplayUtils
 import com.senk.gallery.util.SystemBarUtils
 
@@ -236,7 +237,7 @@ class AlbumDetailActivity : AppCompatActivity() {
     private fun setupGrid() {
         grid.columns = COLUMNS
         grid.setEmptyText(getString(R.string.gallery_empty))
-        grid.onItemClick = { item -> openViewer(item) }
+        grid.onItemClickWithView = { item, cellView -> openViewer(item, cellView) }
         grid.onItemLongClick = { item ->
             if (!grid.selection.isActive) {
                 enterSelectionMode(item)
@@ -306,12 +307,16 @@ class AlbumDetailActivity : AppCompatActivity() {
 
     // ==================== 数据加载 ====================
 
-    private fun openViewer(item: MediaItem) {
+    private fun openViewer(item: MediaItem, cellView: View? = null) {
         val index = pageController?.indexOf(item.id) ?: -1
         if (index < 0) {
             return
         }
+        if (cellView != null) {
+            ViewerTransition.remember(item.id, cellView)
+        }
         startActivity(ViewerActivity.intent(this, baseUri, index))
+        overridePendingTransition(0, 0)
     }
 
     // ==================== 自建相册：添加/管理照片 ====================

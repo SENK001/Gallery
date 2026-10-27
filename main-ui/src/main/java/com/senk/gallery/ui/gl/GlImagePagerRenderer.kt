@@ -9,6 +9,7 @@ import com.senk.gallery.data.entity.MediaItem
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.nio.IntBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.min
@@ -102,6 +103,11 @@ class GlImagePagerRenderer(
     private val badgeCache = BadgeCache()
     private var viewportWidth = 0
     private var viewportHeight = 0
+
+    /** 当前页图片在屏幕上的实际绘制矩形（含缩放/平移；退出转场用，GL 线程写 / 主线程读）。 */
+    private val currentRectLock = Any()
+    private val lastCurrentRect = RectF()
+    private var lastCurrentRectValid = false
 
     init {
         videoManager.listener = object : VideoPlayManager.Listener {
@@ -248,6 +254,12 @@ class GlImagePagerRenderer(
         if (isCurrent && (scale != 1f || panX != 0f || panY != 0f)) {
             applyTransform(fitRect)
         }
+        if (isCurrent) {
+            synchronized(currentRectLock) {
+                lastCurrentRect.set(fitRect)
+                lastCurrentRectValid = true
+            }
+        }
         drawQuad(fitRect, textureId)
         if (item.isVideo) {
             val iconSize = min(viewportWidth, viewportHeight) * 0.22f
@@ -338,6 +350,54 @@ class GlImagePagerRenderer(
     }
 
     fun isPlayIconHit(x: Float, y: Float): Boolean = iconRect.contains(x, y)
+
+    /** 把当前页实际绘制矩形复制到 [out]（无有效画面返回 false）。可在任意线程调用。 */
+    fun snapshotCurrentRect(out: RectF): Boolean = synchronized(currentRectLock) {
+        if (!lastCurrentRectValid) {
+            return false
+        }
+        out.set(lastCurrentRect)
+        true
+    }
+
+    /**
+     * 截取当前画面为 Bitmap（GL 线程调用）。
+     *
+     * 用于退出转场：把 GL 画面临时变成普通 ImageView 覆盖层，才能做「缩小回缩略图」的位移动画
+     * （GLSurfaceView 自身无法参与 View 动画/共享元素）。会先在 GL 线程重画一帧再读像素。
+     */
+    fun captureCurrentFrame(): Bitmap? {
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return null
+        }
+        onDrawFrame(null)
+        val width = viewportWidth
+        val height = viewportHeight
+        val buffer = IntBuffer.allocate(width * height)
+        GLES20.glReadPixels(
+            0,
+            0,
+            width,
+            height,
+            GLES20.GL_RGBA,
+            GLES20.GL_UNSIGNED_BYTE,
+            buffer,
+        )
+        buffer.rewind()
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            val srcRow = (height - 1 - y) * width
+            val dstRow = y * width
+            for (x in 0 until width) {
+                val value = buffer.get(srcRow + x)
+                val r = value and 0xFF
+                val g = (value shr 8) and 0xFF
+                val b = (value shr 16) and 0xFF
+                pixels[dstRow + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+            }
+        }
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+    }
 
     private fun applyTransform(rect: RectF) {
         val cx = rect.centerX()

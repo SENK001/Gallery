@@ -30,6 +30,7 @@ import com.senk.gallery.ui.grid.GridPageController
 import com.senk.gallery.ui.grid.MediaGridView
 import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.ui.theme.ThemeUtils
+import com.senk.gallery.ui.transition.ViewerTransition
 import com.senk.gallery.util.SystemBarUtils
 import kotlinx.coroutines.launch
 
@@ -189,7 +190,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
     private fun setupGrid() {
         grid.columns = COLUMNS
         grid.setEmptyText(getString(R.string.trash_empty))
-        grid.onItemClick = { item -> openViewer(item) }
+        grid.onItemClickWithView = { item, cellView -> openViewer(item, cellView) }
         grid.onItemLongClick = { item ->
             if (!grid.selection.isActive) {
                 grid.selection.enter(item)
@@ -280,12 +281,16 @@ class RecentlyDeletedActivity : AppCompatActivity() {
         selectAllItem?.iconTintList = color
     }
 
-    private fun openViewer(item: MediaItem) {
+    private fun openViewer(item: MediaItem, cellView: View? = null) {
         val index = pageController?.indexOf(item.id) ?: return
         if (index < 0) {
             return
         }
+        if (cellView != null) {
+            ViewerTransition.remember(item.id, cellView)
+        }
         startActivity(ViewerActivity.intent(this, trashBaseUri, index))
+        overridePendingTransition(0, 0)
     }
 
     // ==================== 恢复 / 彻底删除 ====================

@@ -1063,3 +1063,38 @@ androidComponents { onVariants(selector().all()) { variant ->
   **左/右边缘各为 0 与屏宽 1280**（修复前首列 x=2、末列右 1278）；
 - 内部间隙保持：列 1 右 318 → 列 2 左 322（4px）、行间 678 → 682（4px）；
 - 相册页宫格同样贴边（首列 x=0、末列右 1280）；截图目视无白边；无崩溃。
+
+---
+
+## 2026-10-27 缩略图 ⇄ 大图 共享元素式转场
+
+**背景（用户要求）**：实现图片从缩略图展开到大图，退出时图片缩小回到缩略图。
+
+**为什么不用系统 SharedElementTransition**：查看器由 `GlImageViewer`（独立 Surface 的 `GLSurfaceView`）绘制，
+系统共享元素动画无法直接作用于 SurfaceView。改为**普通 View 覆盖层 + Bitmap 动画**：
+
+- 新增 `ViewerTransition`（同进程静态）：宿主点击时 `remember(itemId, cellView)` 记录缩略图屏幕矩形
+  与 Bitmap 拷贝；查看器 `takePending()` 取一次（旋转不重播），退出时用矩形作为收拢目标。
+- `MediaGridView` 新增 `onItemClickWithView(item, cellView)`；照片页 / 相册详情页 / 最近删除页的
+  `openViewer` 改走它并 `overridePendingTransition(0,0)` 关掉系统窗口动画。
+- 进入：`ViewerActivity` onCreate 在 GL/两栏之上加白色全屏 cover + 缩略图 ImageView（缩略图屏幕矩形处），
+  GL 在下面提前解码；首帧数据就绪后 280ms 动画到「按 MediaItem 宽高 + EXIF 旋转换算的 contain 矩形」，
+  结束后覆盖层/白底淡出、两栏淡入。
+- 退出：`GlImageViewer.captureCurrentFrame()` 在 GL 线程 `glReadPixels` 截当前画面（并取图片实际绘制矩形，
+  含缩放/平移），裁出图片区域；先让覆盖层与 GL 画面重合（避免白屏闪帧），下一帧隐藏 GL/两栏，
+  260ms 缩回缩略图矩形后 `finish()`。
+- 退化：外部大图模式、无缩略图信息、进入动画未完成即退出、已翻页到其它图片 → 直接 finish 不做转场。
+
+**过程中修复的问题**：
+
+- 退出时过渡 Bitmap 立即 `recycle()` 触发真机崩溃
+  `Canvas: trying to use a recycled bitmap`（RenderThread 仍引用上一帧 display list），
+  改为不主动回收、交给 GC；
+- 退出先隐藏 GL 再放覆盖层会产生一帧白屏，改为「先放覆盖层（与 GL 重合）→ 下一帧隐藏 GL → 开始缩小」。
+
+**真机验证（Redmi / Android 16）**：
+
+- 打开：缩略图从格子位置放大至全屏图片区域，过程中两栏透明、结束后标题/副标题/底栏淡入，有中间帧可复现；
+- 退出：图片从全屏位置缩小回缩略图位置后回到宫格，最终截图/`uiautomator` 确认已回到宫格；
+- 翻页到下一张再返回：直接回宫格（不做错误位置的缩回）；再次点其它格子可正常重新播放；
+- 相册详情页进入/退出正常；外部 VIEW_IMAGE 模式无转场且正常；快速点开立刻返回、连续进出均无崩溃、无残留覆盖层。

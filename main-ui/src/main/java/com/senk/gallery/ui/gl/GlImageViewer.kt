@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
+import android.graphics.RectF
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.util.Size
@@ -128,6 +129,19 @@ class GlImageViewer @JvmOverloads constructor(
     fun currentIndex(): Int = renderer.currentIndex
 
     fun isPlayIconHit(x: Float, y: Float): Boolean = renderer.isPlayIconHit(x, y)
+
+    /**
+     * 截取当前 GL 画面（含缩放/平移后的图片区域），用于退出查看器时「缩小回缩略图」的覆盖层动画。
+     * 回调在主线程：[bitmap] 可能为 null；[imageRect] 为当前页图片在屏幕上的绘制矩形（无效时为空）。
+     */
+    fun captureCurrentFrame(onCaptured: (bitmap: Bitmap?, imageRect: RectF) -> Unit) {
+        queueEvent {
+            val bitmap = renderer.captureCurrentFrame()
+            val rect = RectF()
+            val valid = renderer.snapshotCurrentRect(rect)
+            post { onCaptured(bitmap, if (valid) rect else RectF()) }
+        }
+    }
 
     fun playMotionVideo(item: MediaItem) {
         renderer.startMotionVideo(item)

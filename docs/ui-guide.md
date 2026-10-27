@@ -117,7 +117,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 相册详情页：top 同上；bottom = 系统导航栏（无胶囊），多选时加动作栏高度。
 - **滚动/分页**：接近底部 2 行时 `onLoadMore`（宿主用 `MediaPager` 拉下一页）；`onScrollChanged` 驱动标题栏 40px 死区；数据刷新（`ContentObserver`）回顶重载。
 - **空态**：宫格适配器内单独一行 TextView（`gallery_empty`），不依赖外部布局。
-- 点击缩略图 → `ViewerActivity(baseUri, position)`；长按 → 进入多选并选中该格。
+- 点击缩略图 → `ViewerActivity(baseUri, position)`（打开时播放「缩略图展开成大图」动画，退出时缩回缩略图，见 §12.7）；长按 → 进入多选并选中该格。
 
 ### 5.1 多选（`SelectionState` + `SelectionActionBar` + `SelectionActions`）
 
@@ -267,6 +267,28 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 - 地图卡片整体盖了 `sheet_map_overlay`：点卡片 → `PhotoMapActivity`。点击有双保险：仅 `!immersive && sheetProgress > 0.01`（面板确实展开且可见）时才响应，防止点到不可见面板里的地图。
 - 面板的打开入口是标题栏右侧「详情」菜单（底栏已不再放详情按钮）；底栏「删除」见 12.6。
 - 地图相关卡点：`TextureMapView` 构造**先于授权初始化会 NPE 崩溃**，因此 `ensureSheetMap()` 先调 `BaiduMapSdk.ensureInitialized()`，失败时隐藏地图卡片，不崩溃；坐标系 BD09LL。
+
+### 12.7 缩略图 ⇄ 大图 转场（`ViewerTransition` + 覆盖层 ImageView）
+
+**为什么不用系统 SharedElementTransition**：查看器画面由 `GlImageViewer`（独立 Surface 的 `GLSurfaceView`）绘制，系统共享元素动画无法直接作用于 SurfaceView；因此用**普通 View 覆盖层**模拟：进入用缩略图 Bitmap 放大，退出用截取的 GL 画面缩小。
+
+- 宿主：`PhotosFragment` / `AlbumDetailActivity` / `RecentlyDeletedActivity` 的宫格点击回调改为
+  `MediaGridView.onItemClickWithView(item, cellView)`；`openViewer` 里先
+  `ViewerTransition.remember(item.id, cellView)`（记录缩略图屏幕矩形 + Bitmap 拷贝），
+  再 `startActivity` 并 `overridePendingTransition(0, 0)`（关闭系统窗口动画，避免与覆盖层动画叠加）。
+- 进入（`ViewerActivity`）：
+  - onCreate 取一次 `ViewerTransition.takePending()`（旋转不重播），在两栏之上加白色全屏 `cover` +
+    缩略图 `ImageView`（位置 = 缩略图屏幕矩形）；GL 在下面正常解码/绘制（cover 遮挡避免白屏闪烁）；
+  - `bindPage` 首帧数据就绪后：280ms 把覆盖层矩形动画到「图片按比例完整放进全屏」区域
+    （按 `MediaItem.width/height` + EXIF 旋转 90/270 换算）；结束后覆盖层/白底淡出、标题栏与底栏淡入。
+- 退出（`ViewerActivity.exitViewer`，返回键/标题栏返回都走这里）：
+  - 调 `GlImageViewer.captureCurrentFrame`（GL 线程 `glReadPixels` 截当前画面，并取当前图片实际绘制矩形，
+    含缩放/平移），裁出图片区域作为覆盖层；
+  - 先让覆盖层与 GL 画面重合（避免白屏闪一帧），下一帧隐藏 GL/两栏，覆盖层用 260ms 缩回缩略图矩形，
+    完成后 `overridePendingTransition(0, 0)` + `finish()`。
+- 退化路径：外部大图模式、无缩略图信息、进入动画尚未结束就退出、当前页已翻到别的图片时，直接 finish（不做转场）。
+- 注意：过渡 Bitmap **不主动 `recycle()`**（RenderThread 可能仍引用上一帧 display list，立即回收会触发
+  `Canvas: trying to use a recycled bitmap` 崩溃），交给 GC；`onDestroy` 只清引用并 `ViewerTransition.clear()`。
 
 ## 14. 视频播放器（`VideoPlayerActivity` + `GlVideoView`）
 

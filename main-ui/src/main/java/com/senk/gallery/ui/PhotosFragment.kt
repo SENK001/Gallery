@@ -18,6 +18,7 @@ import com.senk.gallery.ui.grid.MediaGridView
 import com.senk.gallery.ui.selection.SelectionActionBar
 import com.senk.gallery.ui.selection.SelectionActions
 import com.senk.gallery.ui.selection.SelectionState
+import com.senk.gallery.ui.transition.ViewerTransition
 import com.senk.gallery.util.DisplayUtils
 
 /**
@@ -111,7 +112,8 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
             columns = COLUMNS
             // 空态文案（宫格内部适配器的一行空态项）
             setEmptyText(getString(R.string.gallery_empty))
-            onItemClick = { item -> openViewer(item) }
+            // 带格子 View：查看器据此播放「缩略图展开/收回」转场
+            onItemClickWithView = { item, cellView -> openViewer(item, cellView) }
             onItemLongClick = { item ->
                 // 长按进入多选并选中该格（已在多选态时点击由格子自身切换选中）
                 if (!selection.isActive) {
@@ -198,14 +200,19 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         pageController?.load(reset)
     }
 
-    private fun openViewer(item: MediaItem) {
+    private fun openViewer(item: MediaItem, cellView: View? = null) {
         val index = pageController?.indexOf(item.id) ?: -1
         if (index < 0) {
             return
         }
+        if (cellView != null) {
+            ViewerTransition.remember(item.id, cellView)
+        }
         startActivity(
             ViewerActivity.intent(requireContext(), GalleryContract.MEDIA_URI, index),
         )
+        // 查看器内部用覆盖层播放缩略图转场，窗口本身不要再叠加系统默认动画
+        activity?.overridePendingTransition(0, 0)
     }
 
     // ==================== 多选 UI ====================

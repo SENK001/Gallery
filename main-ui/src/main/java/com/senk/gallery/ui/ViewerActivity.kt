@@ -8,10 +8,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -19,6 +22,7 @@ import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -44,16 +48,19 @@ import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.gl.GlImageViewer
+import com.senk.gallery.ui.transition.ViewerTransition
 import com.senk.gallery.util.DateFormats
 import com.senk.gallery.util.FileSizeUtils
 import com.senk.gallery.util.SystemBarUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 class ViewerActivity : AppCompatActivity() {
 
-    private lateinit var rootView: View
+    private lateinit var rootView: FrameLayout
     private lateinit var viewer: GlImageViewer
     private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomBar: View
@@ -77,6 +84,20 @@ class ViewerActivity : AppCompatActivity() {
 
     /** 沉浸切换时标题栏上滑收起 / 底部菜单下滑收起的动画（同一条 ValueAnimator 驱动两栏）。 */
     private var chromeAnimator: ValueAnimator? = null
+
+    // ==================== 缩略图 ⇄ 大图 转场 ====================
+
+    /** 打开时从宫格带过来的缩略图信息；退出时用它作为「缩小回缩略图」的目标矩形。 */
+    private var transitionThumb: ViewerTransition.Thumb? = null
+    private var enterTransitionStarted = false
+    private var enterCover: View? = null
+    private var enterOverlay: ImageView? = null
+    private var enterOverlayBitmap: Bitmap? = null
+    private var enterAnimator: ValueAnimator? = null
+    private var exitTransitionRunning = false
+    private var exitOverlay: ImageView? = null
+    private var exitOverlayBitmap: Bitmap? = null
+    private var exitAnimator: ValueAnimator? = null
     private var currentItem: MediaItem? = null
     private var addressResolver: LocationAddressResolver? = null
     private var sheetMapView: TextureMapView? = null
@@ -130,10 +151,19 @@ class ViewerActivity : AppCompatActivity() {
         deleteButton = findViewById(R.id.action_delete)
         bottomBarBaseTop = bottomBar.paddingTop
         bottomBarBaseBottom = bottomBar.paddingBottom
-        toolbar.setNavigationOnClickListener { finish() }
+        // 点击缩略图打开时，宿主已在 ViewerTransition 里放好缩略图屏幕矩形/Bitmap；
+        // 取一次后由本页持有（进入动画只播一次，旋转不重播；退出时作为收拢目标）。
+        transitionThumb = ViewerTransition.takePending()
+        if (transitionThumb != null) {
+            // 两栏先透明，等缩略图展开动画结束再淡入；GL 在覆盖层下面提前解码/绘制
+            toolbar.alpha = 0f
+            bottomBar.alpha = 0f
+        }
+        toolbar.setNavigationOnClickListener { exitViewer() }
         setupToolbarMenu()
         setupSheet()
         applyInsets()
+        prepareEnterPreview()
         viewer.onSingleTap = { x, y -> onViewerTap(x, y) }
         viewer.onLongPress = { onViewerLongPress() }
         viewer.onPressEnd = { viewer.stopMotionVideo() }
@@ -157,7 +187,8 @@ class ViewerActivity : AppCompatActivity() {
         deleteButton.setOnClickListener { deleteCurrent() }
         val externalUris = intent.getStringArrayListExtra(GalleryExternal.EXTRA_VIEW_URIS)
         if (externalUris != null) {
-            // 外部模式：URI 列表来自调用方，不读本应用媒体库。
+            // 外部模式：URI 列表来自调用方，不读本应用媒体库；也没有宫格转场。
+            restoreChromeWithoutTransition()
             setupExternalMode(externalUris)
         } else {
             baseUri = intent.getStringExtra(EXTRA_BASE_URI)?.let(Uri::parse) ?: Uri.EMPTY
@@ -185,6 +216,14 @@ class ViewerActivity : AppCompatActivity() {
         sheetAnimator?.cancel()
         chromeAnimator?.cancel()
         chromeAnimator = null
+        enterAnimator?.cancel()
+        enterAnimator = null
+        exitAnimator?.cancel()
+        exitAnimator = null
+        removeEnterPreview()
+        removeExitOverlay()
+        transitionThumb = null
+        ViewerTransition.clear()
         sheetMapView?.onDestroy()
         sheetMapView = null
         super.onDestroy()
@@ -214,7 +253,7 @@ class ViewerActivity : AppCompatActivity() {
                     if (sheetProgress > 0.01f) {
                         closeSheet()
                     } else {
-                        finish()
+                        exitViewer()
                     }
                 }
             },
@@ -386,6 +425,7 @@ class ViewerActivity : AppCompatActivity() {
             loadSubtitleRegion(item)
         }
         updatePageUi()
+        maybePlayEnterTransition(item)
         if (!externalMode && sheetProgress > 0.01f) {
             ensureSheetContent(item)
         }
@@ -546,6 +586,295 @@ class ViewerActivity : AppCompatActivity() {
         // setItems 内部会触发 onPageChanged -> bindPage，更新标题/副标题/详情内容
         viewer.setItems(ArrayList(items), nextIndex)
         Toast.makeText(this, R.string.selection_deleted_done, Toast.LENGTH_SHORT).show()
+    }
+
+    // ==================== 缩略图 ⇄ 大图 转场 ====================
+
+    /**
+     * 在 GL/两栏之上准备「缩略图预览」：白色全屏盖住尚未解码好的 GL 画面，
+     * 缩略图 Bitmap 放在被点击格子的屏幕矩形处，等首帧数据就绪后再放大到图片区域。
+     */
+    private fun prepareEnterPreview() {
+        val bitmap = transitionThumb?.bitmap ?: return
+        val cover = View(this).apply {
+            setBackgroundColor(ThemeUtils.surfaceContent(this@ViewerActivity))
+        }
+        rootView.addView(
+            cover,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        enterCover = cover
+        enterOverlay = addTransitionOverlay(bitmap, RectF(transitionThumb!!.rect))
+        enterOverlayBitmap = bitmap
+    }
+
+    /** 首帧数据就绪后播放「缩略图展开到大图」。 */
+    private fun maybePlayEnterTransition(item: MediaItem) {
+        if (enterTransitionStarted || externalMode) {
+            return
+        }
+        enterTransitionStarted = true
+        val thumb = transitionThumb
+        val overlay = enterOverlay
+        if (thumb == null || overlay == null || thumb.itemId != item.id) {
+            restoreChromeWithoutTransition()
+            return
+        }
+        val target = computeViewerImageRect(item)
+        if (target == null) {
+            restoreChromeWithoutTransition()
+            return
+        }
+        overlay.post {
+            if (isFinishing || isDestroyed || immersive) {
+                restoreChromeWithoutTransition()
+                return@post
+            }
+            enterAnimator = animateOverlayRect(
+                overlay,
+                RectF(thumb.rect),
+                target,
+                TRANSITION_ENTER_MS,
+            ) {
+                enterAnimator = null
+                if (isFinishing || isDestroyed) {
+                    return@animateOverlayRect
+                }
+                // 缩略图已放大到图片区域：覆盖层与白色底一起淡出，露出下面已准备好的 GL 画面
+                overlay.animate().alpha(0f).setDuration(TRANSITION_FADE_MS).start()
+                enterCover?.animate()?.alpha(0f)?.setDuration(TRANSITION_FADE_MS)?.start()
+                toolbar.animate().alpha(1f).setDuration(TRANSITION_FADE_MS).start()
+                bottomBar.animate().alpha(1f).setDuration(TRANSITION_FADE_MS).start()
+                rootView.postDelayed({ removeEnterPreview() }, TRANSITION_FADE_MS + 30L)
+            }
+        }
+    }
+
+    /** 目标矩形 = 与 GL 渲染一致的「图片按比例完整放进全屏」区域（考虑 EXIF 旋转）。 */
+    private fun computeViewerImageRect(item: MediaItem): RectF? {
+        if (item.width <= 0 || item.height <= 0) {
+            return null
+        }
+        val rotated = item.orientation == 90 || item.orientation == 270
+        val imageWidth = if (rotated) item.height else item.width
+        val imageHeight = if (rotated) item.width else item.height
+        val viewWidth = rootView.width.takeIf { it > 0 }
+            ?: resources.displayMetrics.widthPixels
+        val viewHeight = rootView.height.takeIf { it > 0 }
+            ?: resources.displayMetrics.heightPixels
+        val scale = min(
+            viewWidth.toFloat() / imageWidth,
+            viewHeight.toFloat() / imageHeight,
+        )
+        val width = imageWidth * scale
+        val height = imageHeight * scale
+        val left = (viewWidth - width) / 2f
+        val top = (viewHeight - height) / 2f
+        return RectF(left, top, left + width, top + height)
+    }
+
+    private fun addTransitionOverlay(bitmap: Bitmap, rect: RectF): ImageView {
+        val overlay = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setImageBitmap(bitmap)
+            isClickable = true
+        }
+        val params = FrameLayout.LayoutParams(
+            rect.width().roundToInt().coerceAtLeast(1),
+            rect.height().roundToInt().coerceAtLeast(1),
+            Gravity.TOP or Gravity.START,
+        )
+        params.leftMargin = rect.left.roundToInt()
+        params.topMargin = rect.top.roundToInt()
+        rootView.addView(overlay, params)
+        return overlay
+    }
+
+    private fun updateTransitionOverlay(overlay: ImageView, rect: RectF) {
+        val params = overlay.layoutParams as? FrameLayout.LayoutParams ?: return
+        params.width = rect.width().roundToInt().coerceAtLeast(1)
+        params.height = rect.height().roundToInt().coerceAtLeast(1)
+        params.leftMargin = rect.left.roundToInt()
+        params.topMargin = rect.top.roundToInt()
+        overlay.layoutParams = params
+    }
+
+    private fun animateOverlayRect(
+        overlay: ImageView,
+        from: RectF,
+        to: RectF,
+        durationMs: Long,
+        onEnd: () -> Unit,
+    ): ValueAnimator {
+        var cancelled = false
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = durationMs
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                updateTransitionOverlay(
+                    overlay,
+                    RectF(
+                        from.left + (to.left - from.left) * fraction,
+                        from.top + (to.top - from.top) * fraction,
+                        from.right + (to.right - from.right) * fraction,
+                        from.bottom + (to.bottom - from.bottom) * fraction,
+                    ),
+                )
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    if (!cancelled) {
+                        onEnd()
+                    }
+                }
+            })
+            start()
+        }
+        return animator
+    }
+
+    /** 移除进入转场的白色底/缩略图覆盖层（进入动画完成、被打断或无需转场时调用）。 */
+    private fun removeEnterPreview() {
+        enterOverlay?.let { overlay -> rootView.removeView(overlay) }
+        enterOverlay = null
+        enterCover?.let { cover -> rootView.removeView(cover) }
+        enterCover = null
+        // 不主动 recycle：过渡 Bitmap 可能仍被 RenderThread 上一帧 display list 引用，
+        // 立即回收会在真机触发 "Canvas: trying to use a recycled bitmap"；交给 GC 回收即可。
+        enterOverlayBitmap = null
+    }
+
+    /** 不播进入动画（外部模式/无缩略图信息/数据异常）：恢复普通查看器外观。 */
+    private fun restoreChromeWithoutTransition() {
+        enterAnimator?.cancel()
+        enterAnimator = null
+        removeEnterPreview()
+        toolbar.animate().cancel()
+        bottomBar.animate().cancel()
+        toolbar.alpha = 1f
+        bottomBar.alpha = 1f
+        if (!viewer.isVisible) {
+            viewer.isVisible = true
+        }
+        viewer.requestRender()
+    }
+
+    /**
+     * 退出查看器：有缩略图来源时截取当前 GL 画面，用覆盖层缩小回原缩略图位置后再 finish；
+     * 其余情况直接 finish（退化为无动画，不影响功能）。
+     */
+    private fun exitViewer() {
+        if (isFinishing || isDestroyed || exitTransitionRunning) {
+            return
+        }
+        val thumb = transitionThumb
+        val item = currentItem
+        if (externalMode || thumb == null || item == null || item.id != thumb.itemId) {
+            finish()
+            return
+        }
+        if (enterAnimator != null || enterOverlay != null || enterCover != null) {
+            // 进入动画还没结束就退出：清掉覆盖层，直接收场
+            restoreChromeWithoutTransition()
+            finish()
+            return
+        }
+        exitTransitionRunning = true
+        if (sheetProgress > 0.01f) {
+            closeSheetImmediately()
+        }
+        viewer.captureCurrentFrame { bitmap, imageRect ->
+            if (isFinishing || isDestroyed) {
+                return@captureCurrentFrame
+            }
+            if (bitmap == null || imageRect.width() < 2f || imageRect.height() < 2f) {
+                finish()
+                return@captureCurrentFrame
+            }
+            playExitTransition(bitmap, imageRect, thumb)
+        }
+    }
+
+    private fun playExitTransition(
+        frame: Bitmap,
+        imageRect: RectF,
+        thumb: ViewerTransition.Thumb,
+    ) {
+        val viewWidth = viewer.width.takeIf { it > 0 } ?: frame.width
+        val viewHeight = viewer.height.takeIf { it > 0 } ?: frame.height
+        if (viewWidth <= 0 || viewHeight <= 0) {
+            finish()
+            return
+        }
+        val scaleX = frame.width.toFloat() / viewWidth
+        val scaleY = frame.height.toFloat() / viewHeight
+        val left = (imageRect.left.coerceIn(0f, viewWidth.toFloat()) * scaleX)
+            .roundToInt().coerceIn(0, frame.width - 1)
+        val top = (imageRect.top.coerceIn(0f, viewHeight.toFloat()) * scaleY)
+            .roundToInt().coerceIn(0, frame.height - 1)
+        val right = (imageRect.right.coerceIn(0f, viewWidth.toFloat()) * scaleX)
+            .roundToInt().coerceIn(left + 1, frame.width)
+        val bottom = (imageRect.bottom.coerceIn(0f, viewHeight.toFloat()) * scaleY)
+            .roundToInt().coerceIn(top + 1, frame.height)
+        val cropped = Bitmap.createBitmap(frame, left, top, right - left, bottom - top)
+        val startRect = RectF(
+            left / scaleX,
+            top / scaleY,
+            right / scaleX,
+            bottom / scaleY,
+        )
+
+        // 缩小过程在普通视图层播放：先放覆盖层（此刻它与 GL 画面完全重合，避免白屏闪一帧），
+        // 下一帧再隐藏 GL/两栏并开始缩小动画。
+        if (immersive) {
+            WindowCompat.getInsetsController(window, window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
+            SystemBarUtils.applyLightBackgroundAppearance(this, lightBackground = true)
+        }
+        toolbar.animate().cancel()
+        bottomBar.animate().cancel()
+        toolbar.alpha = 0f
+        bottomBar.alpha = 0f
+        detailsSheet.visibility = View.INVISIBLE
+        window.decorView.setBackgroundColor(ThemeUtils.surfaceContent(this))
+        rootView.setBackgroundColor(ThemeUtils.surfaceContent(this))
+        viewer.setLightBackground(true)
+
+        val overlay = addTransitionOverlay(cropped, startRect)
+        exitOverlay = overlay
+        exitOverlayBitmap = cropped
+        overlay.postDelayed({
+            if (isFinishing || isDestroyed) {
+                return@postDelayed
+            }
+            viewer.isVisible = false
+            exitAnimator = animateOverlayRect(
+                overlay,
+                startRect,
+                RectF(thumb.rect),
+                TRANSITION_EXIT_MS,
+            ) {
+                exitAnimator = null
+                removeExitOverlay()
+                overridePendingTransition(0, 0)
+                finish()
+            }
+        }, 16L)
+    }
+
+    private fun removeExitOverlay() {
+        exitOverlay?.let { overlay -> rootView.removeView(overlay) }
+        exitOverlay = null
+        // 同 removeEnterPreview：过渡 Bitmap 交给 GC，避免 RenderThread 仍引用时立即回收导致崩溃
+        exitOverlayBitmap = null
     }
 
     private fun onViewerTap(x: Float, y: Float) {
@@ -1028,6 +1357,15 @@ class ViewerActivity : AppCompatActivity() {
 
         /** 栏未完成测量时的兜底高度（dp），保证动画方向与距离可用。 */
         private const val CHROME_FALLBACK_HEIGHT_DP = 80
+
+        /** 缩略图 → 大图展开动画时长。 */
+        private const val TRANSITION_ENTER_MS = 280L
+
+        /** 大图 → 缩略图收拢动画时长。 */
+        private const val TRANSITION_EXIT_MS = 260L
+
+        /** 展开结束后覆盖层淡出 / 两栏淡入时长。 */
+        private const val TRANSITION_FADE_MS = 140L
 
         /** 标题栏「详情」菜单项 id（main-ui 不新增 menu 资源，代码创建）。 */
         private const val MENU_INFO = 0x3001

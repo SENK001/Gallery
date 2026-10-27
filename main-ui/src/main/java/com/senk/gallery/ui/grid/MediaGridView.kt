@@ -76,6 +76,12 @@ class MediaGridView @JvmOverloads constructor(
     /** 普通点击（非多选态）回调。 */
     var onItemClick: ((MediaItem) -> Unit)? = null
 
+    /**
+     * 普通点击（带被点击格子的根 View）回调：查看器「缩略图展开/收回」转场需要格子 View 的屏幕矩形，
+     * 宿主设置本回调后优先走它（选图页等不需要转场的宿主仍可用 [onItemClick]）。
+     */
+    var onItemClickWithView: ((MediaItem, View) -> Unit)? = null
+
     /** 长按回调：照片页/相册详情页用它进入多选；多选态下的长按也走这里（宿主自行决定）。 */
     var onItemLongClick: ((MediaItem) -> Unit)? = null
 
@@ -380,6 +386,14 @@ class MediaGridView @JvmOverloads constructor(
     private fun handleCellClick(position: Int) {
         val item = gridAdapter.itemAt(position) ?: return
         if (!selection.isActive) {
+            val withView = onItemClickWithView
+            if (withView != null) {
+                val cellView = findViewHolderForAdapterPosition(position)?.itemView
+                if (cellView != null) {
+                    withView.invoke(item, cellView)
+                    return
+                }
+            }
             onItemClick?.invoke(item)
             return
         }

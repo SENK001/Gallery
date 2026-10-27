@@ -317,6 +317,7 @@ class AlbumDetailActivity : AppCompatActivity() {
         }
         startActivity(ViewerActivity.intent(this, baseUri, index))
         overridePendingTransition(0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
     }
 
     // ==================== 自建相册：添加/管理照片 ====================

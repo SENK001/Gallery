@@ -287,6 +287,9 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 先让覆盖层与 GL 画面重合（避免白屏闪一帧），下一帧隐藏 GL/两栏，覆盖层用 260ms 缩回缩略图矩形，
     完成后 `overridePendingTransition(0, 0)` + `finish()`。
 - 退化路径：外部大图模式、无缩略图信息、进入动画尚未结束就退出、当前页已翻到别的图片时，直接 finish（不做转场）。
+- **关闭系统窗口动画**：查看器用 `Theme.Gallery.Viewer`（`android:windowAnimationStyle=@null`），
+  打开/退出时宿主/查看器另调 `overrideActivityTransition(OPEN/CLOSE, 0, 0)`（API 34+）并保留
+  `overridePendingTransition(0, 0)` 兜底——否则覆盖层缩回到缩略图之后还会叠一层系统淡出/缩放。
 - 注意：过渡 Bitmap **不主动 `recycle()`**（RenderThread 可能仍引用上一帧 display list，立即回收会触发
   `Canvas: trying to use a recycled bitmap` 崩溃），交给 GC；`onDestroy` 只清引用并 `ViewerTransition.clear()`。
 

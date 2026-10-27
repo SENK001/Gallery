@@ -291,6 +291,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
         }
         startActivity(ViewerActivity.intent(this, trashBaseUri, index))
         overridePendingTransition(0, 0)
+        overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
     }
 
     // ==================== 恢复 / 彻底删除 ====================

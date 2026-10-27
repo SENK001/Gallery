@@ -864,7 +864,13 @@ class ViewerActivity : AppCompatActivity() {
             ) {
                 exitAnimator = null
                 removeExitOverlay()
+                // 关闭系统窗口动画（API 34+ 走 overrideActivityTransition；旧 API 保留 pending 版兜底）
                 overridePendingTransition(0, 0)
+                overrideActivityTransition(
+                    android.app.Activity.OVERRIDE_TRANSITION_CLOSE,
+                    0,
+                    0,
+                )
                 finish()
             }
         }, 16L)

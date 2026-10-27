@@ -213,6 +213,7 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
         )
         // 查看器内部用覆盖层播放缩略图转场，窗口本身不要再叠加系统默认动画
         activity?.overridePendingTransition(0, 0)
+        activity?.overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
     }
 
     // ==================== 多选 UI ====================

@@ -1098,3 +1098,29 @@ androidComponents { onVariants(selector().all()) { variant ->
 - 退出：图片从全屏位置缩小回缩略图位置后回到宫格，最终截图/`uiautomator` 确认已回到宫格；
 - 翻页到下一张再返回：直接回宫格（不做错误位置的缩回）；再次点其它格子可正常重新播放；
 - 相册详情页进入/退出正常；外部 VIEW_IMAGE 模式无转场且正常；快速点开立刻返回、连续进出均无崩溃、无残留覆盖层。
+
+---
+
+## 2026-10-28 修复：退出查看器仍会叠系统窗口动画
+
+**背景（用户反馈）**：缩略图转场实现后，退出时还是有系统动画。
+
+**原因**：查看器沿用 `Theme.Gallery`，主题自带 Activity 窗口进入/退出动画；只在
+`finish()` 前调 `overridePendingTransition(0, 0)` 在 Android 14+（targetSdk 36）不可靠
+（该 API 已废弃，系统优先使用 Activity Transition），所以覆盖层缩回缩略图后，窗口又播了一遍
+默认的淡出/缩放；录屏逐帧可见「宫格与查看器叠加」的系统转场帧。
+
+**修法**：
+
+- 新增主题 `Theme.Gallery.Viewer`（`android:windowAnimationStyle = @null`，继承 `Theme.Gallery`
+  以保留浅色/深色），并在 `main-ui/AndroidManifest.xml` 给 `ViewerActivity` 指定该主题；
+- 代码补充 API 34+ 的 `overrideActivityTransition(...)`：
+  - 查看器退出动画结束后 `overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)` + finish；
+  - 三个宿主打开查看器后 `overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)`；
+  - 仍保留 `overridePendingTransition(0, 0)` 兜底。
+
+**真机验证（Redmi / Android 16）**：
+
+- `screenrecord` 逐帧检查：退出时覆盖层（图片）缩小到缩略图位置后，下一帧直接是宫格，
+  不再出现「宫格和查看器同时叠加」的系统淡出帧；
+- 打开/进入转场、翻页后返回、外部模式、快速进出均正常、无崩溃。

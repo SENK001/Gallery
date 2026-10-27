@@ -13,4 +13,14 @@
     <style name="Theme.Gallery.Privacy" parent="Theme.Gallery">
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
+
+    <!--
+      查看器主题：转场完全由应用内覆盖层动画完成（缩略图展开/收回），
+      必须关闭系统 Activity 窗口动画，否则退出时覆盖层缩回后又叠一层系统淡出/缩放动画。
+      API 34+ 另在代码里调 overrideActivityTransition(CLOSE, 0, 0)。
+      使用方在 main-ui 的 AndroidManifest（合并后可见），lint 跨模块统计不到该引用，显式忽略。
+    -->
+    <style name="Theme.Gallery.Viewer" parent="Theme.Gallery" tools:ignore="UnusedResources">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

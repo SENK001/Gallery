@@ -92,6 +92,7 @@
 - 其他：`ShapeAppearance.Gallery.Cover`（封面圆角 8dp）、`Widget.Gallery.NavCard`（胶囊卡片：半透明底 + 34dp 圆角 + 10dp elevation）、`NavIcon` / `NavLabel`（引用 ColorStateList）、`PermissionOverlay`、`PrivacyRoot`；
 - 多选动作栏：`Widget.Gallery.SelectionCapsule`（照片页/相册详情页的**悬浮胶囊**：`bg_selection_capsule` 32dp 圆角 + 12dp elevation + 8dp 左右内边距；进入时宽度由 64dp 圆动画到 304dp，由 `SelectionActionBar` 控制）、`Widget.Gallery.SelectionActionBar`（最近删除页的整行两动作栏，仍用不透明底）、`SelectionActionIcon` / `SelectionActionLabel`（图标/文字，两处共用）；
 - 对话框（`values/styles_dialog.xml`）：`Theme.Gallery.Dialog`（独立 Dialog 窗口主题：`Theme.Material3.DayNight.Dialog` + 透明窗口 + 品牌色映射）、`TextAppearance.Gallery.DialogTitle/DialogBody/DialogListItem`、`Widget.Gallery.DialogButton(.Primary/.Secondary)`（胶囊按钮，参考隐私页「同意/退出」）、`Widget.Gallery.DialogInput`（圆角 16dp 输入框）；配套 drawable `bg_gallery_dialog`（28dp 圆角 surface 卡）。
+- 查看器：`Theme.Gallery.Viewer`（继承 `Theme.Gallery`，`android:windowAnimationStyle=@null`）——缩略图展开/收回完全由覆盖层动画完成，必须关掉系统窗口动画，否则退出时缩回后会叠一层系统淡出。
 
 形状/圆角资源：查看器面板 `bg_viewer_sheet`、地图卡片 `bg_viewer_map_card`、导航项选中底 `bg_nav_item` 等 drawable 同受本规范约束（颜色引用色板/状态列表）。
 

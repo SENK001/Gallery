@@ -13,6 +13,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.ui.dialog.DeleteDialogs
 import com.senk.gallery.ui.grid.GridPageController
 import com.senk.gallery.ui.grid.MediaGridView
 import com.senk.gallery.ui.selection.SelectionActionBar
@@ -100,6 +101,10 @@ class PhotosFragment : Fragment(R.layout.fragment_photos) {
                 trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
             launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
+            // MANAGE_MEDIA 已授予：删除改走应用自定义确认框（否则回退系统确认）
+            confirmDeleteWithoutConsent = { count, onConfirm ->
+                DeleteDialogs.confirmMoveToTrash(requireContext(), count, onConfirm)
+            }
         }
         actions = selectionActions
 

@@ -15,4 +15,11 @@
     <string name="selection_deleted_done">已移到最近删除</string>
     <string name="selection_action_failed">操作失败，请重试</string>
     <string name="selection_share_empty">所选内容没有可分享的文件</string>
+
+    <!-- MANAGE_MEDIA 已授予时的应用内删除确认弹窗（替代系统确认框） -->
+    <string name="media_delete_title">删除</string>
+    <string name="media_delete_move_message">确定将 %1$d 项移到最近删除吗？</string>
+    <string name="media_delete_permanent_message">确定彻底删除 %1$d 项吗？此操作不可恢复。</string>
+    <string name="media_delete_confirm">删除</string>
+    <string name="media_delete_cancel">取消</string>
 </resources>

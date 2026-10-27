@@ -11,6 +11,17 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
 
+    <!--
+      免系统确认直接修改/删除媒体（Android 11+ 的受限权限）。
+      - 该权限不是普通运行时权限：通常只有系统相册/特权应用可持有；
+        开发机可用 `adb shell pm grant com.senk.gallery android.permission.MANAGE_MEDIA`
+        或 `adb shell cmd appops set com.senk.gallery MANAGE_MEDIA allow` 授予后验证。
+      - 未授予时应用自动回退到 MediaStore.createTrashRequest/createDeleteRequest 系统确认框。
+    -->
+    <uses-permission
+        android:name="android.permission.MANAGE_MEDIA"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:name=".GalleryApp"
         android:allowBackup="true"

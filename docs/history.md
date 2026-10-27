@@ -1124,3 +1124,46 @@ androidComponents { onVariants(selector().all()) { variant ->
 - `screenrecord` 逐帧检查：退出时覆盖层（图片）缩小到缩略图位置后，下一帧直接是宫格，
   不再出现「宫格和查看器同时叠加」的系统淡出帧；
 - 打开/进入转场、翻页后返回、外部模式、快速进出均正常、无崩溃。
+
+---
+
+## 2026-10-28 申请 MANAGE_MEDIA：删除改应用自定义弹窗（无权限时回退系统确认）
+
+**背景（用户要求）**：申请 MANAGE_MEDIA 权限，删除不再弹系统确认框，改为应用自定义弹窗。
+
+**权限事实（真机验证）**：
+
+- 新增 `<uses-permission android:name="android.permission.MANAGE_MEDIA">`，`MainActivity` 启动时尝试 runtime 申请一次；
+- 该权限为 signature/privileged，普通安装：
+  - `adb shell pm grant com.senk.gallery android.permission.MANAGE_MEDIA` → **失败**
+    （"not a changeable permission type"）；
+  - `adb shell cmd appops set com.senk.gallery MANAGE_MEDIA allow` → 成功；此时 MediaProvider 的
+    `createTrashRequest/createDeleteRequest` 系统确认界面会**直接放行**（不再可见）；
+  - 但 appop 单独 allow 时应用直接 `update(is_trashed)` / `delete` 仍抛
+    `RecoverableSecurityException`（MediaProvider 校验真实权限），因此直接操作必须带失败回退。
+
+**实现**：
+
+- `MediaManageAccess`：能力判断 = 真实 MANAGE_MEDIA 权限 **或** MANAGE_MEDIA appop allow；
+  提供 `moveToTrash` / `restoreFromTrash` / `deletePermanently`（直接 ContentResolver 操作，
+  `IS_TRASHED + DATE_EXPIRES=30天`）。
+- `DeleteDialogs`：应用内危险确认弹窗（移到最近删除 / 彻底删除两种文案），复用 `GalleryDialog`。
+- 三条删除链路支持“能力判断 → 应用自定义确认 → 直接操作 → **失败回退系统 request**”：
+  - 多选删除（`SelectionActions`，照片页/相册详情页注入 `confirmDeleteWithoutConsent`）；
+  - 查看器底栏删除（`ViewerActivity.deleteCurrent`）；
+  - 最近删除页恢复/彻底删除/清空（`RecentlyDeletedActivity`）。
+- 无能力（普通安装）时不显示任何新弹窗，静默沿用系统确认框，普通用户无感。
+- 文档：ui-guide §5.1/§12.6（含能力矩阵）、verification 手测项、README、history。
+
+**真机验证（Redmi / Android 16）**：
+
+- appop allow：
+  - 多选删除：点删除 → **应用自定义“删除/确定将 1 项移到最近删除吗”**（无系统框）→ 确认后
+    静默成功、Toast「已移到最近删除」；
+  - 查看器删除：同样应用自定义弹窗 → 确认后当前图消失、停留下一张、无系统框；
+  - 最近删除：恢复直接成功无弹窗；彻底删除先弹应用危险确认，确认后静默删除；清空（3 项）
+    同样应用确认后静默完成，回收站清空、相册页入口消失；
+- appop default（模拟普通安装）：删除重新出现系统「要允许相册将此照片移到最近删除吗」确认框，
+  应用自定义弹窗不出现（回退正确）；
+- 结束测试后已把 appops 恢复为 default、测试副本全部彻底删除、回收站清空；无崩溃。
+- 门禁：Debug/Release 构建、单测 25/25、lint 0 error/3 warning（ProtectedPermissions 已忽略）、颜色校验 31 色成对。

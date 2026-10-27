@@ -15,6 +15,7 @@ import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.provider.GalleryContract
 import com.senk.gallery.ui.R
 import com.senk.gallery.ui.addto.AddToAlbumActivity
+import com.senk.gallery.ui.util.MediaManageAccess
 import java.util.ArrayList
 
 /**
@@ -29,8 +30,9 @@ import java.util.ArrayList
  * 通过 Provider 的 `update(media/{id}, is_favorite)` 写入，**不再修改系统媒体库**。
  * 因此不需要 `MediaStore.createFavoriteRequest` 系统授权弹窗，也不会出现批量收藏失败。
  *
- * 删除策略：`MediaStore.createTrashRequest` 生成待确认的 PendingIntent，授权通过后
- * 系统删除并通知 MediaStore，宿主重新加载。
+ * 删除策略：默认 `MediaStore.createTrashRequest` 生成待确认的 PendingIntent，授权通过后
+ * 系统删除并通知 MediaStore；若持有 MANAGE_MEDIA（权限/appop），改为应用自定义弹窗确认后
+ * 直接 update `is_trashed`，不再弹系统确认框。
  */
 class SelectionActions(
     private val context: Context,
@@ -44,6 +46,12 @@ class SelectionActions(
 
     /** 宿主注入：启动「添加到相册」选择页。 */
     var launchAddToAlbum: ((Intent) -> Unit)? = null
+
+    /**
+     * 宿主注入：获得 MANAGE_MEDIA 时用**应用自定义弹窗**确认删除。
+     * 参数：选中数量、用户确认后的执行动作。
+     */
+    var confirmDeleteWithoutConsent: ((count: Int, onConfirm: () -> Unit) -> Unit)? = null
 
     private var pendingAddCount = 0
 
@@ -140,7 +148,13 @@ class SelectionActions(
         launcher.invoke(intent)
     }
 
-    /** 删除：走 MediaStore 的「移到最近删除」请求，由系统弹确认框。 */
+    /**
+     * 删除。
+     *
+     * 真正持有 MANAGE_MEDIA 时：先弹**应用自定义确认弹窗**，确认后直接 update
+     * `is_trashed` 移到最近删除，不再拉起系统确认框；没有该权限（普通安装）时回退到
+     * `MediaStore.createTrashRequest` 的系统确认流程。直接操作若意外失败也会回退系统确认。
+     */
     fun delete(items: List<MediaItem>) {
         if (items.isEmpty()) {
             return
@@ -154,6 +168,32 @@ class SelectionActions(
             onMessage(context.getString(R.string.selection_action_failed))
             return
         }
+        if (MediaManageAccess.isGranted(context)) {
+            val directDelete = {
+                if (MediaManageAccess.moveToTrash(context, uris)) {
+                    val ids = items.map { it.id }
+                    FavoriteStore.get(context).markTrashed(ids, true)
+                    onMessage(context.getString(R.string.selection_deleted_done))
+                    onExitSelection()
+                    onReload()
+                } else {
+                    // 权限在实际执行时失效（ROM 差异）：回退系统确认，保证仍能删除
+                    startSystemTrashRequest(items, uris)
+                }
+            }
+            val confirm = confirmDeleteWithoutConsent
+            if (confirm != null) {
+                confirm(items.size, directDelete)
+            } else {
+                directDelete()
+            }
+            return
+        }
+        startSystemTrashRequest(items, uris)
+    }
+
+    /** 系统确认框删除路径（无 MANAGE_MEDIA 或直接操作失败时使用）。 */
+    private fun startSystemTrashRequest(items: List<MediaItem>, uris: List<android.net.Uri>) {
         pendingTrashIds = items.map { it.id }
         try {
             val request = MediaStore.createTrashRequest(context.contentResolver, uris, true)

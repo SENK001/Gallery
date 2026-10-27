@@ -27,6 +27,7 @@ import com.senk.gallery.data.album.CustomAlbumStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.ui.dialog.DeleteDialogs
 import com.senk.gallery.data.provider.GalleryCursorReader
 import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.grid.GridPageController
@@ -226,6 +227,10 @@ class AlbumDetailActivity : AppCompatActivity() {
                 trashConsentLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
             launchAddToAlbum = { intent -> addToAlbumLauncher.launch(intent) }
+            // MANAGE_MEDIA 已授予：删除改走应用自定义确认框（否则回退系统确认）
+            confirmDeleteWithoutConsent = { count, onConfirm ->
+                DeleteDialogs.confirmMoveToTrash(this@AlbumDetailActivity, count, onConfirm)
+            }
         }
         actions = selectionActions
         actionBar.onShareClick = { selectionActions.share(selectedItems()) }

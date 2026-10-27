@@ -130,7 +130,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - **分享**：单张 `ACTION_SEND`、多张 `ACTION_SEND_MULTIPLE` + `ClipData` + `FLAG_GRANT_READ_URI_PERMISSION`。
   - **收藏**：写入**应用内自建收藏库**（Provider → `FavoriteStore`，不修改系统媒体库），因此没有系统授权弹窗、批量收藏不会失败；全部已收藏 → 取消收藏，否则全部收藏。
   - **添加到**：启动 `AddToAlbumActivity`（见 §12），返回 `RESULT_OK` 后退出多选。
-  - **删除**：`MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。
+  - **删除**：默认 `MediaStore.createTrashRequest`（**必须用 MediaStore 真实媒体 URI**，不能传本应用 Provider URI，否则抛 `IllegalArgumentException: All requested items must be referenced by specific ID`）→ 系统「移到最近删除」确认 → 授权后退出多选并刷新。**已具备 MANAGE_MEDIA 能力时（见 12.6）改为应用自定义危险确认弹窗，确认后直接移入最近删除**。
 - **未选择任何项时禁用菜单**：多选态下 4 个动作置灰（38% 透明度、`enabled=false`）并禁用点击，**不弹 Toast / 不弹系统框**；选择至少 1 项后恢复。实现：`SelectionActionBar.setActionsEnabled(enabled)`，宿主在 `onSelectionChanged` 里传 `state.isActive && state.count > 0`（照片页同时挂到宿主的菜单顺序动画上；选择 0 时胶囊展开过程中也保持置灰观感）。禁用仍保留 `clickable=true`，让触摸被胶囊消费、不会穿透到下面的宫格误选。
 - 「全选」是**切换按钮**：选中**全部条目**（不止当前已加载的一页）——点击时会先自动把剩余分页全部加载完（`GridPageController.toggleSelectAll` → `loadAllPages`），再一次性选中；冷启动未滑动时也能选满整个数据源（如 248 项而不是首屏 200 项）。全部已选时按钮文案变为「取消全选」，**再次点击清空已选并保持多选态**（不会因 count 归零自动退出；`toggleSelectAll` 期间用 `suppressAutoExitOnZero` 抑制自动退出）。取消全选后再点单个格子/关闭按钮仍按原逻辑退出。加载期间重复点击菜单会被忽略。
 - 多选时宫格底部预留切换为「动作栏高度 64dp + 系统导航栏」，胶囊悬浮其上但滚动到列表末尾时最后一行不会被遮挡。
@@ -177,7 +177,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 点击缩略图 → 查看器（baseUri 为最近删除列表，翻页范围即回收站）；
   - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、全选（切换语义，再次点击取消全选）；底部动作栏 **恢复 / 彻底删除**（未选择任何项时置灰禁用、点击无响应且不弹提示，≥1 项后恢复）；
   - 标题栏溢出菜单 **清空**：先二次确认（显示条数），再彻底删除回收站全部条目；
-  - **恢复** = `MediaStore.createTrashRequest(uris, false)`、**彻底删除** = `MediaStore.createDeleteRequest(uris)`，两者都会由系统弹出「允许修改/删除」确认框；
+  - **恢复** = `MediaStore.createTrashRequest(uris, false)`、**彻底删除** = `MediaStore.createDeleteRequest(uris)`，无 MANAGE_MEDIA 时由系统弹出「允许修改/删除」确认框；具备 MANAGE_MEDIA 能力时恢复/彻底删除直接执行（彻底删除前弹应用自定义危险确认框，清空的二次确认沿用原弹窗）。
   - 成功后退出多选并重新加载；回收站清空后返回相册页，入口自动消失。
 - 30 天自动清理由系统 MediaStore 负责，应用不做定时任务；选图页的相册 tab 不展示「最近删除」（回收站不是选图来源）。
 
@@ -231,9 +231,24 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 
 ### 12.6 删除（移到最近删除）
 
-- 底栏「删除」与多选删除同一套语义：`MediaStore.createTrashRequest(uris, true)` 由系统弹「允许相册将此照片移到最近删除吗」确认，不直接物理删除。
+- 底栏「删除」与多选删除同一套语义：默认 `MediaStore.createTrashRequest(uris, true)` 由系统弹「允许相册将此照片移到最近删除吗」确认；具备 MANAGE_MEDIA 能力时改为**应用自定义确认弹窗**，确认后直接移入最近删除，不直接物理删除。
 - 确认成功后：从查看器内存列表移除该条 → `viewer.setItems(...)` 触发 `onPageChanged` 刷新标题/副标题/详情，停留在下一张；列表删空则 `finish()`；同时 `FavoriteStore.markTrashed(id, true)`，收藏相册随 Provider 通知刷新。
 - 外部模式不提供删除（URI 不属于本应用媒体库）。
+
+#### MANAGE_MEDIA（免系统确认删除）
+
+- 声明：`main` manifest 声明 `android.permission.MANAGE_MEDIA`（受限权限）；`MainActivity` 启动时 `requestPermissions` 尝试申请一次。
+- 能力判断：`MediaManageAccess.isGranted` = **真正持有 MANAGE_MEDIA 权限** 或 **MANAGE_MEDIA appop = allow**。
+  - 该权限是 signature/privileged：普通安装 `pm grant` 会报 "not a changeable permission type"，运行时申请通常被系统直接拒绝。
+  - 开发机/定制 ROM 可授予 appop：`adb shell cmd appops set com.senk.gallery MANAGE_MEDIA allow`；
+    此时 MediaProvider 的 `createTrashRequest` 确认界面会**直接放行**（实测不再弹系统框）。
+- 行为矩阵：
+  | 能力 | 多选/查看器删除 | 最近删除 · 恢复 | 最近删除 · 彻底删除/清空 |
+  |---|---|---|---|
+  | 无（普通安装） | 系统确认框（原行为） | 系统确认框 | 系统确认框 |
+  | appop allow / 真权限 | 应用 `GalleryDialog` 危险确认 → 直接 `update(is_trashed=1)`；若 MediaProvider 拒绝则回退 `createTrashRequest`（appop 下无系统框） | 直接 `update(is_trashed=0)`，失败回退系统 request | 应用危险确认 → 直接 `delete`，失败回退系统 delete request |
+- 实现：`MediaManageAccess`（直接 update/delete）、`DeleteDialogs.confirmMoveToTrash/confirmPermanentDelete`（应用弹窗）；三条链路（`SelectionActions` / `ViewerActivity` / `RecentlyDeletedActivity`）均做“能力判断 → 自定义确认 → 直接操作 → 失败回退系统请求”。
+- 未授予时不做任何额外弹窗，静默沿用系统确认框，普通用户无感。
 
 ### 12.3 沉浸模式与手势
 

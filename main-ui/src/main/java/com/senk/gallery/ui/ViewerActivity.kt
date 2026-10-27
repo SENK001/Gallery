@@ -47,8 +47,10 @@ import com.senk.gallery.data.entity.MediaObject
 import com.senk.gallery.external.GalleryExternal
 import com.senk.gallery.ui.theme.ThemeUtils
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.ui.dialog.DeleteDialogs
 import com.senk.gallery.ui.gl.GlImageViewer
 import com.senk.gallery.ui.transition.ViewerTransition
+import com.senk.gallery.ui.util.MediaManageAccess
 import com.senk.gallery.util.DateFormats
 import com.senk.gallery.util.FileSizeUtils
 import com.senk.gallery.util.SystemBarUtils
@@ -546,8 +548,9 @@ class ViewerActivity : AppCompatActivity() {
     // ==================== 删除（移到最近删除） ====================
 
     /**
-     * 删除当前媒体：与多选删除一致，走 `MediaStore.createTrashRequest` 由系统确认；
-     * 确认成功后从查看器列表移除并停留在下一张（没有下一张则退出）。
+     * 删除当前媒体：有 MANAGE_MEDIA 时用应用自定义弹窗确认后直接移入最近删除；
+     * 否则回退 `MediaStore.createTrashRequest` 系统确认。
+     * 删除成功后从查看器列表移除并停留在下一张（没有下一张则退出）。
      */
     private fun deleteCurrent() {
         if (externalMode) {
@@ -555,6 +558,24 @@ class ViewerActivity : AppCompatActivity() {
         }
         val item = currentItem ?: return
         val uri = item.uri ?: return
+        if (MediaManageAccess.isGranted(this)) {
+            DeleteDialogs.confirmMoveToTrash(this, 1) {
+                pendingDeleteId = item.id
+                if (MediaManageAccess.moveToTrash(this, listOf(uri))) {
+                    onDeleteConsentResult(true)
+                } else {
+                    // 权限在实际执行时失效：回退系统确认，保证仍能删除
+                    pendingDeleteId = -1L
+                    requestSystemTrash(item, uri)
+                }
+            }
+            return
+        }
+        requestSystemTrash(item, uri)
+    }
+
+    /** 无 MANAGE_MEDIA（或直接操作失败）时的系统确认框删除路径。 */
+    private fun requestSystemTrash(item: MediaItem, uri: Uri) {
         try {
             val request = MediaStore.createTrashRequest(contentResolver, listOf(uri), true)
             pendingDeleteId = item.id

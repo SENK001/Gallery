@@ -25,11 +25,13 @@ import com.senk.gallery.data.album.FavoriteStore
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.data.entity.MediaSet
 import com.senk.gallery.data.provider.GalleryContract
+import com.senk.gallery.ui.dialog.DeleteDialogs
 import com.senk.gallery.ui.dialog.GalleryDialog
 import com.senk.gallery.ui.grid.GridPageController
 import com.senk.gallery.ui.grid.MediaGridView
 import com.senk.gallery.ui.selection.SelectionState
 import com.senk.gallery.ui.theme.ThemeUtils
+import com.senk.gallery.ui.util.MediaManageAccess
 import com.senk.gallery.ui.transition.ViewerTransition
 import com.senk.gallery.util.SystemBarUtils
 import kotlinx.coroutines.launch
@@ -43,8 +45,9 @@ import kotlinx.coroutines.launch
  * 交互（与查看器/相册页一致的交互习惯）：
  * - 点击缩略图 → 查看器（baseUri 也是最近删除列表，翻页范围即回收站）；
  * - 长按或标题栏「多选」进入多选 → 标题「已选择 N 项」、右上角选择框；
- * - 底部动作栏：**恢复**（`MediaStore.createTrashRequest(..., isTrash = false)`）/
- *   **彻底删除**（`MediaStore.createDeleteRequest`），两者都由系统弹确认框；
+ * - 底部动作栏：**恢复** / **彻底删除**。默认走 `MediaStore.createTrashRequest` /
+ *   `createDeleteRequest` 由系统确认；持有 MANAGE_MEDIA 时直接 update/delete，
+ *   彻底删除改为应用自定义危险确认弹窗；
  * - 标题栏溢出菜单：**清空**（一次性彻底删除回收站全部条目，同样走系统确认）。
  *
  * 恢复/删除成功后：退出多选、重新加载列表；空回收站时「最近删除」入口随相册页自动隐藏。
@@ -302,6 +305,23 @@ class RecentlyDeletedActivity : AppCompatActivity() {
         if (uris.isEmpty()) {
             return
         }
+        if (MediaManageAccess.isGranted(this)) {
+            // MANAGE_MEDIA：直接恢复，不再弹系统确认框
+            if (MediaManageAccess.restoreFromTrash(this, uris)) {
+                pendingAction = PendingAction.RESTORE
+                pendingCount = uris.size
+                pendingIds = items.map { it.id }
+                onConsentResult(true)
+            } else {
+                // 权限实际执行时失效：回退系统确认
+                requestSystemRestore(items, uris)
+            }
+            return
+        }
+        requestSystemRestore(items, uris)
+    }
+
+    private fun requestSystemRestore(items: List<MediaItem>, uris: List<Uri>) {
         try {
             val request = MediaStore.createTrashRequest(contentResolver, uris, false)
             pendingAction = PendingAction.RESTORE
@@ -320,6 +340,24 @@ class RecentlyDeletedActivity : AppCompatActivity() {
         if (uris.isEmpty()) {
             return
         }
+        if (MediaManageAccess.isGranted(this)) {
+            // MANAGE_MEDIA：应用自定义危险确认弹窗 → 直接彻底删除，不再弹系统确认框
+            DeleteDialogs.confirmPermanentDelete(this, uris.size) {
+                if (MediaManageAccess.deletePermanently(this, uris)) {
+                    pendingAction = PendingAction.DELETE
+                    pendingCount = uris.size
+                    pendingIds = items.map { it.id }
+                    onConsentResult(true)
+                } else {
+                    requestSystemDelete(items, uris)
+                }
+            }
+            return
+        }
+        requestSystemDelete(items, uris)
+    }
+
+    private fun requestSystemDelete(items: List<MediaItem>, uris: List<Uri>) {
         try {
             val request = MediaStore.createDeleteRequest(contentResolver, uris)
             pendingAction = PendingAction.DELETE
@@ -332,7 +370,7 @@ class RecentlyDeletedActivity : AppCompatActivity() {
         }
     }
 
-    /** 清空：先二次确认，再走系统「彻底删除」授权（两步都必要，避免误删）。 */
+    /** 清空：先二次确认，再删（有 MANAGE_MEDIA 直接删，否则走系统「彻底删除」授权）。 */
     private fun confirmClearAll() {
         lifecycleScope.launch {
             val all = MediaQuery.media(
@@ -348,20 +386,40 @@ class RecentlyDeletedActivity : AppCompatActivity() {
                 .setMessage(getString(R.string.trash_clear_message, uris.size))
                 .setNegativeButton(getString(R.string.trash_clear_cancel))
                 .setPositiveButton(getString(R.string.trash_clear_confirm), destructive = true) {
-                    try {
-                        val request = MediaStore.createDeleteRequest(contentResolver, uris)
-                        pendingAction = PendingAction.CLEAR_ALL
-                        pendingCount = uris.size
-                        pendingIds = all.map { it.id }
-                        consentLauncher.launch(
-                            IntentSenderRequest.Builder(request.intentSender).build(),
-                        )
-                    } catch (e: Exception) {
-                        pendingAction = null
-                        toast(getString(R.string.trash_clear_failed))
+                    if (MediaManageAccess.isGranted(this@RecentlyDeletedActivity)) {
+                        if (MediaManageAccess.deletePermanently(
+                                this@RecentlyDeletedActivity,
+                                uris,
+                            )
+                        ) {
+                            pendingAction = PendingAction.CLEAR_ALL
+                            pendingCount = uris.size
+                            pendingIds = all.map { it.id }
+                            onConsentResult(true)
+                        } else {
+                            // 权限实际执行时失效：回退系统确认
+                            requestSystemClear(all, uris)
+                        }
+                        return@setPositiveButton
                     }
+                    requestSystemClear(all, uris)
                 }
                 .show()
+        }
+    }
+
+    private fun requestSystemClear(all: List<MediaItem>, uris: List<Uri>) {
+        try {
+            val request = MediaStore.createDeleteRequest(contentResolver, uris)
+            pendingAction = PendingAction.CLEAR_ALL
+            pendingCount = uris.size
+            pendingIds = all.map { it.id }
+            consentLauncher.launch(
+                IntentSenderRequest.Builder(request.intentSender).build(),
+            )
+        } catch (e: Exception) {
+            pendingAction = null
+            toast(getString(R.string.trash_clear_failed))
         }
     }
 

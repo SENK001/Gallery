@@ -28,6 +28,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.senk.gallery.ui.AlbumsFragment
 import com.senk.gallery.ui.BaiduMapSdk
 import com.senk.gallery.ui.PhotosFragment
+import com.senk.gallery.ui.util.MediaManageAccess
 import com.senk.gallery.ui.theme.ThemeUtils
 // 标题栏文案 / 图标定义在 main-ui 模块，必须用库自己的 R 类引用（main 的 R 只含本模块资源）
 import com.senk.gallery.ui.R as UiR
@@ -76,6 +77,15 @@ class MainActivity : AppCompatActivity() {
         requestCount++
         updatePermissionState()
     }
+
+    /**
+     * MANAGE_MEDIA 请求（受限权限，普通安装通常会被系统直接拒绝；系统签名/特权构建或部分 ROM
+     * 可能授予）。授予后各删除入口改走应用自定义确认弹窗；未授予则静默回退系统确认框。
+     */
+    private val manageMediaLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* 结果无需额外处理：各删除入口每次都重新用 MediaManageAccess.isGranted 判断 */ }
+    private var manageMediaRequested = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +137,20 @@ class MainActivity : AppCompatActivity() {
         updatePermissionState()
         if (!hasMediaPermission()) {
             requestPermissions()
+        }
+        requestManageMediaPermissionIfNeeded()
+    }
+
+    private fun requestManageMediaPermissionIfNeeded() {
+        if (manageMediaRequested) {
+            return
+        }
+        manageMediaRequested = true
+        if (MediaManageAccess.isGranted(this)) {
+            return
+        }
+        runCatching {
+            manageMediaLauncher.launch(android.Manifest.permission.MANAGE_MEDIA)
         }
     }
 

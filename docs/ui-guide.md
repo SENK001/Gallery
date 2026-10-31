@@ -116,7 +116,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 照片页：top = 状态栏 + 标题栏；bottom = 胶囊导航占位 `72dp` + 系统导航栏；**多选时** bottom = 动作栏 `64dp` + 系统导航栏。
   - 相册详情页：top 同上；bottom = 系统导航栏（无胶囊），多选时加动作栏高度。
 - **滚动/分页**：接近底部 2 行时 `onLoadMore`（宿主用 `MediaPager` 拉下一页）；`onScrollChanged` 驱动标题栏 40px 死区；数据刷新（`ContentObserver`）回顶重载。
-- **越界回弹（`BounceRecyclerView`）**：滚动到顶部后继续向下拖 / 到底后继续向上拖时，内容按阻尼（0.42× 手指位移，最大 88dp）跟手位移，松手用 `OvershootInterpolator` 弹性归位；关闭系统 overscroll（glow/stretch）避免叠加。只在边界且向外拖超过 touchSlop 时触发，普通滚动/点击/多选刷选不受影响；中途按下会停止归位动画继续跟手。
+- **越界回弹（`BounceRecyclerView`）**：滚动到顶部后继续向下拖 / 到底后继续向上拖时，内容跟手位移；**位移上限 = 一屏高度**（RecyclerView 自身高度），采用指数阻尼 `offset = max × (1 − e^(−1.1 × raw / max))`——越拉斜率越小（阻力越大）、永不超一屏；手指位移用 `MotionEvent.rawY` 计算，避免视图自身 `translationY` 反过来影响事件坐标。松手用 `OvershootInterpolator` 弹性归位；关闭系统 overscroll（glow/stretch）避免叠加。只在边界且向外拖超过 touchSlop 时触发，普通滚动/点击/多选刷选不受影响；中途按下会停止归位动画继续跟手。
 - **空态**：宫格适配器内单独一行 TextView（`gallery_empty`），不依赖外部布局。
 - 点击缩略图 → `ViewerActivity(baseUri, position)`（打开时播放「缩略图展开成大图」动画，退出时缩回缩略图，见 §12.7）；长按 → 进入多选并选中该格。
 

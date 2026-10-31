@@ -10,6 +10,7 @@ import android.view.ViewConfiguration
 import android.view.animation.OvershootInterpolator
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.math.abs
+import kotlin.math.exp
 
 /**
  * 带「越界回弹」的 RecyclerView：滚动到顶部后继续向下拖、或到底后继续向上拖时，
@@ -18,7 +19,9 @@ import kotlin.math.abs
  * 实现要点：
  * - 关闭系统 overscroll（glow / stretch），否则会与自定义位移叠加；
  * - 只在**边界**且位移方向继续向外时进入回弹，普通滚动/点击完全不受影响；
- * - 中途按下手指会停止归位动画并从当前位置继续拖；
+ * - 位移上限 = RecyclerView 自身高度（一屏），采用指数阻尼：越拉阻力越大，
+ *   位移永远不超过一屏；
+ * - 中途按下手指会停止归位动画、从当前累计位移继续拖；
  * - 只位移 RecyclerView 自身（`translationY`），因此不会改变真实滚动位置，
  *   松手回弹后布局/滚动状态与普通 RecyclerView 一致。
  *
@@ -32,11 +35,16 @@ open class BounceRecyclerView @JvmOverloads constructor(
 ) : RecyclerView(context, attrs, defStyleAttr) {
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-    private val maxPullPx = dp(88f)
     private var animator: ValueAnimator? = null
     private var lastY = 0f
     private var edgeAccum = 0f
     private var pulling = false
+
+    /** 已经累计的向外手指位移（像素，≥0；反向拖会减少）。 */
+    private var rawPull = 0f
+
+    /** 本次回弹方向：+1 = 顶部下拉，-1 = 底部上拉。 */
+    private var pullDirection = 1
 
     init {
         overScrollMode = OVER_SCROLL_NEVER
@@ -44,7 +52,7 @@ open class BounceRecyclerView @JvmOverloads constructor(
 
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> resetTouch(e.y)
+            MotionEvent.ACTION_DOWN -> resetTouch(e.rawY)
 
             MotionEvent.ACTION_MOVE -> {
                 if (pulling) {
@@ -64,14 +72,14 @@ open class BounceRecyclerView @JvmOverloads constructor(
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (!pulling) {
-                    resetTouch(e.y)
+                    resetTouch(e.rawY)
                 }
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (pulling) {
-                    val delta = e.y - lastY
-                    lastY = e.y
+                    val delta = e.rawY - lastY
+                    lastY = e.rawY
                     dragBy(delta)
                     return true
                 }
@@ -101,12 +109,12 @@ open class BounceRecyclerView @JvmOverloads constructor(
     /** 更新 lastY 并判断是否越过边界向外拖到可以开始回弹。 */
     private fun tryStartPull(e: MotionEvent): Boolean {
         if (!hasContent()) {
-            lastY = e.y
+            lastY = e.rawY
             edgeAccum = 0f
             return false
         }
-        val delta = e.y - lastY
-        lastY = e.y
+        val delta = e.rawY - lastY
+        lastY = e.rawY
         // 只在已经到边界、且继续向外拖时累计越界距离
         if (delta > 0f && !canScrollVertically(-1)) {
             edgeAccum += delta
@@ -132,17 +140,37 @@ open class BounceRecyclerView @JvmOverloads constructor(
     private fun startPull(accumulated: Float) {
         pulling = true
         parent?.requestDisallowInterceptTouchEvent(true)
+        pullDirection = if (accumulated >= 0f) 1 else -1
         // 扣掉触发阈值那一段，避免越过 slop 时突然跳一下
-        val trigger = if (accumulated > 0f) touchSlop else -touchSlop
+        rawPull = (abs(accumulated) - touchSlop).coerceAtLeast(0f)
         edgeAccum = 0f
-        dragBy(accumulated - trigger)
+        applyPull()
     }
 
     private fun dragBy(delta: Float) {
-        val next = (translationY + delta * PULL_RESISTANCE)
-            .coerceIn(-maxPullPx, maxPullPx)
-        translationY = next
+        rawPull = (rawPull + delta * pullDirection).coerceAtLeast(0f)
+        applyPull()
     }
+
+    /**
+     * 把累计手指位移映射为内容位移：指数阻尼，位移上限 = 一屏高度。
+     *
+     * `offset = max * (1 - e^(-rate * raw / max))`：越拉斜率越小（阻力越大），
+     * 且永远不超过 `max`（RecyclerView 自身高度，即一屏）。
+     */
+    private fun applyPull() {
+        val max = maxPullPx()
+        if (max <= 0f) {
+            translationY = 0f
+            return
+        }
+        val ratio = 1f - exp(-PULL_RATE * rawPull / max)
+        translationY = pullDirection * max * ratio.coerceIn(0f, 1f)
+    }
+
+    private fun maxPullPx(): Float = (
+        height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+    ).toFloat()
 
     private fun release() {
         pulling = false
@@ -152,7 +180,7 @@ open class BounceRecyclerView @JvmOverloads constructor(
             translationY = 0f
             return
         }
-        val distanceRatio = (abs(start) / maxPullPx).coerceIn(0f, 1f)
+        val distanceRatio = (abs(start) / maxPullPx()).coerceIn(0f, 1f)
         animator = ValueAnimator.ofFloat(start, 0f).apply {
             duration = (RELEASE_MIN_DURATION_MS +
                 (RELEASE_EXTRA_DURATION_MS * distanceRatio).toLong())
@@ -179,11 +207,9 @@ open class BounceRecyclerView @JvmOverloads constructor(
 
     private fun hasContent(): Boolean = (adapter?.itemCount ?: 0) > 0
 
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
-
     private companion object {
-        /** 手指位移映射到内容位移的阻尼系数（越小越「拉不动」）。 */
-        const val PULL_RESISTANCE = 0.42f
+        /** 指数阻尼系数：越大越跟手、同时越快接近一屏上限。 */
+        const val PULL_RATE = 1.1f
 
         const val RELEASE_MIN_DURATION_MS = 220L
         const val RELEASE_EXTRA_DURATION_MS = 140L

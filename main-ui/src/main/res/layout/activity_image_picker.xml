@@ -54,7 +54,7 @@
                 android:visibility="gone" />
 
             <!-- 相册 tab：常用 / 我的相册 / 更多 分组列表（复用 AlbumListAdapter） -->
-            <androidx.recyclerview.widget.RecyclerView
+            <com.senk.gallery.ui.widget.BounceRecyclerView
                 android:id="@+id/picker_album_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

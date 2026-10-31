@@ -1167,3 +1167,34 @@ androidComponents { onVariants(selector().all()) { variant ->
   应用自定义弹窗不出现（回退正确）；
 - 结束测试后已把 appops 恢复为 default、测试副本全部彻底删除、回收站清空；无崩溃。
 - 门禁：Debug/Release 构建、单测 25/25、lint 0 error/3 warning（ProtectedPermissions 已忽略）、颜色校验 31 色成对。
+
+---
+
+## 2026-11-01 缩略图宫格与相册页滑动越界回弹
+
+**背景（用户要求）**：缩略图和相册页面实现滑动越界回弹。
+
+**实现**：
+
+- 新增 `BounceRecyclerView`（RecyclerView 子类）：
+  - 关闭系统 overscroll（`OVER_SCROLL_NEVER`），避免自带 glow/stretch 与自定义回弹叠加；
+  - 顶部继续下拉、底部继续上拉且累计位移超过 touchSlop 时进入回弹：
+    内容跟手位移 = 手指位移 × 0.42，最大 88dp；
+  - 松手 `ValueAnimator` 回 0，`OvershootInterpolator(1.35)` 产生轻微回弹；动画中再次按下会停止动画、
+    从当前位置继续跟手；
+  - 只位移 RecyclerView 自身 `translationY`，不改变真实滚动位置；空列表不触发。
+- 接入范围：
+  - `MediaGridView` 改为继承 `BounceRecyclerView` → 照片页/相册详情/选图/最近删除宫格全部生效；
+  - 相册页 `fragment_albums.xml`、添加到相册 `activity_add_to_album.xml`、
+    选图页相册 tab `activity_image_picker.xml` 的 RecyclerView 换成 `BounceRecyclerView`。
+- 过程中问题：首版只在 `onInterceptTouchEvent` 判断边界，但宫格格子在部分场景不消费 DOWN，
+  事件直接走 `onTouchEvent`，导致回弹不触发；补上 `onTouchEvent` 内的同一套判定后生效。
+
+**真机验证（Redmi / Android 16）**：
+
+- 照片宫格顶部下拉（MOVE 分段、按住截图）：首行 cells bounds 由 `y=360` 变为 `y=483`（跟手下移 123px），
+  松手后回到 `y=360`；
+- 照片宫格滚到底后继续上拉：首行可见 bounds 由 232 变 44（内容上移），松手复位；
+- 相册页顶部下拉：`album_list` bounds `[0,0]` → `[0,123]`，松手回 `[0,0]`；
+- 回归：相册页正常上滑滚动（封面位置变化）、照片点击打开查看器、长按多选后横向刷选（选中 4 格）
+  均正常；无系统 glow/stretch、无崩溃。

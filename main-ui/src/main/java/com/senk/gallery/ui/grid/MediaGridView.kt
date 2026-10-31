@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.senk.gallery.data.entity.MediaItem
 import com.senk.gallery.ui.selection.SelectionState
+import com.senk.gallery.ui.widget.BounceRecyclerView
 import com.senk.gallery.util.DisplayUtils
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -35,7 +36,7 @@ import kotlin.math.hypot
 class MediaGridView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : RecyclerView(context, attrs) {
+) : BounceRecyclerView(context, attrs) {
 
     /** 多选状态（宿主可设置 maxCount、监听变化；宫格内部监听并刷新格子）。 */
     val selection = SelectionState()

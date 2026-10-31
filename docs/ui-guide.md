@@ -116,6 +116,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
   - 照片页：top = 状态栏 + 标题栏；bottom = 胶囊导航占位 `72dp` + 系统导航栏；**多选时** bottom = 动作栏 `64dp` + 系统导航栏。
   - 相册详情页：top 同上；bottom = 系统导航栏（无胶囊），多选时加动作栏高度。
 - **滚动/分页**：接近底部 2 行时 `onLoadMore`（宿主用 `MediaPager` 拉下一页）；`onScrollChanged` 驱动标题栏 40px 死区；数据刷新（`ContentObserver`）回顶重载。
+- **越界回弹（`BounceRecyclerView`）**：滚动到顶部后继续向下拖 / 到底后继续向上拖时，内容按阻尼（0.42× 手指位移，最大 88dp）跟手位移，松手用 `OvershootInterpolator` 弹性归位；关闭系统 overscroll（glow/stretch）避免叠加。只在边界且向外拖超过 touchSlop 时触发，普通滚动/点击/多选刷选不受影响；中途按下会停止归位动画继续跟手。
 - **空态**：宫格适配器内单独一行 TextView（`gallery_empty`），不依赖外部布局。
 - 点击缩略图 → `ViewerActivity(baseUri, position)`（打开时播放「缩略图展开成大图」动画，退出时缩回缩略图，见 §12.7）；长按 → 进入多选并选中该格。
 
@@ -147,6 +148,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 ## 7. 相册页（`AlbumsFragment` + `AlbumListAdapter`）
 
 - `RecyclerView` + `GridLayoutManager(spanCount = 3)`：
+  - 使用 `BounceRecyclerView`：相册列表同样支持顶部下拉/底部上拉的越界回弹（实现见 §5）；
   - `Row.Header` 占满 3 格（`SPAN_FULL`）；
   - 常用相册为宫格卡（`item_album_grid`，每行 3 个，封面 `ShapeableImageView`，`ImageViewThumbLoader.load(cover, coverUri)` 默认 256px）；
   - 我的相册/更多相册为整行卡（`item_album_row`，占满 3 格，封面 160px）；`Row.Action` 用于「新建相册」动作行（整行 + 图标）。
@@ -330,6 +332,7 @@ ExternalEntryActivity → ImagePickerActivity（选图，照片/相册双 tab）
 | 组件 | 行为 | 备注 |
 |---|---|---|
 | `ImageViewThumbLoader` | 4 线程 `loadThumbnail` + LRU Bitmap 缓存（约堆内存 1/8，按 uri+尺寸档位）+ `imageView.tag` 校验防列表复用错位；加载前先铺主题占位色 | 宫格与相册封面共用 |
+| `BounceRecyclerView` | RecyclerView 子类：边缘继续外拉时内容跟手位移，松手弹性回弹；仅位移 `translationY`，不改变真实滚动位置 | 宫格（`MediaGridView` 继承）与相册列表共用 |
 | `SelectionState` | 多选状态机（id 集合 / active / maxCount / 监听器） | 照片页、相册详情、选图页共用 |
 | `SelectionActions` | 分享/收藏/添加到/删除的共享实现；需要 ActivityResult 的三处由宿主注入启动器 | 照片页与相册详情共用 |
 | `GridPageController` | 分页加载 + `ContentObserver` 回顶刷新 + `setItems/appendItems` 提交 + 索引/已选集合 | 照片页与相册详情共用 |
